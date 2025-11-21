@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+target
+*.lock
+pnpm-lock.yaml
+Cargo.lock
+.vscode
+.idea
+*.log
+
