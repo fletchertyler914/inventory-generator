@@ -3,7 +3,6 @@ import { ConfigForm } from '../ConfigForm';
 import { ExportDialog } from '../ExportDialog';
 import { ImportDialog } from '../ImportDialog';
 import { ThemeToggle } from '../ThemeToggle';
-import { Separator } from '../ui/separator';
 import { KeyboardShortcutsHint } from '../KeyboardShortcutsHint';
 import { Button } from '../ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
@@ -107,7 +106,7 @@ export function SidebarContent({
             <FolderSelector
               onFolderSelected={onFolderSelected}
               disabled={loading}
-              selectedFolder={selectedFolder}
+              selectedFolder={selectedFolder ?? null}
             />
           </div>
 

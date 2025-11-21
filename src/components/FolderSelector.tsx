@@ -7,7 +7,7 @@ import { toast } from "@/hooks/useToast"
 interface FolderSelectorProps {
   onFolderSelected: (path: string) => void
   disabled?: boolean
-  selectedFolder?: string | null
+  selectedFolder?: string | null | undefined
 }
 
 export function FolderSelector({ onFolderSelected, disabled, selectedFolder }: FolderSelectorProps) {
