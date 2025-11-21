@@ -35,6 +35,7 @@ export function KeyboardShortcutsHint({ className }: KeyboardShortcutsHintProps)
     { keys: `${modifier} + O`, action: "Load Inventory" },
     { keys: `${modifier} + A`, action: "Select All" },
     { keys: `${modifier} + D`, action: "Focus Date Input" },
+    { keys: `${modifier} + B`, action: "Toggle Sidebar" },
     { keys: "Esc", action: "Clear Selection" },
   ]
 

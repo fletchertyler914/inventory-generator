@@ -6,6 +6,7 @@ interface KeyboardShortcuts {
   onSelectAll?: () => void
   onClearSelection?: () => void
   onBulkDateFocus?: () => void
+  onToggleSidebar?: () => void
 }
 
 // Detect if running on macOS
@@ -35,6 +36,7 @@ export function useKeyboardShortcuts({
   onSelectAll,
   onClearSelection,
   onBulkDateFocus,
+  onToggleSidebar,
 }: KeyboardShortcuts) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -90,12 +92,19 @@ export function useKeyboardShortcuts({
         onBulkDateFocus?.()
         return
       }
+
+      // Ctrl/Cmd + B: Toggle sidebar
+      if (modifier && e.key.toLowerCase() === "b") {
+        e.preventDefault()
+        onToggleSidebar?.()
+        return
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [onExport, onImport, onSelectAll, onClearSelection, onBulkDateFocus])
+  }, [onExport, onImport, onSelectAll, onClearSelection, onBulkDateFocus, onToggleSidebar])
 }
 

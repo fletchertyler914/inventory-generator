@@ -112,7 +112,7 @@ export function ExportDialog({ items, caseNumber, disabled, onExportComplete, se
           <DialogTrigger asChild>
             <Button 
               disabled={disabled || items.length === 0}
-              variant="ghost"
+              variant="outline"
               className="w-full"
             >
               <FilePlus className="mr-2 h-4 w-4" />

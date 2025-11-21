@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, forwardRef, useImperativeHandle } from 'react';
 import { SidebarContent } from './SidebarContent';
 import { TableContent } from './TableContent';
 import { Button } from '../ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { InventoryItem } from '@/types/inventory';
 import type { RecentInventory } from '@/hooks/useRecentInventories';
+
+export interface DesktopLayoutRef {
+  toggleSidebar: () => void;
+}
 
 interface DesktopLayoutProps {
   items: InventoryItem[];
@@ -31,7 +35,7 @@ interface DesktopLayoutProps {
   bulkDateInputRef?: React.RefObject<HTMLInputElement>;
 }
 
-export function DesktopLayout({
+export const DesktopLayout = forwardRef<DesktopLayoutRef, DesktopLayoutProps>(function DesktopLayout({
   items,
   onItemsChange,
   caseNumber,
@@ -54,8 +58,14 @@ export function DesktopLayout({
   importDialogOpen,
   onImportDialogOpenChange,
   bulkDateInputRef,
-}: DesktopLayoutProps) {
+}, ref) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    toggleSidebar: () => {
+      setIsSidebarCollapsed(prev => !prev);
+    },
+  }));
 
   return (
     <div className='flex h-screen w-screen overflow-hidden bg-background relative'>
@@ -132,4 +142,4 @@ export function DesktopLayout({
       </main>
     </div>
   );
-}
+});

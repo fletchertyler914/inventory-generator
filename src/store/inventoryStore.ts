@@ -32,6 +32,10 @@ interface InventoryState {
   importing: boolean
   syncing: boolean
   
+  // Sync status
+  syncStatus: 'synced' | 'out_of_sync' | null
+  folderFileCount: number | null
+  
   // UI state
   exportDialogOpen: boolean
   importDialogOpen: boolean
@@ -48,6 +52,7 @@ interface InventoryState {
   setExporting: (exporting: boolean) => void
   setImporting: (importing: boolean) => void
   setSyncing: (syncing: boolean) => void
+  setSyncStatus: (status: 'synced' | 'out_of_sync' | null, fileCount?: number) => void
   setExportDialogOpen: (open: boolean) => void
   setImportDialogOpen: (open: boolean) => void
   reset: () => void
@@ -63,6 +68,8 @@ const initialState = {
   exporting: false,
   importing: false,
   syncing: false,
+  syncStatus: null as 'synced' | 'out_of_sync' | null,
+  folderFileCount: null as number | null,
   exportDialogOpen: false,
   importDialogOpen: false,
 }
@@ -109,7 +116,6 @@ export const useInventoryStore = create<InventoryState>((set) => ({
       }
     }),
   
-  setSelectedFolder: (folder) => set({ selectedFolder: folder }),
   
   setCaseNumber: (caseNumber) => set({ caseNumber }),
   
@@ -124,6 +130,13 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   setImporting: (importing) => set({ importing }),
   
   setSyncing: (syncing) => set({ syncing, loading: syncing }),
+  
+  setSyncStatus: (status, fileCount) => set({ 
+    syncStatus: status, 
+    folderFileCount: fileCount !== undefined ? fileCount : null 
+  }),
+  
+  setSelectedFolder: (folder) => set({ selectedFolder: folder, syncStatus: null }),
   
   setExportDialogOpen: (open) => set({ exportDialogOpen: open }),
   

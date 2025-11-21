@@ -1,12 +1,12 @@
 import { useRef, useState } from "react"
 import "./index.css"
-import { DesktopLayout } from "./components/layout/DesktopLayout"
+import { DesktopLayout, type DesktopLayoutRef } from "./components/layout/DesktopLayout"
 import { LargeFolderWarningDialog } from "./components/LargeFolderWarningDialog"
 import { useInventory } from "./hooks/useInventory"
 import { useRecentInventories } from "./hooks/useRecentInventories"
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts"
 import { useInventoryStore } from "./store/inventoryStore"
-import { importInventory } from "./services/inventoryService"
+import { importInventory, countDirectoryFiles } from "./services/inventoryService"
 import { createAppError, logError, ErrorCode } from "./lib/error-handler"
 import { toast } from "./hooks/useToast"
 import { ErrorBoundary } from "./components/ErrorBoundary"
@@ -29,6 +29,8 @@ function App() {
     bulkUpdateItems,
   } = useInventory()
   
+  const { setSelectedFolder } = useInventoryStore()
+  
   const [warningDialogOpen, setWarningDialogOpen] = useState(false)
   const [pendingFolderPath, setPendingFolderPath] = useState<string | null>(null)
   const [pendingFileCount, setPendingFileCount] = useState<number>(0)
@@ -48,6 +50,7 @@ function App() {
   } = useRecentInventories()
 
   const bulkDateInputRef = useRef<HTMLInputElement>(null)
+  const desktopLayoutRef = useRef<DesktopLayoutRef>(null)
 
   const handleFolderSelected = async (path: string) => {
     try {
@@ -103,24 +106,58 @@ function App() {
     caseNumber: string | null,
     folderPath: string | null
   ) => {
-    addRecentInventory(filePath, items, caseNumber, folderPath || selectedFolder)
+    // Clear previously selected folder
+    if (selectedFolder) {
+      setSelectedFolder(null)
+    }
     
-    // If folder_path was restored from metadata, set it as selected folder
+    addRecentInventory(filePath, items, caseNumber, folderPath || null)
+    
+    // If folder_path was restored from metadata, validate and set it as selected folder
     if (folderPath) {
       try {
+        // Validate folder exists by trying to count files
+        await countDirectoryFiles(folderPath)
+        // Folder exists, scan it
         await scanFolder(folderPath)
       } catch (error) {
-        // Error already handled in scanFolder
+        // Folder doesn't exist or is invalid
+        const appError = createAppError(error, ErrorCode.FILE_NOT_FOUND)
+        logError(appError, "handleImportComplete")
+        toast({
+          title: "Folder path not found",
+          description: `The folder path "${folderPath}" from the imported file no longer exists on your system.`,
+          variant: "destructive",
+        })
+        // Set sync status to null since folder doesn't exist
+        useInventoryStore.getState().setSyncStatus(null)
       }
     }
   }
   
   const handleFolderPathRestored = async (folderPath: string) => {
-    // When importing, if folder_path is restored from metadata, set it as selected folder
+    // Clear previously selected folder
+    if (selectedFolder) {
+      setSelectedFolder(null)
+    }
+    
+    // When importing, if folder_path is restored from metadata, validate and set it as selected folder
     try {
+      // Validate folder exists by trying to count files
+      await countDirectoryFiles(folderPath)
+      // Folder exists, scan it
       await scanFolder(folderPath)
     } catch (error) {
-      // Error already handled in scanFolder
+      // Folder doesn't exist or is invalid
+      const appError = createAppError(error, ErrorCode.FILE_NOT_FOUND)
+      logError(appError, "handleFolderPathRestored")
+      toast({
+        title: "Folder path not found",
+        description: `The folder path "${folderPath}" from the imported file no longer exists on your system.`,
+        variant: "destructive",
+      })
+      // Set sync status to null since folder doesn't exist
+      useInventoryStore.getState().setSyncStatus(null)
     }
   }
   
@@ -158,12 +195,29 @@ function App() {
         setCaseNumber(result.case_number)
       }
       
-      // If folder_path was restored, set it as selected folder
+      // Clear previously selected folder
+      if (selectedFolder) {
+        setSelectedFolder(null)
+      }
+      
+      // If folder_path was restored, validate and set it as selected folder
       if (result.folder_path) {
         try {
+          // Validate folder exists by trying to count files
+          await countDirectoryFiles(result.folder_path)
+          // Folder exists, scan it
           await scanFolder(result.folder_path)
         } catch (error) {
-          // Error already handled
+          // Folder doesn't exist or is invalid
+          const appError = createAppError(error, ErrorCode.FILE_NOT_FOUND)
+          logError(appError, "handleOpenRecentInventory")
+          toast({
+            title: "Folder path not found",
+            description: `The folder path "${result.folder_path}" from the inventory file no longer exists on your system.`,
+            variant: "destructive",
+          })
+          // Set sync status to null since folder doesn't exist
+          useInventoryStore.getState().setSyncStatus(null)
         }
       }
       
@@ -206,12 +260,16 @@ function App() {
     onBulkDateFocus: () => {
       bulkDateInputRef.current?.focus()
     },
+    onToggleSidebar: () => {
+      desktopLayoutRef.current?.toggleSidebar()
+    },
   })
 
   return (
     <ErrorBoundary>
       <div className="h-screen w-screen bg-background text-foreground antialiased overflow-hidden">
         <DesktopLayout
+          ref={desktopLayoutRef}
           items={items}
           onItemsChange={setItems}
           caseNumber={caseNumber}

@@ -321,14 +321,14 @@ export function EditableCell({
     <div
       onClick={handleClick}
       className={cn(
-        "group relative flex items-center gap-1 cursor-pointer rounded px-2 py-1 -mx-2 -my-1 transition-colors duration-150 min-h-[24px]",
+        "group relative flex items-center gap-1 cursor-pointer rounded px-2 py-1 -mx-2 -my-1 transition-colors duration-150 min-h-[24px] min-w-0",
         "hover:bg-muted/40",
         isEmpty && "text-muted-foreground",
         className
       )}
       title={isEmpty ? "Click to edit (Enter to save, Esc to cancel)" : `${displayValue} - Click to edit (Enter to save, Esc to cancel)`}
     >
-      <span className="text-xs truncate flex-1" title={displayValue}>
+      <span className="text-xs truncate flex-1 min-w-0" title={displayValue}>
         {isEmpty ? placeholder : displayValue}
       </span>
       {isEmpty && (

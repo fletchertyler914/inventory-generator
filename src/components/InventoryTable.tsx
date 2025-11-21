@@ -1,20 +1,21 @@
-import { memo, useCallback } from "react"
+import { memo, useCallback, useRef, useEffect, useState } from "react"
 import * as React from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import {
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./ui/table"
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table"
 import { Checkbox } from "./ui/checkbox"
 import { Badge } from "./ui/badge"
 import { EditableCell } from "./table/EditableCell"
 import { TableActions } from "./table/TableActions"
+import { EmptyState } from "./ui/empty-state"
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip"
 import { useTableSelection } from "@/hooks/useTableSelection"
 import { cn } from "@/lib/utils"
-import { updateInventoryItemField, type InventoryItem, type InventoryItemField } from "@/types/inventory"
+import {
+  updateInventoryItemField,
+  type InventoryItem,
+  type InventoryItemField,
+} from "@/types/inventory"
+import { FolderOpen } from "lucide-react"
 
 interface InventoryTableProps {
   items: InventoryItem[]
@@ -22,6 +23,70 @@ interface InventoryTableProps {
   onSelectionChange?: ((selectedIndices: number[]) => void) | undefined
   selectedIndices?: number[] | undefined
 }
+
+// Component to show tooltip when text is truncated
+const TruncatedText = memo(function TruncatedText({
+  text,
+  className,
+}: {
+  text: string
+  className?: string
+}) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [isTruncated, setIsTruncated] = useState(false)
+
+  useEffect(() => {
+    const checkTruncation = () => {
+      if (ref.current) {
+        const truncated = ref.current.scrollWidth > ref.current.clientWidth
+        setIsTruncated(truncated)
+      }
+    }
+    
+    // Check after a small delay to ensure DOM is ready
+    const timeoutId = setTimeout(checkTruncation, 0)
+    
+    // Check on resize
+    window.addEventListener("resize", checkTruncation)
+    
+    // Use ResizeObserver for more accurate detection
+    let resizeObserver: ResizeObserver | null = null
+    if (ref.current) {
+      resizeObserver = new ResizeObserver(checkTruncation)
+      resizeObserver.observe(ref.current)
+    }
+    
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener("resize", checkTruncation)
+      if (resizeObserver && ref.current) {
+        resizeObserver.unobserve(ref.current)
+      }
+    }
+  }, [text])
+
+  if (!text) {
+    return <span className={cn("text-xs truncate block", className)}>{text}</span>
+  }
+
+  const content = (
+    <span ref={ref} className={cn("text-xs truncate block", className)}>
+      {text}
+    </span>
+  )
+
+  // Always show tooltip if text exists (simpler and works better)
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {content}
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="max-w-md break-words whitespace-normal">{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  )
+})
 
 const TableRowMemo = memo(function TableRowMemo({
   item,
@@ -56,7 +121,7 @@ const TableRowMemo = memo(function TableRowMemo({
       aria-selected={isSelected}
       role="row"
     >
-      <TableCell className="w-[2%] min-w-[40px]" role="gridcell">
+      <TableCell role="gridcell" style={{ width: "40px", minWidth: "40px", maxWidth: "40px" }}>
         <Checkbox
           checked={isSelected}
           onCheckedChange={onToggle}
@@ -64,7 +129,7 @@ const TableRowMemo = memo(function TableRowMemo({
           aria-label={`Select row ${index + 1}: ${item.file_name}`}
         />
       </TableCell>
-      <TableCell className="w-[6%] min-w-[80px]" role="gridcell">
+      <TableCell role="gridcell" style={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}>
         <EditableCell
           value={item.date_rcvd}
           onSave={handleSave("date_rcvd")}
@@ -72,7 +137,7 @@ const TableRowMemo = memo(function TableRowMemo({
           type="date"
         />
       </TableCell>
-      <TableCell className="w-[5%] min-w-[60px]" role="gridcell">
+      <TableCell role="gridcell" style={{ width: "80px", minWidth: "80px", maxWidth: "80px" }}>
         <EditableCell
           value={item.doc_year}
           onSave={handleSave("doc_year")}
@@ -80,56 +145,61 @@ const TableRowMemo = memo(function TableRowMemo({
           placeholder="—"
         />
       </TableCell>
-      <TableCell className="w-[7%] min-w-[100px]" role="gridcell">
+      <TableCell role="gridcell" style={{ width: "120px", minWidth: "120px", maxWidth: "120px" }}>
         <EditableCell
           value={item.doc_date_range}
           onSave={handleSave("doc_date_range")}
           placeholder="—"
         />
       </TableCell>
-      <TableCell className="w-[10%] min-w-[120px]" role="gridcell">
-        <span className="text-xs font-semibold text-foreground">
-          {item.document_type}
-        </span>
-      </TableCell>
-      <TableCell className="w-[15%] min-w-[150px]" role="gridcell">
-        <span className="text-xs text-foreground/90 truncate block" title={item.document_description}>
-          {item.document_description}
-        </span>
-      </TableCell>
-      <TableCell className="w-[14%] min-w-[140px]" role="gridcell">
-        <span className="text-xs font-mono text-foreground/80 truncate block" title={item.file_name}>
-          {item.file_name}
-        </span>
-      </TableCell>
-      <TableCell className="w-[8%] min-w-[100px]" role="gridcell">
-        <span className="text-xs text-muted-foreground truncate block" title={item.folder_name}>
-          {item.folder_name}
-        </span>
-      </TableCell>
-      <TableCell className="w-[12%] min-w-[120px]" role="gridcell">
-        <span className="text-xs text-muted-foreground/80 font-mono truncate block" title={item.folder_path}>
-          {item.folder_path}
-        </span>
-      </TableCell>
-      <TableCell className="w-[5%] min-w-[60px]" role="gridcell">
-        <Badge variant="outline" className="text-[10px] font-medium" aria-label={`File type: ${item.file_type}`}>
-          {item.file_type}
-        </Badge>
-      </TableCell>
-      <TableCell className="w-[6%] min-w-[80px]" role="gridcell">
-        <EditableCell
-          value={item.bates_stamp}
-          onSave={handleSave("bates_stamp")}
-          placeholder="—"
+      <TableCell role="gridcell" style={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}>
+        <TruncatedText
+          text={item.document_type}
+          className="font-semibold text-foreground"
         />
       </TableCell>
-      <TableCell className="w-[10%] min-w-[120px]" role="gridcell">
-        <EditableCell
-          value={item.notes}
-          onSave={handleSave("notes")}
-          placeholder="—"
+      <TableCell role="gridcell" style={{ width: "200px", minWidth: "200px", maxWidth: "200px" }}>
+        <TruncatedText
+          text={item.document_description}
+          className="text-foreground/90"
         />
+      </TableCell>
+      <TableCell role="gridcell" style={{ width: "180px", minWidth: "180px", maxWidth: "180px" }}>
+        <TruncatedText
+          text={item.file_name}
+          className="font-mono text-foreground/80"
+        />
+      </TableCell>
+      <TableCell role="gridcell" style={{ width: "120px", minWidth: "120px", maxWidth: "120px" }}>
+        <TruncatedText
+          text={item.folder_name}
+          className="text-muted-foreground"
+        />
+      </TableCell>
+      <TableCell role="gridcell" style={{ width: "180px", minWidth: "180px", maxWidth: "180px" }}>
+        <TruncatedText
+          text={item.folder_path}
+          className="text-muted-foreground/80 font-mono"
+        />
+      </TableCell>
+      <TableCell role="gridcell" style={{ width: "80px", minWidth: "80px", maxWidth: "80px" }}>
+        {item.file_type ? (
+          <Badge
+            variant="outline"
+            className="text-[10px] font-medium"
+            aria-label={`File type: ${item.file_type}`}
+          >
+            {item.file_type}
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell role="gridcell" style={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}>
+        <EditableCell value={item.bates_stamp} onSave={handleSave("bates_stamp")} placeholder="—" />
+      </TableCell>
+      <TableCell role="gridcell" style={{ width: "160px", minWidth: "160px", maxWidth: "160px" }}>
+        <EditableCell value={item.notes} onSave={handleSave("notes")} placeholder="—" />
       </TableCell>
     </TableRow>
   )
@@ -137,18 +207,23 @@ const TableRowMemo = memo(function TableRowMemo({
 
 /**
  * InventoryTable component with virtual scrolling for large datasets
- * 
+ *
  * Features:
  * - Virtual scrolling for 100+ items (improves performance)
  * - Row selection with keyboard and mouse support
  * - Inline editing of inventory fields
  * - Full accessibility support (ARIA labels, keyboard navigation)
- * 
+ *
  * @param items - Array of inventory items to display
  * @param onItemsChange - Callback when items are updated
  * @param onSelectionChange - Optional callback when selection changes
  */
-export function InventoryTable({ items, onItemsChange, onSelectionChange, selectedIndices }: InventoryTableProps) {
+export function InventoryTable({
+  items,
+  onItemsChange,
+  onSelectionChange,
+  selectedIndices,
+}: InventoryTableProps) {
   const {
     selectedRows,
     toggleRow,
@@ -173,8 +248,10 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
       // Only update if different to avoid unnecessary re-renders
       const currentArray = Array.from(selectedRowsRef.current).sort()
       const externalArray = Array.from(externalSet).sort()
-      if (currentArray.length !== externalArray.length || 
-          !currentArray.every((val, idx) => val === externalArray[idx])) {
+      if (
+        currentArray.length !== externalArray.length ||
+        !currentArray.every((val, idx) => val === externalArray[idx])
+      ) {
         setSelectedRows(externalSet)
       }
     }
@@ -191,12 +268,12 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
     (index: number, field: InventoryItemField, value: string) => {
       const updatedItems = [...items]
       const item = updatedItems[index]
-      
+
       if (!item) return
-      
+
       // Use type-safe update function
       updatedItems[index] = updateInventoryItemField(item, field, value)
-      
+
       onItemsChange(updatedItems)
     },
     [items, onItemsChange]
@@ -211,8 +288,9 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
 
   // Virtual scrolling setup - only use for large datasets
   const parentRef = React.useRef<HTMLDivElement>(null)
+  const tableRef = React.useRef<HTMLTableElement>(null)
   const shouldVirtualize = items.length > 100
-  
+
   // Always create virtualizer but only use it when shouldVirtualize is true
   const rowVirtualizer = useVirtualizer({
     count: items.length,
@@ -225,45 +303,86 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
   // Get virtual items - only use when shouldVirtualize is true
   const virtualItems = shouldVirtualize ? rowVirtualizer.getVirtualItems() : null
 
+  // Get table width for virtual rows
+  const [tableWidth, setTableWidth] = React.useState<number | undefined>(undefined)
+
   // Force virtualizer to measure when items change or container is ready
   React.useEffect(() => {
     if (shouldVirtualize && parentRef.current) {
       // Use requestAnimationFrame to ensure DOM is fully rendered
       const rafId = requestAnimationFrame(() => {
         rowVirtualizer.measure()
+        // Measure table width for virtual rows
+        if (tableRef.current) {
+          setTableWidth(tableRef.current.scrollWidth)
+        }
       })
       return () => cancelAnimationFrame(rafId)
     }
     return undefined
   }, [shouldVirtualize, items.length, rowVirtualizer])
 
+  // Update table width on resize
+  React.useEffect(() => {
+    if (!shouldVirtualize) return
+
+    const updateWidth = () => {
+      if (tableRef.current) {
+        setTableWidth(tableRef.current.scrollWidth)
+      }
+    }
+
+    const resizeObserver = new ResizeObserver(updateWidth)
+    if (tableRef.current) {
+      resizeObserver.observe(tableRef.current)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [shouldVirtualize])
+
   return (
-    <div 
-      className="relative rounded border border-border bg-card overflow-hidden h-full flex flex-col"
+    <div
+      className={cn(
+        "relative rounded border border-border bg-card overflow-hidden flex flex-col",
+        "h-full min-h-[400px]"
+      )}
       role="region"
       aria-label="Inventory table"
       aria-rowcount={items.length}
       aria-colcount={12}
     >
-      <div ref={parentRef} className="flex-1 overflow-auto relative">
-        <table className="w-full caption-bottom text-sm table-auto border-collapse" role="grid" aria-label="Document inventory items">
+      <div
+        ref={parentRef}
+        className="relative flex-1 overflow-auto min-h-0"
+      >
+        <table
+          ref={tableRef}
+          className="caption-bottom text-sm table-fixed border-collapse min-w-[1400px] w-full"
+          role="grid"
+          aria-label="Document inventory items"
+        >
           <colgroup>
-            <col className="w-[2%] min-w-[40px]" />
-            <col className="w-[6%] min-w-[80px]" />
-            <col className="w-[5%] min-w-[60px]" />
-            <col className="w-[7%] min-w-[100px]" />
-            <col className="w-[10%] min-w-[120px]" />
-            <col className="w-[15%] min-w-[150px]" />
-            <col className="w-[14%] min-w-[140px]" />
-            <col className="w-[8%] min-w-[100px]" />
-            <col className="w-[12%] min-w-[120px]" />
-            <col className="w-[5%] min-w-[60px]" />
-            <col className="w-[6%] min-w-[80px]" />
-            <col className="w-[10%] min-w-[120px]" />
+            <col className="w-[40px]" />
+            <col className="w-[100px]" />
+            <col className="w-[80px]" />
+            <col className="w-[120px]" />
+            <col className="w-[140px]" />
+            <col className="w-[200px]" />
+            <col className="w-[180px]" />
+            <col className="w-[120px]" />
+            <col className="w-[180px]" />
+            <col className="w-[80px]" />
+            <col className="w-[100px]" />
+            <col className="w-[160px]" />
           </colgroup>
-          <TableHeader className="sticky top-0 z-20 bg-muted/95 backdrop-blur-sm border-b border-border" role="rowgroup">
+          <TableHeader
+            className="sticky top-0 z-20 bg-muted/95 backdrop-blur-sm border-b border-border"
+            role="rowgroup"
+          >
             <TableRow role="row">
-              <TableHead className="w-[2%] min-w-[40px]" role="columnheader" scope="col">
+              <TableHead role="columnheader" scope="col">
                 <Checkbox
                   checked={isAllSelected}
                   onCheckedChange={toggleAll}
@@ -272,17 +391,39 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
                   aria-describedby={isIndeterminate ? "selection-status" : undefined}
                 />
               </TableHead>
-              <TableHead className="w-[6%] min-w-[80px]" role="columnheader" scope="col">Date Rcvd</TableHead>
-              <TableHead className="w-[5%] min-w-[60px]" role="columnheader" scope="col">Doc Year</TableHead>
-              <TableHead className="w-[7%] min-w-[100px]" role="columnheader" scope="col">Doc Date Range</TableHead>
-              <TableHead className="w-[10%] min-w-[120px]" role="columnheader" scope="col">Document Type</TableHead>
-              <TableHead className="w-[15%] min-w-[150px]" role="columnheader" scope="col">Document Description</TableHead>
-              <TableHead className="w-[14%] min-w-[140px]" role="columnheader" scope="col">File Name</TableHead>
-              <TableHead className="w-[8%] min-w-[100px]" role="columnheader" scope="col">Folder Name</TableHead>
-              <TableHead className="w-[12%] min-w-[120px]" role="columnheader" scope="col">Folder Path</TableHead>
-              <TableHead className="w-[5%] min-w-[60px]" role="columnheader" scope="col">File Type</TableHead>
-              <TableHead className="w-[6%] min-w-[80px]" role="columnheader" scope="col">Bates Stamp</TableHead>
-              <TableHead className="w-[10%] min-w-[120px]" role="columnheader" scope="col">Notes</TableHead>
+              <TableHead role="columnheader" scope="col">
+                Date Rcvd
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Doc Year
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Doc Date Range
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Document Type
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Document Description
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                File Name
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Folder Name
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Folder Path
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                File Type
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Bates Stamp
+              </TableHead>
+              <TableHead role="columnheader" scope="col">
+                Notes
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody
@@ -291,7 +432,7 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
               shouldVirtualize && virtualItems && virtualItems.length > 0
                 ? {
                     height: `${rowVirtualizer.getTotalSize()}px`,
-                    width: "100%",
+                    width: tableWidth ? `${tableWidth}px` : "100%",
                     position: "relative",
                   }
                 : undefined
@@ -299,11 +440,13 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
           >
             {items.length === 0 ? (
               <TableRow role="row">
-                <TableCell colSpan={12} className="text-center py-8" role="gridcell">
-                  <div className="flex flex-col items-center gap-2">
-                    <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
-                      No files found. Select a folder to scan.
-                    </p>
+                <TableCell colSpan={12} className="p-0" role="gridcell">
+                  <div className="min-h-[300px] flex items-center justify-center">
+                    <EmptyState
+                      icon={FolderOpen}
+                      title="No files found"
+                      description="Select a folder to scan and generate your inventory."
+                    />
                   </div>
                 </TableCell>
               </TableRow>
@@ -312,7 +455,7 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
               virtualItems.map((virtualRow) => {
                 const item = items[virtualRow.index]
                 if (!item) return null
-                
+
                 return (
                   <TableRowMemo
                     key={`${item.absolute_path}-${virtualRow.index}`}
@@ -325,7 +468,8 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
                       position: "absolute",
                       top: 0,
                       left: 0,
-                      width: "100%",
+                      width: tableWidth ? `${tableWidth}px` : "100%",
+                      minWidth: tableWidth ? `${tableWidth}px` : "100%",
                       height: `${virtualRow.size}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
@@ -364,10 +508,7 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
           {selectedCount} row{selectedCount !== 1 ? "s" : ""} selected
         </div>
       )}
-      <TableActions
-        selectedCount={selectedCount}
-        onClearSelection={clearSelection}
-      />
+      <TableActions selectedCount={selectedCount} onClearSelection={clearSelection} />
     </div>
   )
 }

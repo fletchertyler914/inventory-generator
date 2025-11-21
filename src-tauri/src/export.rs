@@ -23,7 +23,7 @@ pub struct InventoryRow {
 pub fn generate_xlsx(
     rows: &[InventoryRow],
     case_number: Option<&str>,
-    _folder_path: Option<&str>,
+    folder_path: Option<&str>,
     output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut workbook = Workbook::new();
@@ -47,7 +47,7 @@ pub fn generate_xlsx(
         .set_bold()
         .set_border(FormatBorder::Thin);
     
-    // Write metadata rows if case number provided
+    // Write metadata rows if case number or folder path provided
     let mut current_row = 0;
     if case_number.is_some() {
         // Create centered format for merged title cells
@@ -64,6 +64,23 @@ pub fn generate_xlsx(
         };
         
         worksheet.merge_range(current_row, 0, current_row, 1, &title_text, &title_format)?;
+        current_row += 1;
+        
+        // Write folder path row if provided
+        if let Some(folder) = folder_path {
+            let folder_text = format!("Source Folder: {}", folder);
+            worksheet.write_string(current_row, 0, &folder_text)?;
+        }
+        current_row += 1;
+        
+        // Empty row for spacing
+        current_row += 1;
+    } else if folder_path.is_some() {
+        // If no case number but folder path exists, write folder path row
+        if let Some(folder) = folder_path {
+            let folder_text = format!("Source Folder: {}", folder);
+            worksheet.write_string(current_row, 0, &folder_text)?;
+        }
         current_row += 1;
         
         // Empty row for spacing
@@ -113,12 +130,12 @@ pub fn generate_xlsx(
 pub fn generate_csv(
     rows: &[InventoryRow],
     case_number: Option<&str>,
-    _folder_path: Option<&str>,
+    folder_path: Option<&str>,
     output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut wtr = csv::Writer::from_path(output_path)?;
     
-    // Write title row with case number (no source folder row)
+    // Write title row with case number and source folder row
     if case_number.is_some() {
         // First row: Merged title in first two cells
         // CSV doesn't support merged cells, so we put the full title in first cell
@@ -139,7 +156,33 @@ pub fn generate_csv(
         let title_row_refs: Vec<&str> = title_row.iter().map(|s| s.as_str()).collect();
         wtr.write_record(&title_row_refs)?;
         
+        // Write folder path row if provided
+        if let Some(folder) = folder_path {
+            let mut folder_row: Vec<String> = vec![format!("Source Folder: {}", folder)];
+            // Pad with empty cells to match column structure (11 columns total)
+            while folder_row.len() < 11 {
+                folder_row.push(String::new());
+            }
+            let folder_row_refs: Vec<&str> = folder_row.iter().map(|s| s.as_str()).collect();
+            wtr.write_record(&folder_row_refs)?;
+        }
+        
         // Empty row for spacing (matching XLSX format)
+        let empty_row: Vec<&str> = vec![""; 11];
+        wtr.write_record(&empty_row)?;
+    } else if folder_path.is_some() {
+        // If no case number but folder path exists, write folder path row
+        if let Some(folder) = folder_path {
+            let mut folder_row: Vec<String> = vec![format!("Source Folder: {}", folder)];
+            // Pad with empty cells to match column structure (11 columns total)
+            while folder_row.len() < 11 {
+                folder_row.push(String::new());
+            }
+            let folder_row_refs: Vec<&str> = folder_row.iter().map(|s| s.as_str()).collect();
+            wtr.write_record(&folder_row_refs)?;
+        }
+        
+        // Empty row for spacing
         let empty_row: Vec<&str> = vec![""; 11];
         wtr.write_record(&empty_row)?;
     }

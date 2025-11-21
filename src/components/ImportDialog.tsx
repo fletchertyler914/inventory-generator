@@ -106,7 +106,7 @@ export function ImportDialog({ onItemsChange, onCaseNumberChange, onImportComple
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
             <Button 
-              variant="ghost"
+              variant="outline"
               className="w-full"
             >
               <FileText className="mr-2 h-4 w-4" />

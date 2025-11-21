@@ -52,18 +52,19 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-const addToRemoveQueue = (toastId: string) => {
+const addToRemoveQueue = (toastId: string, delay: number = TOAST_REMOVE_DELAY) => {
   if (toastTimeouts.has(toastId)) {
     return
   }
 
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId)
+    // Dismiss the toast (this will set open: false and schedule removal)
     dispatch({
-      type: "REMOVE_TOAST",
+      type: "DISMISS_TOAST",
       toastId: toastId,
     })
-  }, TOAST_REMOVE_DELAY)
+  }, delay)
 
   toastTimeouts.set(toastId, timeout)
 }
@@ -87,11 +88,42 @@ export const reducer = (state: State, action: Action): State => {
     case "DISMISS_TOAST": {
       const { toastId } = action
 
-      if (toastId) {
-        addToRemoveQueue(toastId)
+      // If there's already a timeout for this toast (auto-dismiss), clear it and remove immediately
+      if (toastId && toastTimeouts.has(toastId)) {
+        const existingTimeout = toastTimeouts.get(toastId)
+        if (existingTimeout) {
+          clearTimeout(existingTimeout)
+          toastTimeouts.delete(toastId)
+        }
+        // Schedule immediate removal after a short delay for animation
+        setTimeout(() => {
+          dispatch({
+            type: "REMOVE_TOAST",
+            toastId: toastId,
+          })
+        }, 100)
+      } else if (toastId) {
+        // Manual dismiss - schedule removal after animation delay
+        setTimeout(() => {
+          dispatch({
+            type: "REMOVE_TOAST",
+            toastId: toastId,
+          })
+        }, 100)
       } else {
+        // Dismiss all
         state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
+          const existingTimeout = toastTimeouts.get(toast.id)
+          if (existingTimeout) {
+            clearTimeout(existingTimeout)
+            toastTimeouts.delete(toast.id)
+          }
+          setTimeout(() => {
+            dispatch({
+              type: "REMOVE_TOAST",
+              toastId: toast.id,
+            })
+          }, 100)
         })
       }
 
@@ -134,7 +166,7 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-function toast({ ...props }: Toast) {
+function toast({ duration = TOAST_REMOVE_DELAY, ...props }: Toast & { duration?: number }) {
   const id = genId()
 
   const update = (props: ToasterToast) =>
@@ -149,12 +181,16 @@ function toast({ ...props }: Toast) {
     toast: {
       ...props,
       id,
+      duration,
       open: true,
       onOpenChange: (open) => {
         if (!open) dismiss()
       },
     },
   })
+
+  // Automatically dismiss after duration
+  addToRemoveQueue(id)
 
   return {
     id: id,
