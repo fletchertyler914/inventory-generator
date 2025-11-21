@@ -3,7 +3,7 @@ mod mappings;
 mod export;
 mod error;
 
-use scanner::scan_folder;
+use scanner::{scan_folder, count_files};
 use mappings::process_file_metadata;
 use export::{InventoryRow, generate_xlsx, generate_csv, generate_json, read_xlsx, read_csv, read_json};
 use error::AppError;
@@ -25,6 +25,22 @@ pub struct InventoryItem {
     pub notes: String,
     // Internal fields for tracking
     pub absolute_path: String,
+}
+
+#[tauri::command]
+fn count_directory_files(path: String) -> Result<usize, String> {
+    let root_path = PathBuf::from(&path);
+    
+    if !root_path.exists() {
+        return Err(AppError::PathNotFound(path).to_string_message());
+    }
+    
+    if !root_path.is_dir() {
+        return Err(AppError::NotADirectory(path).to_string_message());
+    }
+    
+    count_files(&root_path)
+        .map_err(|e| AppError::ScanError(e.to_string()).to_string_message())
 }
 
 #[tauri::command]
@@ -227,7 +243,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![scan_directory, export_inventory, import_inventory, sync_inventory])
+        .invoke_handler(tauri::generate_handler![count_directory_files, scan_directory, export_inventory, import_inventory, sync_inventory])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

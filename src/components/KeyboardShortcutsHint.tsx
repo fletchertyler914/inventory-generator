@@ -10,8 +10,8 @@ export function KeyboardShortcutsHint({ className }: KeyboardShortcutsHintProps)
   const modifier = isMac ? "⌘" : "Ctrl"
 
   const shortcuts = [
-    { keys: `${modifier} + S`, action: "Export" },
-    { keys: `${modifier} + O`, action: "Import" },
+    { keys: `${modifier} + S`, action: "Create Inventory" },
+    { keys: `${modifier} + O`, action: "Load Inventory" },
     { keys: `${modifier} + A`, action: "Select All" },
     { keys: `${modifier} + D`, action: "Focus Date Input" },
     { keys: "Esc", action: "Clear Selection" },

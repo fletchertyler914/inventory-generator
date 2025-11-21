@@ -224,7 +224,7 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange }: Inve
       aria-colcount={12}
     >
       <div ref={parentRef} className="flex-1 overflow-auto relative">
-        <table className="w-full caption-bottom text-sm table-auto" role="grid" aria-label="Document inventory items">
+        <table className="w-full caption-bottom text-sm table-auto border-collapse" role="grid" aria-label="Document inventory items">
           <colgroup>
             <col className="w-[2%] min-w-[40px]" />
             <col className="w-[6%] min-w-[80px]" />

@@ -4,26 +4,49 @@
  */
 
 import { useInventoryStore } from "@/store/inventoryStore"
-import { scanDirectory, syncInventory } from "@/services/inventoryService"
+import { countDirectoryFiles, scanDirectory, syncInventory } from "@/services/inventoryService"
 import { createAppError, logError, ErrorCode } from "@/lib/error-handler"
 import { toast } from "./useToast"
+import type { InventoryItem } from "@/types/inventory"
 
 export function useInventory() {
   const store = useInventoryStore()
 
-  const scanFolder = async (path: string) => {
+  const scanFolder = async (path: string, skipWarning = false): Promise<{ items: InventoryItem[], shouldShowWarning: boolean, fileCount?: number }> => {
     store.setScanning(true)
     store.setSelectedFolder(path)
     
     try {
+      // First, quickly count files to check if we need to show warning
+      let fileCount: number | null = null
+      if (!skipWarning) {
+        try {
+          fileCount = await countDirectoryFiles(path)
+          // If 100+ files, show warning before scanning
+          if (fileCount >= 100) {
+            store.setScanning(false)
+            return { items: [], shouldShowWarning: true, fileCount }
+          }
+        } catch (error) {
+          // If count fails, proceed with scan anyway
+          console.warn("Failed to count files, proceeding with scan:", error)
+        }
+      }
+      
+      // Proceed with full scan
       const scannedItems = await scanDirectory(path)
+      
+      // If skipping warning or count < 100, proceed normally
       store.setItems(scannedItems)
       toast({
         title: "Folder scanned successfully",
         description: `Found ${scannedItems.length} file${scannedItems.length !== 1 ? 's' : ''}`,
         variant: "success",
       })
+      store.setScanning(false)
+      return { items: scannedItems, shouldShowWarning: false, fileCount: scannedItems.length }
     } catch (error) {
+      store.setScanning(false)
       const appError = createAppError(error, ErrorCode.SCAN_DIRECTORY_FAILED)
       logError(appError, "scanFolder")
       toast({
@@ -32,10 +55,9 @@ export function useInventory() {
         variant: "destructive",
       })
       throw appError
-    } finally {
-      store.setScanning(false)
     }
   }
+  
 
   const syncFolder = async (folderPath: string) => {
     if (!folderPath) {

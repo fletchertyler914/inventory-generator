@@ -1,6 +1,7 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import "./index.css"
 import { DesktopLayout } from "./components/layout/DesktopLayout"
+import { LargeFolderWarningDialog } from "./components/LargeFolderWarningDialog"
 import { useInventory } from "./hooks/useInventory"
 import { useRecentInventories } from "./hooks/useRecentInventories"
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts"
@@ -28,6 +29,10 @@ function App() {
     bulkUpdateItems,
   } = useInventory()
   
+  const [warningDialogOpen, setWarningDialogOpen] = useState(false)
+  const [pendingFolderPath, setPendingFolderPath] = useState<string | null>(null)
+  const [pendingFileCount, setPendingFileCount] = useState<number>(0)
+  
   const {
     exportDialogOpen,
     importDialogOpen,
@@ -46,9 +51,36 @@ function App() {
 
   const handleFolderSelected = async (path: string) => {
     try {
-      await scanFolder(path)
+      const result = await scanFolder(path)
+      if (result.shouldShowWarning) {
+        setPendingFolderPath(path)
+        setPendingFileCount(result.fileCount || 0)
+        setWarningDialogOpen(true)
+      }
     } catch (error) {
       // Error already handled in scanFolder with toast
+    }
+  }
+  
+  const handleWarningConfirm = async () => {
+    if (pendingFolderPath) {
+      try {
+        // Now scan with warning skipped
+        await scanFolder(pendingFolderPath, true)
+      } catch (error) {
+        // Error already handled
+      }
+      setPendingFolderPath(null)
+      setPendingFileCount(0)
+    }
+  }
+  
+  const handleWarningCancel = () => {
+    setPendingFolderPath(null)
+    setPendingFileCount(0)
+    // Clear selected folder if user cancels
+    if (selectedFolder) {
+      setItems([])
     }
   }
 
@@ -204,6 +236,13 @@ function App() {
           bulkDateInputRef={bulkDateInputRef}
         />
         <Toaster />
+        <LargeFolderWarningDialog
+          open={warningDialogOpen}
+          onOpenChange={setWarningDialogOpen}
+          fileCount={pendingFileCount}
+          onConfirm={handleWarningConfirm}
+          onCancel={handleWarningCancel}
+        />
       </div>
     </ErrorBoundary>
   )

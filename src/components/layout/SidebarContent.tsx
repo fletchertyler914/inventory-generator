@@ -6,6 +6,7 @@ import { ThemeToggle } from '../ThemeToggle';
 import { Separator } from '../ui/separator';
 import { KeyboardShortcutsHint } from '../KeyboardShortcutsHint';
 import { Button } from '../ui/button';
+import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { RefreshCw } from 'lucide-react';
 import type { InventoryItem } from '@/types/inventory';
 
@@ -77,22 +78,68 @@ export function SidebarContent({
 
       {/* Scrollable Content */}
       <div className='flex-1 overflow-y-auto'>
-        <div className='p-6 space-y-6'>
-          {/* Folder Selection */}
+        <div className='p-6 space-y-8'>
+          {/* Source Folder Section */}
           <div className='space-y-3'>
-            <label className='text-xs font-semibold text-foreground/60 uppercase tracking-wider block'>
-              Source Folder
-            </label>
+            <div className='flex items-center justify-between'>
+              <label className='text-xs font-semibold text-foreground/60 uppercase tracking-wider'>
+                Source Folder
+              </label>
+              {items.length > 0 && selectedFolder && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={onSyncInventory}
+                      disabled={loading || !selectedFolder}
+                      variant='ghost'
+                      size='icon'
+                      className='h-6 w-6'
+                    >
+                      <RefreshCw className='h-4 w-4' />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Sync with Folder
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             <FolderSelector
               onFolderSelected={onFolderSelected}
               disabled={loading}
+              selectedFolder={selectedFolder}
             />
           </div>
 
-          <Separator />
+          {/* Inventory Operations */}
+          <div className='space-y-2'>
+            <label className='text-xs font-semibold text-foreground/60 uppercase tracking-wider block'>
+              Inventory Operations
+            </label>
+            <div className='grid grid-cols-2 gap-2'>
+              <ImportDialog
+                onItemsChange={onItemsChange}
+                onCaseNumberChange={onCaseNumberChange}
+                onImportComplete={onImportComplete}
+                onFolderPathRestored={onFolderPathRestored}
+                selectedFolder={selectedFolder}
+                open={importDialogOpen}
+                onOpenChange={onImportDialogOpenChange}
+              />
+              <ExportDialog
+                items={items}
+                caseNumber={caseNumber}
+                disabled={items.length === 0}
+                onExportComplete={onExportComplete}
+                selectedFolder={selectedFolder}
+                open={exportDialogOpen}
+                onOpenChange={onExportDialogOpenChange}
+              />
+            </div>
+          </div>
 
-          {/* Configuration Form */}
-          <div className='space-y-3'>
+          {/* Configuration */}
+          <div className='space-y-5'>
             <ConfigForm
               caseNumber={caseNumber}
               onCaseNumberChange={onCaseNumberChange}
@@ -102,86 +149,24 @@ export function SidebarContent({
               bulkDateInputRef={bulkDateInputRef}
             />
           </div>
-
-          <Separator />
-
-          {/* Import */}
-          <div className='space-y-3'>
-            <label className='text-xs font-semibold text-foreground/60 uppercase tracking-wider block'>
-              Import
-            </label>
-            <ImportDialog
-              onItemsChange={onItemsChange}
-              onCaseNumberChange={onCaseNumberChange}
-              onImportComplete={onImportComplete}
-              onFolderPathRestored={onFolderPathRestored}
-              selectedFolder={selectedFolder}
-              open={importDialogOpen}
-              onOpenChange={onImportDialogOpenChange}
-            />
-          </div>
-
-          <Separator />
-
-          {/* Sync */}
-          {items.length > 0 && selectedFolder && (
-            <div className='space-y-3'>
-              <label className='text-xs font-semibold text-foreground/60 uppercase tracking-wider block'>
-                Sync
-              </label>
-              <Button
-                onClick={onSyncInventory}
-                disabled={loading || !selectedFolder}
-                variant='outline'
-                className='w-full'
-              >
-                <RefreshCw className='mr-2 h-4 w-4' />
-                Sync with Folder
-              </Button>
-              <p className='text-xs text-muted-foreground'>
-                Update inventory to reflect changes in the source folder
-              </p>
-            </div>
-          )}
-
-          {items.length > 0 && selectedFolder && <Separator />}
-
-          {/* Export */}
-          <div className='space-y-3'>
-            <label className='text-xs font-semibold text-foreground/60 uppercase tracking-wider block'>
-              Export
-            </label>
-            <ExportDialog
-              items={items}
-              caseNumber={caseNumber}
-              disabled={items.length === 0}
-              onExportComplete={onExportComplete}
-              selectedFolder={selectedFolder}
-              open={exportDialogOpen}
-              onOpenChange={onExportDialogOpenChange}
-            />
-          </div>
-
-          <Separator />
-
-          {/* Keyboard Shortcuts */}
-          <div className='space-y-3'>
-            <KeyboardShortcutsHint />
-          </div>
         </div>
       </div>
 
-      {/* Footer Stats */}
-      {items.length > 0 && (
-        <div className='p-4 border-t border-border bg-muted/30'>
-          <div className='flex items-center gap-2'>
-            <div className='h-1.5 w-1.5 rounded-full bg-muted-foreground' />
-            <p className='text-xs text-muted-foreground'>
-              {items.length} file{items.length !== 1 ? 's' : ''} loaded
-            </p>
-          </div>
+      {/* Footer with Keyboard Shortcuts */}
+      <div className='border-t border-border bg-muted/20'>
+        <div className='p-4 space-y-3'>
+          <KeyboardShortcutsHint />
+          {items.length > 0 && (
+            <div className='flex items-center gap-2 pt-2 border-t border-border/50'>
+              <div className='h-1.5 w-1.5 rounded-full bg-muted-foreground' />
+              <p className='text-xs text-muted-foreground'>
+                {items.length} file{items.length !== 1 ? 's' : ''} loaded
+              </p>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+
     </div>
   );
 }

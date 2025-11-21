@@ -10,7 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "./ui/dialog"
-import { Download, FileSpreadsheet, FileText, Code, Loader2 } from "lucide-react"
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip"
+import { FilePlus, FileSpreadsheet, FileText, Code, Loader2 } from "lucide-react"
 import { exportInventory } from "@/services/inventoryService"
 import { createAppError, logError, ErrorCode } from "@/lib/error-handler"
 import { toast } from "@/hooks/useToast"
@@ -38,8 +39,8 @@ export function ExportDialog({ items, caseNumber, disabled, onExportComplete, se
   const handleExport = async () => {
     if (items.length === 0) {
       toast({
-        title: "No items to export",
-        description: "Please add items to your inventory before exporting.",
+        title: "No items to create inventory",
+        description: "Please add items to your inventory before creating a file.",
         variant: "warning",
       })
       return
@@ -81,15 +82,15 @@ export function ExportDialog({ items, caseNumber, disabled, onExportComplete, se
 
       setOpen(false)
       toast({
-        title: "Export successful",
-        description: `Successfully exported ${items.length} item${items.length !== 1 ? 's' : ''} to ${filePath.split(/[/\\]/).pop()}`,
+        title: "Inventory created",
+        description: `Successfully created inventory file with ${items.length} item${items.length !== 1 ? 's' : ''} at ${filePath.split(/[/\\]/).pop()}`,
         variant: "success",
       })
     } catch (error) {
       const appError = createAppError(error, ErrorCode.EXPORT_FAILED)
       logError(appError, "ExportDialog")
       toast({
-        title: "Export failed",
+        title: "Failed to create inventory",
         description: appError.message,
         variant: "destructive",
       })
@@ -106,20 +107,30 @@ export function ExportDialog({ items, caseNumber, disabled, onExportComplete, se
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          disabled={disabled || items.length === 0}
-          className="w-full"
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
-      </DialogTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button 
+              disabled={disabled || items.length === 0}
+              variant="ghost"
+              className="w-full"
+            >
+              <FilePlus className="mr-2 h-4 w-4" />
+              Create
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>
+          {items.length === 0 
+            ? "No items to create inventory" 
+            : `Create inventory file with ${items.length} item${items.length !== 1 ? 's' : ''}`}
+        </TooltipContent>
+      </Tooltip>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold">Export Inventory</DialogTitle>
+          <DialogTitle className="text-xl font-semibold">Create</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Export {items.length} item{items.length !== 1 ? 's' : ''} in your preferred format
+            Create inventory file with {items.length} item{items.length !== 1 ? 's' : ''} in your preferred format
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -180,12 +191,12 @@ export function ExportDialog({ items, caseNumber, disabled, onExportComplete, se
             {exporting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Exporting...
+                Creating...
               </>
             ) : (
               <>
-                <Download className="mr-2 h-4 w-4" />
-                Export
+                <FilePlus className="mr-2 h-4 w-4" />
+                Create
               </>
             )}
           </Button>

@@ -19,6 +19,23 @@ export interface ImportResult {
 }
 
 /**
+ * Counts files in a directory without loading metadata (fast)
+ * 
+ * @param path - Absolute path to the directory to count
+ * @returns Promise resolving to the number of files
+ * @throws Error if the path doesn't exist or isn't a directory
+ * 
+ * @example
+ * ```ts
+ * const count = await countDirectoryFiles("/path/to/documents")
+ * console.log(`Found ${count} files`)
+ * ```
+ */
+export async function countDirectoryFiles(path: string): Promise<number> {
+  return invoke<number>("count_directory_files", { path })
+}
+
+/**
  * Scans a directory and returns inventory items
  * 
  * @param path - Absolute path to the directory to scan

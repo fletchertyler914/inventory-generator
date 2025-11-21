@@ -10,7 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "./ui/dialog"
-import { Upload, Loader2 } from "lucide-react"
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip"
+import { FileText, Loader2 } from "lucide-react"
 import { importInventory } from "@/services/inventoryService"
 import { createAppError, logError, ErrorCode } from "@/lib/error-handler"
 import { toast } from "@/hooks/useToast"
@@ -82,15 +83,15 @@ export function ImportDialog({ onItemsChange, onCaseNumberChange, onImportComple
 
       setOpen(false)
       toast({
-        title: "Import successful",
-        description: `Successfully imported ${result.items.length} item${result.items.length !== 1 ? 's' : ''}`,
+        title: "Inventory loaded",
+        description: `Successfully loaded ${result.items.length} item${result.items.length !== 1 ? 's' : ''}`,
         variant: "success",
       })
     } catch (error) {
       const appError = createAppError(error, ErrorCode.IMPORT_FAILED)
       logError(appError, "ImportDialog")
       toast({
-        title: "Import failed",
+        title: "Failed to load inventory",
         description: appError.message,
         variant: "destructive",
       })
@@ -101,24 +102,32 @@ export function ImportDialog({ onItemsChange, onCaseNumberChange, onImportComple
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          className="w-full"
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          Import
-        </Button>
-      </DialogTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button 
+              variant="ghost"
+              className="w-full"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Load
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>
+          Load a previously created inventory file
+        </TooltipContent>
+      </Tooltip>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold">Import Inventory</DialogTitle>
+          <DialogTitle className="text-xl font-semibold">Load</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Load a previously exported inventory file (XLSX, CSV, or JSON)
+            Load a previously created inventory file (XLSX, CSV, or JSON)
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <p className="text-sm text-muted-foreground">
-            Select an inventory file to import. The format will be automatically detected from the file extension.
+            Select an inventory file to load. The format will be automatically detected from the file extension.
             This will replace your current inventory items.
           </p>
         </div>
@@ -136,12 +145,12 @@ export function ImportDialog({ onItemsChange, onCaseNumberChange, onImportComple
             {importing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Importing...
+                Loading...
               </>
             ) : (
               <>
-                <Upload className="mr-2 h-4 w-4" />
-                Import
+                <FileText className="mr-2 h-4 w-4" />
+                Load
               </>
             )}
           </Button>

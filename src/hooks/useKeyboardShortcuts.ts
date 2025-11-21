@@ -30,14 +30,14 @@ export function useKeyboardShortcuts({
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0
       const modifier = isMac ? e.metaKey : e.ctrlKey
 
-      // Ctrl/Cmd + S: Export
+      // Ctrl/Cmd + S: Create Inventory
       if (modifier && e.key === "s") {
         e.preventDefault()
         onExport?.()
         return
       }
 
-      // Ctrl/Cmd + O: Import
+      // Ctrl/Cmd + O: Load Inventory
       if (modifier && e.key === "o") {
         e.preventDefault()
         onImport?.()

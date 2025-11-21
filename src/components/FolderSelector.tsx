@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { open } from "@tauri-apps/plugin-dialog"
 import { Button } from "./ui/button"
 import { FolderOpen, CheckCircle2 } from "lucide-react"
@@ -8,11 +7,10 @@ import { toast } from "@/hooks/useToast"
 interface FolderSelectorProps {
   onFolderSelected: (path: string) => void
   disabled?: boolean
+  selectedFolder?: string | null
 }
 
-export function FolderSelector({ onFolderSelected, disabled }: FolderSelectorProps) {
-  const [selectedPath, setSelectedPath] = useState<string | null>(null)
-
+export function FolderSelector({ onFolderSelected, disabled, selectedFolder }: FolderSelectorProps) {
   const handleSelectFolder = async () => {
     try {
       const selected = await open({
@@ -21,7 +19,6 @@ export function FolderSelector({ onFolderSelected, disabled }: FolderSelectorPro
       })
 
       if (selected && typeof selected === "string") {
-        setSelectedPath(selected)
         onFolderSelected(selected)
       }
     } catch (error) {
@@ -37,22 +34,22 @@ export function FolderSelector({ onFolderSelected, disabled }: FolderSelectorPro
 
   return (
     <div className="space-y-3">
+      {selectedFolder && (
+        <div className="flex items-center gap-2.5 px-3 py-2 rounded border border-border bg-muted/30">
+          <CheckCircle2 className="h-4 w-4 text-accent flex-shrink-0" />
+          <span className="text-sm font-medium text-foreground truncate">
+            {selectedFolder.split('/').pop() || selectedFolder}
+          </span>
+        </div>
+      )}
       <Button
         onClick={handleSelectFolder}
         disabled={disabled}
         className="w-full"
       >
         <FolderOpen className="mr-2 h-4 w-4" />
-        Select Folder
+        Select Inventory Folder
       </Button>
-      {selectedPath && (
-        <div className="flex items-center gap-2.5 px-3 py-2 rounded border border-border bg-muted/30">
-          <CheckCircle2 className="h-4 w-4 text-accent flex-shrink-0" />
-          <span className="text-sm font-medium text-foreground truncate">
-            {selectedPath.split('/').pop()}
-          </span>
-        </div>
-      )}
     </div>
   )
 }

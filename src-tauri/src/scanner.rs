@@ -116,6 +116,30 @@ fn format_size(bytes: u64) -> String {
     format!("{:.2} {}", size, UNITS[unit_index])
 }
 
+/// Fast file count - only counts files without reading metadata
+pub fn count_files(root_path: &Path) -> std::io::Result<usize> {
+    let mut count = 0;
+    
+    fn walk_dir_count(dir: &Path, count: &mut usize) -> std::io::Result<()> {
+        if dir.is_dir() {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                
+                if path.is_dir() {
+                    walk_dir_count(&path, count)?;
+                } else if path.is_file() {
+                    *count += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+    
+    walk_dir_count(root_path, &mut count)?;
+    Ok(count)
+}
+
 pub fn scan_folder(root_path: &Path) -> std::io::Result<Vec<FileMetadata>> {
     let mut files = Vec::new();
     
