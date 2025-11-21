@@ -105,57 +105,71 @@ export function ConfigForm({
             )}
           </div>
         </div>
-        <div className="space-y-2.5">
-        <Label htmlFor="bulk-date" className="text-xs font-semibold text-foreground/70 uppercase tracking-wider flex items-center gap-2">
-          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-            Bulk Set Date Rcvd
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="bulk-date" className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              Bulk Set Date Received
           </Label>
         {hasSelection && (
-          <p className="text-xs text-muted-foreground">
-            {selectedIndices.length} of {totalItems} item{totalItems !== 1 ? 's' : ''} selected
+              <span className="text-xs text-muted-foreground">
+                {selectedIndices.length} selected
+              </span>
+            )}
+          </div>
+          
+          {!hasSelection && totalItems > 0 && (
+            <p className="text-xs text-muted-foreground/80 leading-relaxed">
+              Apply to all items, or select specific rows in the table first
           </p>
         )}
-        {!hasSelection && totalItems > 0 && (
-          <p className="text-xs text-muted-foreground">
-            Select rows in the table to apply to specific items, or leave unselected to apply to all
+          
+          {totalItems === 0 && (
+            <p className="text-xs text-muted-foreground/60 italic">
+              No items available. Scan a folder to begin.
           </p>
         )}
-        <div className="space-y-2">
+
+          <div className="flex gap-2">
+            <div className="flex-1">
           <DateInput
             id="bulk-date"
             ref={bulkDateInputRef}
             value={bulkDate}
             onChange={handleDateChange}
-            placeholder="Select date"
+                placeholder="Select date"
             error={dateError}
             disabled={totalItems === 0}
+                className="w-full"
           />
+            </div>
           <Button 
             onClick={handleBulkSetDate} 
             variant="default"
             disabled={!bulkDate.trim() || totalItems === 0 || !!dateError}
-            size="sm"
+              size="default"
             className={cn(
-              "w-full transition-all duration-200",
+                "shrink-0 px-4 transition-all duration-200",
               showSuccess && "bg-green-600 hover:bg-green-700"
             )}
           >
             {showSuccess ? (
-              <span className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4" />
-                Applied!
+                  Applied
               </span>
             ) : (
               "Apply"
             )}
           </Button>
+          </div>
+          
           {showSuccess && (
-            <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1.5">
+            <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1.5 animate-in fade-in-0">
               <CheckCircle2 className="h-3 w-3" />
-              Date applied to {hasSelection ? selectedIndices.length : totalItems} item{hasSelection ? (selectedIndices.length !== 1 ? 's' : '') : (totalItems !== 1 ? 's' : '')}
+              Applied to {hasSelection ? selectedIndices.length : totalItems} item{hasSelection ? (selectedIndices.length !== 1 ? 's' : '') : (totalItems !== 1 ? 's' : '')}
             </p>
           )}
-        </div>
       </div>
     </div>
   )

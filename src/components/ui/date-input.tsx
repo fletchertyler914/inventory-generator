@@ -13,6 +13,9 @@ import {
 import { cn } from "@/lib/utils"
 import { isValidDateFormat, formatDate, parseDate } from "@/lib/date-utils"
 
+// Memoize helper function outside component
+const getFirstOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
+
 interface DateInputProps {
   value: string
   onChange: (value: string) => void
@@ -25,45 +28,53 @@ interface DateInputProps {
   defaultOpen?: boolean
 }
 
-export const DateInput = React.forwardRef<HTMLButtonElement, DateInputProps>(
+const DateInputComponent = React.forwardRef<HTMLButtonElement, DateInputProps>(
   (
     {
-      value,
-      onChange,
-      onBlur,
+  value,
+  onChange,
+  onBlur,
       placeholder = "Select date",
-      className,
-      disabled = false,
-      error,
-      id,
+  className,
+  disabled = false,
+  error,
+  id,
       defaultOpen = false,
     },
     ref
   ) => {
     const [open, setOpen] = React.useState(defaultOpen)
     const buttonRef = React.useRef<HTMLButtonElement>(null)
+    const onBlurRef = React.useRef(onBlur)
+    const onChangeRef = React.useRef(onChange)
+    const prevDefaultOpenRef = React.useRef(defaultOpen)
     
     // Merge refs
     React.useImperativeHandle(ref, () => buttonRef.current as HTMLButtonElement, [])
-
-    // Sync open state with defaultOpen prop when it changes
+  
+    // Keep refs in sync
     React.useEffect(() => {
-      if (defaultOpen) {
+      onBlurRef.current = onBlur
+      onChangeRef.current = onChange
+    }, [onBlur, onChange])
+
+    // Sync open state with defaultOpen prop when it changes from false to true
+  React.useEffect(() => {
+      if (defaultOpen && !prevDefaultOpenRef.current) {
         setOpen(true)
-      }
+        }
+      prevDefaultOpenRef.current = defaultOpen
     }, [defaultOpen])
 
-    // Parse current value for calendar
-    const selectedDate = React.useMemo(() => {
-      if (!value || !isValidDateFormat(value)) {
-        return undefined
-      }
-      return parseDate(value) || undefined
-    }, [value])
+  // Parse current value for calendar
+  const selectedDate = React.useMemo(() => {
+    if (!value || !isValidDateFormat(value)) {
+      return undefined
+    }
+    return parseDate(value) || undefined
+  }, [value])
 
-    // Month state for calendar navigation - always use first day of month
-    const getFirstOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
-    
+    // Consolidate month state management into single effect
     const [month, setMonth] = React.useState<Date>(() => {
       if (selectedDate) {
         return getFirstOfMonth(selectedDate)
@@ -71,17 +82,14 @@ export const DateInput = React.forwardRef<HTMLButtonElement, DateInputProps>(
       return getFirstOfMonth(new Date())
     })
 
-    // Update month when selectedDate changes
-    React.useEffect(() => {
-      if (selectedDate) {
-        setMonth(getFirstOfMonth(selectedDate))
-      }
-    }, [selectedDate])
-
-    // Reset month when popover opens if no date is selected
+    // Consolidated month state effect
     React.useEffect(() => {
       if (open && !selectedDate) {
+        // Reset to current month when popover opens with no date
         setMonth(getFirstOfMonth(new Date()))
+      } else if (selectedDate) {
+        // Update month when selectedDate changes
+        setMonth(getFirstOfMonth(selectedDate))
       }
     }, [open, selectedDate])
 
@@ -96,30 +104,28 @@ export const DateInput = React.forwardRef<HTMLButtonElement, DateInputProps>(
       return placeholder
     }, [value, placeholder])
 
-    // Handle date picker selection
-    const handleDateSelect = (date: Date | undefined) => {
+    // Handle date picker selection - optimized with refs and requestAnimationFrame
+    const handleDateSelect = React.useCallback((date: Date | undefined) => {
       if (date) {
         const formatted = formatDate(date)
-        onChange(formatted)
+        onChangeRef.current(formatted)
         setOpen(false)
-        // Call onBlur to save and close editable cell
-        // Use a longer delay to ensure onChange has updated parent state
-        setTimeout(() => {
-          onBlur?.()
-        }, 150)
+        // Use requestAnimationFrame for immediate execution
+        requestAnimationFrame(() => {
+          onBlurRef.current?.()
+        })
       } else {
-        // If date is cleared, update to empty string
-        onChange("")
+        onChangeRef.current("")
         setOpen(false)
-        setTimeout(() => {
-          onBlur?.()
-        }, 150)
+        requestAnimationFrame(() => {
+          onBlurRef.current?.()
+        })
       }
-    }
+    }, [])
 
     const hasError = !!error
 
-    return (
+  return (
       <div className="relative w-full" data-date-input-wrapper onMouseDown={(e) => e.stopPropagation()}>
         <Popover 
           open={open} 
@@ -127,9 +133,9 @@ export const DateInput = React.forwardRef<HTMLButtonElement, DateInputProps>(
             setOpen(newOpen)
             // When popover closes (user clicked outside), trigger save
             if (!newOpen) {
-              setTimeout(() => {
-                onBlur?.()
-              }, 100)
+              requestAnimationFrame(() => {
+                onBlurRef.current?.()
+              })
             }
           }}
         >
@@ -138,20 +144,20 @@ export const DateInput = React.forwardRef<HTMLButtonElement, DateInputProps>(
               ref={buttonRef}
               type="button"
               id={id || "date-picker"}
-              variant="ghost"
+              variant="outline"
               disabled={disabled}
               className={cn(
-                "w-full justify-end text-right font-normal h-8 text-xs",
+                "w-full justify-start text-left font-normal h-9 text-xs",
                 !value && "text-muted-foreground",
-                hasError && "text-destructive",
+                hasError && "border-destructive text-destructive focus-visible:ring-destructive",
                 className
               )}
               onMouseDown={(e) => {
                 e.stopPropagation()
               }}
             >
-              <span className="truncate flex-1 text-right">{displayText}</span>
-              <CalendarIcon className="ml-2 h-3 w-3 flex-shrink-0" />
+              <CalendarIcon className="mr-2 h-3 w-3 flex-shrink-0" />
+              <span className="truncate flex-1 text-left">{displayText}</span>
             </Button>
           </PopoverTrigger>
             <PopoverContent
@@ -166,13 +172,11 @@ export const DateInput = React.forwardRef<HTMLButtonElement, DateInputProps>(
               selected={selectedDate}
                 captionLayout="dropdown"
                 month={month}
-                onMonthChange={(date) => {
+                onMonthChange={React.useCallback((date: Date | undefined) => {
                   if (date) {
-                    // Normalize to first day of month to ensure consistent state
-                    const firstOfMonth = getFirstOfMonth(date)
-                    setMonth(firstOfMonth)
+                    setMonth(getFirstOfMonth(date))
                   }
-                }}
+                }, [])}
               onSelect={handleDateSelect}
               fromYear={1900}
               toYear={2100}
@@ -181,9 +185,12 @@ export const DateInput = React.forwardRef<HTMLButtonElement, DateInputProps>(
         </Popover>
         {hasError && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
       </div>
-    )
+  )
   }
 )
 
-DateInput.displayName = "DateInput"
+DateInputComponent.displayName = "DateInput"
+
+// Memoize component
+export const DateInput = React.memo(DateInputComponent)
 

@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react"
+import { useRef, useCallback, useEffect } from "react"
 
 /**
  * Custom hook to throttle a function
@@ -11,16 +11,22 @@ export function useThrottle<T extends (...args: unknown[]) => void>(
   delay: number = 300
 ): T {
   const lastRun = useRef<number>(Date.now())
+  const callbackRef = useRef(callback)
+
+  // Keep callback ref in sync
+  useEffect(() => {
+    callbackRef.current = callback
+  }, [callback])
 
   return useCallback(
     ((...args: Parameters<T>) => {
       const now = Date.now()
       if (now - lastRun.current >= delay) {
-        callback(...args)
+        callbackRef.current(...args)
         lastRun.current = now
       }
     }) as T,
-    [callback, delay]
+    [delay] // Only depend on delay, use ref for callback
   )
 }
 

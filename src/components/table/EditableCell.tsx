@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, memo } from "react"
 import { Input } from "../ui/input"
 import { DateInput } from "../ui/date-input"
 import { Edit2 } from "lucide-react"
@@ -13,7 +13,7 @@ interface EditableCellProps {
   className?: string
 }
 
-export function EditableCell({
+function EditableCellComponent({
   value,
   onSave,
   placeholder = "—",
@@ -25,78 +25,91 @@ export function EditableCell({
   const [dateError, setDateError] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  // Use ref to track latest editValue for date blur handler
+  // Use refs for stable callbacks to avoid effect re-registration
   const editValueRef = useRef(editValue)
+  const onSaveRef = useRef(onSave)
+  const typeRef = useRef(type)
+  const setDateErrorRef = useRef(setDateError)
 
-  // Keep ref in sync with state
+  // Keep refs in sync with props/state
   useEffect(() => {
-    editValueRef.current = editValue
-  }, [editValue])
+    onSaveRef.current = onSave
+    typeRef.current = type
+    setDateErrorRef.current = setDateError
+  }, [onSave, type])
 
-  const handleSave = useCallback(() => {
-    if (type === "date" && editValue.trim()) {
+  // Update editValueRef directly when setEditValue is called
+  const setEditValueWithRef = useCallback((value: string) => {
+    editValueRef.current = value
+    setEditValue(value)
+  }, [])
+
+  // Use ref-based handler to avoid dependency array issues
+  const handleSaveRef = useRef<() => void>()
+  handleSaveRef.current = () => {
+    const currentValue = editValueRef.current
+    if (typeRef.current === "date" && currentValue.trim()) {
       // Validate date before saving
-      if (!isValidDateFormat(editValue.trim())) {
-        setDateError("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
+      if (!isValidDateFormat(currentValue.trim())) {
+        setDateErrorRef.current("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
         return
       }
     }
-    setDateError("")
-    onSave(editValue)
+    setDateErrorRef.current("")
+    onSaveRef.current(currentValue)
     setIsEditing(false)
-  }, [type, editValue, onSave])
+  }
+
+  const handleSave = useCallback(() => {
+    handleSaveRef.current?.()
+  }, [])
 
   useEffect(() => {
-    if (isEditing) {
-      if (type !== "date" && inputRef.current) {
-        // For text/number inputs, focus immediately
-        // Use setTimeout to ensure it happens after click event completes
-        setTimeout(() => {
-          if (inputRef.current) {
-            inputRef.current.focus()
-            // Set cursor to end of input
-            const length = inputRef.current.value.length
-            inputRef.current.setSelectionRange(length, length)
-          }
-        }, 0)
-      } else if (type === "date") {
-        // For date inputs, the popover will open via defaultOpen prop
-        // No need to do anything here
-      }
+    if (isEditing && type !== "date" && inputRef.current) {
+      // For text/number inputs, focus immediately using requestAnimationFrame
+      requestAnimationFrame(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+          // Set cursor to end of input
+          const length = inputRef.current.value.length
+          inputRef.current.setSelectionRange(length, length)
+        }
+      })
     }
   }, [isEditing, type])
 
-  // Handle click outside to blur and save
+  // Handle click outside to blur and save - optimized with refs
   useEffect(() => {
     if (!isEditing) return
+
+    // Cache popover selectors to avoid repeated DOM queries
+    const popoverSelectors = [
+      '[role="dialog"]',
+      "[data-radix-portal]",
+      "[data-radix-popper-content-wrapper]",
+      "[data-radix-popover-content]",
+      '[data-slot="popover-content"]',
+      'button[aria-label*="calendar" i]',
+      'button[aria-label*="date" i]',
+      '[id*="date-picker"]',
+    ]
 
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node | null
       if (!target || !containerRef.current) return
 
-      // Check if click is outside our container
-      // Also check if it's a popover element (date picker) - Radix UI renders in portal
       const targetElement = target as Element
-      const isPopover =
-        targetElement?.closest?.('[role="dialog"]') ||
-        targetElement?.closest?.("[data-radix-portal]") ||
-        targetElement?.closest?.("[data-radix-popper-content-wrapper]") ||
-        targetElement?.closest?.("[data-radix-popover-content]") ||
-        targetElement?.closest?.("[data-slot='popover-content']") ||
-        // Check if clicking on calendar or popover trigger button
-        targetElement?.closest?.('button[aria-label*="calendar" i]') ||
-        targetElement?.closest?.('button[aria-label*="date" i]') ||
-        targetElement?.closest?.('[id*="date-picker"]')
 
-      // Check if clicking on the date picker button or its container (should not close)
-      if (type === "date" && containerRef.current?.contains(target)) {
-        // Check if clicking on the date picker button or any part of DateInput component
+      // Simplified popover detection
+      const isPopover = popoverSelectors.some((selector) => targetElement?.closest?.(selector))
+
+      // Check if clicking on the date picker button or its container
+      if (typeRef.current === "date" && containerRef.current?.contains(target)) {
         const isDatePickerButton =
           targetElement?.tagName === "BUTTON" ||
           targetElement?.closest?.("button") ||
           targetElement?.closest?.("[data-date-input-wrapper]")
 
-        // If clicking on any part of the DateInput component, don't close
         if (isDatePickerButton) {
           return
         }
@@ -104,13 +117,10 @@ export function EditableCell({
 
       // If clicking outside container and not on popover, handle save
       if (!containerRef.current.contains(target) && !isPopover) {
-        if (type === "date") {
-          // For date fields, the popover's onOpenChange will handle closing and saving
-          // We just need to ensure the popover closes by blurring the input
-          // But only if popover is actually open
+        if (typeRef.current === "date") {
+          // For date fields, check if popover is open
           const popoverContent = document.querySelector('[data-slot="popover-content"]')
           if (popoverContent) {
-            // Popover is open, blur will trigger it to close via onOpenChange
             const inputElement = containerRef.current?.querySelector(
               "input"
             ) as HTMLInputElement | null
@@ -118,19 +128,17 @@ export function EditableCell({
               inputElement.blur()
             }
           } else {
-            // Popover already closed, just save directly
-            handleDateBlur()
+            // Popover already closed, save directly
+            handleDateBlurRef.current?.()
           }
         } else {
           // Save directly for non-date fields
-          handleSave()
+          handleSaveRef.current?.()
         }
       }
     }
 
-    // Also handle when focus moves away
     const handleFocusChange = () => {
-      // Check if focus moved outside our container
       const activeElement = document.activeElement
       if (
         activeElement &&
@@ -138,30 +146,26 @@ export function EditableCell({
         !containerRef.current.contains(activeElement) &&
         isEditing
       ) {
-        // For date fields, let the DateInput's onBlur handle saving
-        // For other fields, save immediately
-        if (type !== "date") {
-          handleSave()
+        if (typeRef.current !== "date") {
+          handleSaveRef.current?.()
         }
       }
     }
 
-    // Use a small delay to avoid immediate trigger when clicking to edit
-    const timeoutId = setTimeout(() => {
-      // Use capture phase to catch events before they bubble
+    // Use requestAnimationFrame instead of setTimeout for immediate registration
+    const rafId = requestAnimationFrame(() => {
       document.addEventListener("mousedown", handleClickOutside, true)
       document.addEventListener("touchstart", handleClickOutside, true)
-      // Also listen for focus changes
       document.addEventListener("focusin", handleFocusChange, true)
-    }, 100)
+    })
 
     return () => {
-      clearTimeout(timeoutId)
+      cancelAnimationFrame(rafId)
       document.removeEventListener("mousedown", handleClickOutside, true)
       document.removeEventListener("touchstart", handleClickOutside, true)
       document.removeEventListener("focusin", handleFocusChange, true)
     }
-  }, [isEditing, type, handleSave, editValue, onSave, setDateError, isValidDateFormat])
+  }, [isEditing])
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -179,56 +183,56 @@ export function EditableCell({
 
   const handleDateChange = useCallback(
     (newValue: string) => {
-      setEditValue(newValue)
+      setEditValueWithRef(newValue)
       // Clear error when user starts typing
       if (dateError) {
         setDateError("")
       }
     },
-    [dateError]
+    [dateError, setEditValueWithRef]
   )
 
-  const handleDateBlur = useCallback(() => {
-    // Validate on blur for date fields
-    // Use a delay to ensure the value from DateInput is properly set
-    setTimeout(() => {
-      if (type === "date") {
-        // Use ref to get the latest value (React state updates are async)
+  // Use ref-based handler for date blur
+  const handleDateBlurRef = useRef<() => void>()
+  handleDateBlurRef.current = () => {
+    // Use requestAnimationFrame for immediate execution with ref value
+    requestAnimationFrame(() => {
+      if (typeRef.current === "date") {
         const currentValue = editValueRef.current.trim()
         if (currentValue) {
           if (!isValidDateFormat(currentValue)) {
-            setDateError("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
-            // Don't close if invalid
+            setDateErrorRef.current("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
             return
           } else {
-            setDateError("")
-            onSave(currentValue)
+            setDateErrorRef.current("")
+            onSaveRef.current(currentValue)
             setIsEditing(false)
           }
         } else {
-          // Allow empty dates
-          setDateError("")
-          onSave("")
+          setDateErrorRef.current("")
+          onSaveRef.current("")
           setIsEditing(false)
         }
       }
-    }, 150)
-  }, [type, onSave])
+    })
+  }
 
-  const handleBlur = () => {
+  const handleDateBlur = useCallback(() => {
+    handleDateBlurRef.current?.()
+  }, [])
+
+  const handleBlur = useCallback(() => {
     // Auto-save on blur for non-date fields
-    // Use setTimeout to check after focus has actually moved
-    setTimeout(() => {
-      // Check if focus is moving to another element within our container (like a button)
+    // Use requestAnimationFrame for immediate execution
+    requestAnimationFrame(() => {
       const activeElement = document.activeElement
       const isMovingToContainer = activeElement && containerRef.current?.contains(activeElement)
 
-      if (type !== "date" && isEditing && !isMovingToContainer) {
-        // Focus is moving outside the container - save immediately
-        handleSave()
+      if (typeRef.current !== "date" && isEditing && !isMovingToContainer) {
+        handleSaveRef.current?.()
       }
-    }, 10)
-  }
+    })
+  }, [isEditing])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -275,23 +279,35 @@ export function EditableCell({
       )
     }
 
+    // For notes field, constrain to prevent overflow; for other fields, allow expansion
+    const isNotesField = className?.includes("notes") || false
+
     return (
       <div
         ref={containerRef}
-        className={cn("flex items-center gap-1.5 z-[100] relative w-full", className)}
+        className={cn(
+          "flex items-center gap-1.5 z-[100] relative",
+          isNotesField ? "w-full min-w-0" : "w-auto min-w-full",
+          className
+        )}
         style={{ zIndex: 100, position: "relative" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex-1 min-w-[200px] max-w-[400px] z-[100] bg-background">
+        <div
+          className={cn(
+            "z-[100] bg-background",
+            isNotesField ? "flex-1 w-full min-w-0" : "w-auto min-w-[200px]"
+          )}
+        >
           <Input
             ref={inputRef}
             type={type}
             value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
+            onChange={(e) => setEditValueWithRef(e.target.value)}
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             onFocus={(e) => e.stopPropagation()}
-            className="h-8 text-xs w-full"
+            className={cn("h-8 text-xs", isNotesField ? "w-full min-w-0" : "w-auto min-w-[200px]")}
             title={editValue}
           />
         </div>
@@ -326,3 +342,14 @@ export function EditableCell({
     </div>
   )
 }
+
+// Memoize component with shallow prop comparison
+export const EditableCell = memo(EditableCellComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.value === nextProps.value &&
+    prevProps.onSave === nextProps.onSave &&
+    prevProps.placeholder === nextProps.placeholder &&
+    prevProps.type === nextProps.type &&
+    prevProps.className === nextProps.className
+  )
+})

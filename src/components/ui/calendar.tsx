@@ -9,9 +9,18 @@ import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker"
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 
+// Memoize default class names outside component
+const defaultClassNames = getDefaultClassNames()
+
+// Extract formatters to constants outside component
+const defaultFormatters = {
+  formatMonthDropdown: (date: Date) =>
+    date.toLocaleString("default", { month: "short" }),
+}
+
 function Calendar({
   className,
-  classNames,
+  classNames: classNamesProp,
   showOutsideDays = true,
   captionLayout = "label",
   buttonVariant = "ghost",
@@ -21,24 +30,8 @@ function Calendar({
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>["variant"]
 }) {
-  const defaultClassNames = getDefaultClassNames()
-
-  return (
-    <DayPicker
-      showOutsideDays={showOutsideDays}
-      className={cn(
-        "bg-background group/calendar p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent",
-        String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
-        String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
-        className
-      )}
-      captionLayout={captionLayout}
-      formatters={{
-        formatMonthDropdown: (date) =>
-          date.toLocaleString("default", { month: "short" }),
-        ...formatters,
-      }}
-      classNames={{
+  // Memoize classNames object to avoid recreation on every render
+  const memoizedClassNames = React.useMemo(() => ({
         root: cn("w-fit", defaultClassNames.root),
         months: cn(
           "flex gap-4 flex-col md:flex-row relative",
@@ -123,8 +116,27 @@ function Calendar({
           defaultClassNames.disabled
         ),
         hidden: cn("invisible", defaultClassNames.hidden),
-        ...classNames,
-      }}
+        ...classNamesProp,
+  }), [buttonVariant, captionLayout, classNamesProp, showOutsideDays])
+
+  // Memoize formatters
+  const mergedFormatters = React.useMemo(() => ({
+    ...defaultFormatters,
+    ...formatters,
+  }), [formatters])
+
+  return (
+    <DayPicker
+      showOutsideDays={showOutsideDays}
+      className={cn(
+        "bg-background group/calendar p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent",
+        String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
+        String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
+        className
+      )}
+      captionLayout={captionLayout}
+      formatters={mergedFormatters}
+      classNames={memoizedClassNames}
       components={{
         Root: ({ className, rootRef, ...props }) => {
           return (

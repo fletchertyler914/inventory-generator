@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 
 export function useTableSelection(totalItems: number) {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
@@ -29,8 +29,18 @@ export function useTableSelection(totalItems: number) {
     setSelectedRows(new Set())
   }, [])
 
-  const isAllSelected = selectedRows.size === totalItems && totalItems > 0
-  const isIndeterminate = selectedRows.size > 0 && selectedRows.size < totalItems
+  // Memoize computed values
+  const isAllSelected = useMemo(
+    () => selectedRows.size === totalItems && totalItems > 0,
+    [selectedRows.size, totalItems]
+  )
+  
+  const isIndeterminate = useMemo(
+    () => selectedRows.size > 0 && selectedRows.size < totalItems,
+    [selectedRows.size, totalItems]
+  )
+  
+  const selectedCount = useMemo(() => selectedRows.size, [selectedRows.size])
 
   return {
     selectedRows,
@@ -40,7 +50,7 @@ export function useTableSelection(totalItems: number) {
     clearSelection,
     isAllSelected,
     isIndeterminate,
-    selectedCount: selectedRows.size,
+    selectedCount,
   }
 }
 

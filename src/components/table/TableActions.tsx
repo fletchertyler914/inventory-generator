@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { Button } from "../ui/button"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -9,7 +10,7 @@ interface TableActionsProps {
   className?: string
 }
 
-export function TableActions({
+function TableActionsComponent({
   selectedCount,
   onClearSelection,
   actions,
@@ -42,3 +43,6 @@ export function TableActions({
     </div>
   )
 }
+
+// Memoize component to prevent unnecessary re-renders
+export const TableActions = memo(TableActionsComponent)

@@ -3,7 +3,7 @@
  * Now uses Zustand store for state management
  */
 
-import { useEffect, useCallback, useRef } from "react"
+import { useEffect, useCallback, useRef, useMemo } from "react"
 import { useInventoryStore } from "@/store/inventoryStore"
 import { useSettingsStore } from "@/store/settingsStore"
 import { countDirectoryFiles, scanDirectory, syncInventory } from "@/services/inventoryService"
@@ -238,7 +238,8 @@ export function useInventory() {
     }
   }, [selectedFolder, syncPollingEnabled, syncPollingInterval, items.length])
 
-  return {
+  // Memoize returned object to prevent unnecessary re-renders
+  return useMemo(() => ({
     // State from store
     items: store.items,
     loading: store.loading,
@@ -257,5 +258,19 @@ export function useInventory() {
     scanFolder,
     syncFolder,
     checkSyncStatus,
-  }
+  }), [
+    store.items,
+    store.loading,
+    store.selectedFolder,
+    store.caseNumber,
+    store.selectedIndices,
+    store.setItems,
+    store.updateItem,
+    store.bulkUpdateItems,
+    store.setCaseNumber,
+    store.setSelectedIndices,
+    scanFolder,
+    syncFolder,
+    checkSyncStatus,
+  ])
 }

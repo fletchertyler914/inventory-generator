@@ -28,26 +28,18 @@ function App() {
     setSelectedIndices,
     bulkUpdateItems,
   } = useInventory()
-  
+
   const { setSelectedFolder } = useInventoryStore()
-  
+
   const [warningDialogOpen, setWarningDialogOpen] = useState(false)
   const [pendingFolderPath, setPendingFolderPath] = useState<string | null>(null)
   const [pendingFileCount, setPendingFileCount] = useState<number>(0)
-  
-  const {
-    exportDialogOpen,
-    importDialogOpen,
-    setExportDialogOpen,
-    setImportDialogOpen,
-  } = useInventoryStore()
-  
-  const {
-    recentInventories,
-    addRecentInventory,
-    removeRecentInventory,
-    updateLastOpened,
-  } = useRecentInventories()
+
+  const { exportDialogOpen, importDialogOpen, setExportDialogOpen, setImportDialogOpen } =
+    useInventoryStore()
+
+  const { recentInventories, addRecentInventory, removeRecentInventory, updateLastOpened } =
+    useRecentInventories()
 
   const bulkDateInputRef = useRef<HTMLButtonElement>(null)
   const desktopLayoutRef = useRef<DesktopLayoutRef>(null)
@@ -64,7 +56,7 @@ function App() {
       // Error already handled in scanFolder with toast
     }
   }
-  
+
   const handleWarningConfirm = async () => {
     if (pendingFolderPath) {
       try {
@@ -77,7 +69,7 @@ function App() {
       setPendingFileCount(0)
     }
   }
-  
+
   const handleWarningCancel = () => {
     setPendingFolderPath(null)
     setPendingFileCount(0)
@@ -110,9 +102,9 @@ function App() {
     if (selectedFolder) {
       setSelectedFolder(null)
     }
-    
+
     addRecentInventory(filePath, items, caseNumber, folderPath || null)
-    
+
     // If folder_path was restored from metadata, validate and set it as selected folder
     if (folderPath) {
       try {
@@ -134,13 +126,13 @@ function App() {
       }
     }
   }
-  
+
   const handleFolderPathRestored = async (folderPath: string) => {
     // Clear previously selected folder
     if (selectedFolder) {
       setSelectedFolder(null)
     }
-    
+
     // When importing, if folder_path is restored from metadata, validate and set it as selected folder
     try {
       // Validate folder exists by trying to count files
@@ -160,10 +152,10 @@ function App() {
       useInventoryStore.getState().setSyncStatus(null)
     }
   }
-  
+
   const handleSyncInventory = async () => {
     if (!selectedFolder) return
-    
+
     try {
       await syncFolder(selectedFolder)
     } catch (error) {
@@ -194,12 +186,12 @@ function App() {
       if (result.case_number) {
         setCaseNumber(result.case_number)
       }
-      
+
       // Clear previously selected folder
       if (selectedFolder) {
         setSelectedFolder(null)
       }
-      
+
       // If folder_path was restored, validate and set it as selected folder
       if (result.folder_path) {
         try {
@@ -220,10 +212,10 @@ function App() {
           useInventoryStore.getState().setSyncStatus(null)
         }
       }
-      
+
       toast({
         title: "Inventory loaded",
-        description: `Loaded ${result.items.length} item${result.items.length !== 1 ? 's' : ''}`,
+        description: `Loaded ${result.items.length} item${result.items.length !== 1 ? "s" : ""}`,
         variant: "success",
       })
     } catch (error) {
@@ -251,7 +243,7 @@ function App() {
     },
     onSelectAll: () => {
       if (items.length > 0) {
-        setSelectedIndices(items.map((_, i) => i))
+        setSelectedIndices(items.map((_: InventoryItem, i: number) => i))
       }
     },
     onClearSelection: () => {

@@ -72,12 +72,21 @@ const TableRowMemo = memo(function TableRowMemo({
   onUpdate: (field: InventoryItemField, value: string) => void
   style?: React.CSSProperties
 }) {
-  const handleSave = useCallback(
-    (field: InventoryItemField) => (value: string) => {
-      onUpdate(field, value)
-    },
-    [onUpdate]
-  )
+  // Pre-create field-specific save handlers using useMemo
+  const saveHandlers = React.useMemo(() => {
+    const handlers: Record<InventoryItemField, (value: string) => void> = {} as any
+    const fields: InventoryItemField[] = [
+      "date_rcvd",
+      "doc_year",
+      "doc_date_range",
+      "bates_stamp",
+      "notes",
+    ]
+    fields.forEach((field) => {
+      handlers[field] = (value: string) => onUpdate(field, value)
+    })
+    return handlers
+  }, [onUpdate])
 
   return (
     <TableRow
@@ -101,7 +110,7 @@ const TableRowMemo = memo(function TableRowMemo({
       <TableCell role="gridcell" style={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}>
         <EditableCell
           value={item.date_rcvd}
-          onSave={handleSave("date_rcvd")}
+          onSave={saveHandlers.date_rcvd}
           placeholder="—"
           type="date"
         />
@@ -109,7 +118,7 @@ const TableRowMemo = memo(function TableRowMemo({
       <TableCell role="gridcell" style={{ width: "80px", minWidth: "80px", maxWidth: "80px" }}>
         <EditableCell
           value={item.doc_year}
-          onSave={handleSave("doc_year")}
+          onSave={saveHandlers.doc_year}
           type="number"
           placeholder="—"
         />
@@ -117,7 +126,7 @@ const TableRowMemo = memo(function TableRowMemo({
       <TableCell role="gridcell" style={{ width: "120px", minWidth: "120px", maxWidth: "120px" }}>
         <EditableCell
           value={item.doc_date_range}
-          onSave={handleSave("doc_date_range")}
+          onSave={saveHandlers.doc_date_range}
           placeholder="—"
         />
       </TableCell>
@@ -165,10 +174,10 @@ const TableRowMemo = memo(function TableRowMemo({
         )}
       </TableCell>
       <TableCell role="gridcell" style={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}>
-        <EditableCell value={item.bates_stamp} onSave={handleSave("bates_stamp")} placeholder="—" />
+        <EditableCell value={item.bates_stamp} onSave={saveHandlers.bates_stamp} placeholder="—" />
       </TableCell>
       <TableCell role="gridcell" style={{ width: "160px", minWidth: "160px", maxWidth: "160px" }}>
-        <EditableCell value={item.notes} onSave={handleSave("notes")} placeholder="—" />
+        <EditableCell value={item.notes} onSave={saveHandlers.notes} placeholder="—" className="notes" />
       </TableCell>
     </TableRow>
   )
@@ -210,16 +219,16 @@ export function InventoryTable({
     selectedRowsRef.current = selectedRows
   }, [selectedRows])
 
-  // Sync internal state with external selectedIndices prop
+  // Sync internal state with external selectedIndices prop - optimized with Set comparison
   React.useEffect(() => {
     if (selectedIndices !== undefined) {
       const externalSet = new Set(selectedIndices)
-      // Only update if different to avoid unnecessary re-renders
-      const currentArray = Array.from(selectedRowsRef.current).sort()
-      const externalArray = Array.from(externalSet).sort()
+      const currentSet = selectedRowsRef.current
+      
+      // Use Set comparison instead of array sorting
       if (
-        currentArray.length !== externalArray.length ||
-        !currentArray.every((val, idx) => val === externalArray[idx])
+        currentSet.size !== externalSet.size ||
+        !Array.from(currentSet).every((val) => externalSet.has(val))
       ) {
         setSelectedRows(externalSet)
       }
@@ -233,19 +242,23 @@ export function InventoryTable({
     }
   }, [selectedRows, onSelectionChange])
 
+  // Optimize handleUpdate - use items ref to avoid dependency
+  const itemsRef = React.useRef(items)
+  React.useEffect(() => {
+    itemsRef.current = items
+  }, [items])
+
   const handleUpdate = useCallback(
     (index: number, field: InventoryItemField, value: string) => {
-      const updatedItems = [...items]
-      const item = updatedItems[index]
-      
+      const currentItems = itemsRef.current
+      const item = currentItems[index]
       if (!item) return
       
-      // Use type-safe update function
+      const updatedItems = [...currentItems]
       updatedItems[index] = updateInventoryItemField(item, field, value)
-      
       onItemsChange(updatedItems)
     },
-    [items, onItemsChange]
+    [onItemsChange]
   )
 
   const handleToggleRow = useCallback(
@@ -258,7 +271,7 @@ export function InventoryTable({
   // Virtual scrolling setup - only use for large datasets
   const parentRef = React.useRef<HTMLDivElement>(null)
   const tableRef = React.useRef<HTMLTableElement>(null)
-  const shouldVirtualize = items.length > 100
+  const shouldVirtualize = React.useMemo(() => items.length > 100, [items.length])
   
   // Always create virtualizer but only use it when shouldVirtualize is true
   const rowVirtualizer = useVirtualizer({
@@ -275,25 +288,11 @@ export function InventoryTable({
   // Get table width for virtual rows
   const [tableWidth, setTableWidth] = React.useState<number | undefined>(undefined)
 
-  // Force virtualizer to measure when items change or container is ready
+  // Consolidate width measurement effects
   React.useEffect(() => {
-    if (shouldVirtualize && parentRef.current) {
-      // Use requestAnimationFrame to ensure DOM is fully rendered
-      const rafId = requestAnimationFrame(() => {
-        rowVirtualizer.measure()
-        // Measure table width for virtual rows
-        if (tableRef.current) {
-          setTableWidth(tableRef.current.scrollWidth)
-        }
-      })
-      return () => cancelAnimationFrame(rafId)
+    if (!shouldVirtualize) {
+      return undefined
     }
-    return undefined
-  }, [shouldVirtualize, items.length, rowVirtualizer])
-
-  // Update table width on resize
-  React.useEffect(() => {
-    if (!shouldVirtualize) return
 
     const updateWidth = () => {
       if (tableRef.current) {
@@ -301,15 +300,27 @@ export function InventoryTable({
       }
     }
 
+    // Measure on mount and when items change
+    if (!parentRef.current) {
+      return undefined
+    }
+
+      const rafId = requestAnimationFrame(() => {
+        rowVirtualizer.measure()
+      updateWidth()
+      })
+
+    // Set up ResizeObserver for width changes
     const resizeObserver = new ResizeObserver(updateWidth)
     if (tableRef.current) {
       resizeObserver.observe(tableRef.current)
     }
 
     return () => {
+      cancelAnimationFrame(rafId)
       resizeObserver.disconnect()
     }
-  }, [shouldVirtualize])
+  }, [shouldVirtualize, items.length, rowVirtualizer])
 
   return (
     <div 

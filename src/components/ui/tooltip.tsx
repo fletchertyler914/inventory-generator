@@ -16,7 +16,8 @@ function TooltipProvider({
   )
 }
 
-function Tooltip({
+// Memoize Tooltip to avoid recreating provider on every render
+const Tooltip = React.memo(function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
   return (
@@ -24,7 +25,7 @@ function Tooltip({
       <TooltipPrimitive.Root data-slot="tooltip" {...props} />
     </TooltipProvider>
   )
-}
+})
 
 function TooltipTrigger({
   ...props

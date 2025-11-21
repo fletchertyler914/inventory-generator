@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 interface KeyboardShortcuts {
   onExport?: () => void
@@ -9,8 +9,8 @@ interface KeyboardShortcuts {
   onToggleSidebar?: () => void
 }
 
-// Detect if running on macOS
-function isMacOS(): boolean {
+// Memoize platform detection outside component
+const isMacOS = ((): boolean => {
   if (typeof navigator === "undefined") return false
   
   // Try modern API first (userAgentData is experimental and may not be in types)
@@ -28,7 +28,7 @@ function isMacOS(): boolean {
   // Fallback to platform
   const platform = navigator.platform?.toUpperCase() || ""
   return platform.indexOf("MAC") >= 0
-}
+})()
 
 export function useKeyboardShortcuts({
   onExport,
@@ -38,6 +38,24 @@ export function useKeyboardShortcuts({
   onBulkDateFocus,
   onToggleSidebar,
 }: KeyboardShortcuts) {
+  // Use refs for callbacks to avoid effect re-registration
+  const onExportRef = useRef(onExport)
+  const onImportRef = useRef(onImport)
+  const onSelectAllRef = useRef(onSelectAll)
+  const onClearSelectionRef = useRef(onClearSelection)
+  const onBulkDateFocusRef = useRef(onBulkDateFocus)
+  const onToggleSidebarRef = useRef(onToggleSidebar)
+
+  // Keep refs in sync
+  useEffect(() => {
+    onExportRef.current = onExport
+    onImportRef.current = onImport
+    onSelectAllRef.current = onSelectAll
+    onClearSelectionRef.current = onClearSelection
+    onBulkDateFocusRef.current = onBulkDateFocus
+    onToggleSidebarRef.current = onToggleSidebar
+  }, [onExport, onImport, onSelectAll, onClearSelection, onBulkDateFocus, onToggleSidebar])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -45,8 +63,7 @@ export function useKeyboardShortcuts({
                       target.tagName === "TEXTAREA" || 
                       target.isContentEditable
 
-      const isMac = isMacOS()
-      const modifier = isMac ? e.metaKey : e.ctrlKey
+      const modifier = isMacOS ? e.metaKey : e.ctrlKey
 
       // Ctrl/Cmd + A: Select All (works even in inputs, but we check if it's a text input)
       if (modifier && e.key.toLowerCase() === "a") {
@@ -54,7 +71,7 @@ export function useKeyboardShortcuts({
         // This allows normal text selection in inputs, but selects table rows when not in input
         if (!isInput) {
           e.preventDefault()
-          onSelectAll?.()
+          onSelectAllRef.current?.()
           return
         }
         // If in input, let browser handle it (normal text selection)
@@ -69,34 +86,34 @@ export function useKeyboardShortcuts({
       // Ctrl/Cmd + S: Create Inventory
       if (modifier && e.key.toLowerCase() === "s") {
         e.preventDefault()
-        onExport?.()
+        onExportRef.current?.()
         return
       }
 
       // Ctrl/Cmd + O: Load Inventory
       if (modifier && e.key.toLowerCase() === "o") {
         e.preventDefault()
-        onImport?.()
+        onImportRef.current?.()
         return
       }
 
       // Escape: Clear Selection
       if (e.key === "Escape") {
-        onClearSelection?.()
+        onClearSelectionRef.current?.()
         return
       }
 
       // Ctrl/Cmd + D: Focus bulk date input
       if (modifier && e.key.toLowerCase() === "d") {
         e.preventDefault()
-        onBulkDateFocus?.()
+        onBulkDateFocusRef.current?.()
         return
       }
 
       // Ctrl/Cmd + B: Toggle sidebar
       if (modifier && e.key.toLowerCase() === "b") {
         e.preventDefault()
-        onToggleSidebar?.()
+        onToggleSidebarRef.current?.()
         return
       }
     }
@@ -105,6 +122,6 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [onExport, onImport, onSelectAll, onClearSelection, onBulkDateFocus, onToggleSidebar])
+  }, []) // Empty dependency array since we use refs
 }
 
