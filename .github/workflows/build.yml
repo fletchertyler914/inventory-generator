@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - master
+    tags:
+      - "v*.*.*"
   pull_request:
     branches:
       - main
@@ -46,6 +48,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          # Add targets for macOS to enable universal builds
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
 
       - name: Install frontend dependencies
         run: pnpm install
@@ -54,16 +63,93 @@ jobs:
         run: pnpm build
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        id: build-tauri
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: ./src-tauri
           args: ${{ matrix.args }}
+          # Create GitHub release when pushing a version tag
+          # __VERSION__ is automatically replaced with the app version from tauri.conf.json
+          # Only set these when pushing a tag to create a release
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && 'Document Inventory Generator v__VERSION__' || '' }}
+          releaseBody: "See the assets to download this version and install."
+          releaseDraft: false
+          prerelease: false
 
-      - name: Upload artifacts
+      - name: Remove quarantine attribute (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Remove quarantine from DMG files
+          find src-tauri/target/release/bundle -name "*.dmg" -exec xattr -d com.apple.quarantine {} \; 2>/dev/null || true
+          # Remove quarantine from app bundles
+          find src-tauri/target/release/bundle -name "*.app" -type d -exec xattr -d com.apple.quarantine {} \; 2>/dev/null || true
+          # Clear all extended attributes from app bundles (ensures clean state)
+          find src-tauri/target/release/bundle -name "*.app" -type d -exec xattr -cr {} \; 2>/dev/null || true
+
+      - name: Find macOS DMG
+        id: find_dmg
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          DMG_FILE=$(find src-tauri/target/release/bundle -name "*.dmg" -type f | head -1)
+          if [ -z "$DMG_FILE" ]; then
+            echo "Error: DMG file not found"
+            exit 1
+          fi
+          echo "Found DMG: $DMG_FILE"
+          echo "dmg_path=$DMG_FILE" >> $GITHUB_OUTPUT
+          echo "dmg_name=$(basename "$DMG_FILE")" >> $GITHUB_OUTPUT
+
+      - name: Upload macOS DMG
+        if: matrix.platform == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ runner.os }}-${{ matrix.platform }}
-          path: |
-            src-tauri/target/release/bundle/**/*
+          name: macos-dmg-installer
+          path: ${{ steps.find_dmg.outputs.dmg_path }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Find Windows MSI
+        id: find_msi
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          MSI_FILE=$(find src-tauri/target/release/bundle -name "*.msi" -type f | head -1)
+          if [ -n "$MSI_FILE" ]; then
+            echo "Found MSI: $MSI_FILE"
+            echo "msi_path=$MSI_FILE" >> $GITHUB_OUTPUT
+            echo "msi_name=$(basename "$MSI_FILE")" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Windows MSI
+        if: matrix.platform == 'windows-latest' && steps.find_msi.outputs.msi_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi-installer
+          path: ${{ steps.find_msi.outputs.msi_path }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Find Windows EXE
+        id: find_exe
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          EXE_FILE=$(find src-tauri/target/release/bundle -name "*.exe" -type f | head -1)
+          if [ -n "$EXE_FILE" ]; then
+            echo "Found EXE: $EXE_FILE"
+            echo "exe_path=$EXE_FILE" >> $GITHUB_OUTPUT
+            echo "exe_name=$(basename "$EXE_FILE")" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Windows EXE
+        if: matrix.platform == 'windows-latest' && steps.find_exe.outputs.exe_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe-installer
+          path: ${{ steps.find_exe.outputs.exe_path }}
+          retention-days: 30
+          if-no-files-found: error
