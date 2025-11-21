@@ -32,7 +32,7 @@ interface DesktopLayoutProps {
   onExportDialogOpenChange?: (open: boolean) => void;
   importDialogOpen?: boolean;
   onImportDialogOpenChange?: (open: boolean) => void;
-  bulkDateInputRef?: React.RefObject<HTMLInputElement>;
+  bulkDateInputRef?: React.RefObject<HTMLButtonElement>;
 }
 
 export const DesktopLayout = forwardRef<DesktopLayoutRef, DesktopLayoutProps>(function DesktopLayout({

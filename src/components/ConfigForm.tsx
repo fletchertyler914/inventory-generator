@@ -13,7 +13,7 @@ interface ConfigFormProps {
   onBulkSetDateRcvd: (date: string, indices?: number[]) => void
   selectedIndices: number[]
   totalItems: number
-  bulkDateInputRef?: React.RefObject<HTMLInputElement> | undefined
+  bulkDateInputRef?: React.RefObject<HTMLButtonElement> | undefined
 }
 
 export function ConfigForm({
@@ -126,14 +126,9 @@ export function ConfigForm({
             ref={bulkDateInputRef}
             value={bulkDate}
             onChange={handleDateChange}
-            placeholder="MM/DD/YYYY (e.g., 11/20/2025)"
+            placeholder="Select date"
             error={dateError}
             disabled={totalItems === 0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && bulkDate) {
-                handleBulkSetDate()
-              }
-            }}
           />
           <Button 
             onClick={handleBulkSetDate} 

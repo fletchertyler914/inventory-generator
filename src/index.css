@@ -176,6 +176,28 @@
   html {
     scroll-behavior: smooth;
   }
+
+  /* Style react-day-picker dropdown selectors */
+  [data-slot="calendar"] select,
+  .rdp select,
+  select[aria-label*="month"],
+  select[aria-label*="year"] {
+    @apply h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+    min-width: 100px;
+  }
+
+  .dark [data-slot="calendar"] select,
+  .dark .rdp select,
+  .dark select[aria-label*="month"],
+  .dark select[aria-label*="year"] {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  }
 }
 
 @layer utilities {

@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useEffect, useState } from "react"
+import { memo, useCallback, useRef } from "react"
 import * as React from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table"
@@ -33,37 +33,6 @@ const TruncatedText = memo(function TruncatedText({
   className?: string
 }) {
   const ref = useRef<HTMLSpanElement>(null)
-  const [isTruncated, setIsTruncated] = useState(false)
-
-  useEffect(() => {
-    const checkTruncation = () => {
-      if (ref.current) {
-        const truncated = ref.current.scrollWidth > ref.current.clientWidth
-        setIsTruncated(truncated)
-      }
-    }
-    
-    // Check after a small delay to ensure DOM is ready
-    const timeoutId = setTimeout(checkTruncation, 0)
-    
-    // Check on resize
-    window.addEventListener("resize", checkTruncation)
-    
-    // Use ResizeObserver for more accurate detection
-    let resizeObserver: ResizeObserver | null = null
-    if (ref.current) {
-      resizeObserver = new ResizeObserver(checkTruncation)
-      resizeObserver.observe(ref.current)
-    }
-    
-    return () => {
-      clearTimeout(timeoutId)
-      window.removeEventListener("resize", checkTruncation)
-      if (resizeObserver && ref.current) {
-        resizeObserver.unobserve(ref.current)
-      }
-    }
-  }, [text])
 
   if (!text) {
     return <span className={cn("text-xs truncate block", className)}>{text}</span>
@@ -189,8 +158,8 @@ const TableRowMemo = memo(function TableRowMemo({
             className="text-[10px] font-medium"
             aria-label={`File type: ${item.file_type}`}
           >
-            {item.file_type}
-          </Badge>
+          {item.file_type}
+        </Badge>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
@@ -207,13 +176,13 @@ const TableRowMemo = memo(function TableRowMemo({
 
 /**
  * InventoryTable component with virtual scrolling for large datasets
- *
+ * 
  * Features:
  * - Virtual scrolling for 100+ items (improves performance)
  * - Row selection with keyboard and mouse support
  * - Inline editing of inventory fields
  * - Full accessibility support (ARIA labels, keyboard navigation)
- *
+ * 
  * @param items - Array of inventory items to display
  * @param onItemsChange - Callback when items are updated
  * @param onSelectionChange - Optional callback when selection changes
@@ -268,12 +237,12 @@ export function InventoryTable({
     (index: number, field: InventoryItemField, value: string) => {
       const updatedItems = [...items]
       const item = updatedItems[index]
-
+      
       if (!item) return
-
+      
       // Use type-safe update function
       updatedItems[index] = updateInventoryItemField(item, field, value)
-
+      
       onItemsChange(updatedItems)
     },
     [items, onItemsChange]
@@ -290,7 +259,7 @@ export function InventoryTable({
   const parentRef = React.useRef<HTMLDivElement>(null)
   const tableRef = React.useRef<HTMLTableElement>(null)
   const shouldVirtualize = items.length > 100
-
+  
   // Always create virtualizer but only use it when shouldVirtualize is true
   const rowVirtualizer = useVirtualizer({
     count: items.length,
@@ -343,10 +312,10 @@ export function InventoryTable({
   }, [shouldVirtualize])
 
   return (
-    <div
+    <div 
       className={cn(
         "relative rounded border border-border bg-card overflow-hidden flex flex-col",
-        "h-full min-h-[400px]"
+        shouldVirtualize ? "h-full" : "min-h-[400px]"
       )}
       role="region"
       aria-label="Inventory table"
@@ -355,11 +324,16 @@ export function InventoryTable({
     >
       <div
         ref={parentRef}
-        className="relative flex-1 overflow-auto min-h-0"
+        className={cn(
+          "relative overflow-auto",
+          shouldVirtualize ? "flex-1 min-h-0" : ""
+        )}
+        style={{ overflow: "auto" }}
       >
         <table
           ref={tableRef}
           className="caption-bottom text-sm table-fixed border-collapse min-w-[1400px] w-full"
+          style={{ display: "table" }}
           role="grid"
           aria-label="Document inventory items"
         >
@@ -378,11 +352,21 @@ export function InventoryTable({
             <col className="w-[160px]" />
           </colgroup>
           <TableHeader
-            className="sticky top-0 z-20 bg-muted/95 backdrop-blur-sm border-b border-border"
+            className="sticky top-0 z-30 border-b border-border"
             role="rowgroup"
+            style={{ 
+              position: "sticky", 
+              top: 0, 
+              zIndex: 50,
+              display: "table-header-group"
+            }}
           >
-            <TableRow role="row">
-              <TableHead role="columnheader" scope="col">
+            <TableRow 
+              role="row" 
+              className="bg-muted/95 backdrop-blur-sm sticky top-0 z-50"
+              style={{ position: "sticky", top: 0, zIndex: 50 }}
+            >
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">
                 <Checkbox
                   checked={isAllSelected}
                   onCheckedChange={toggleAll}
@@ -391,39 +375,17 @@ export function InventoryTable({
                   aria-describedby={isIndeterminate ? "selection-status" : undefined}
                 />
               </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Date Rcvd
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Doc Year
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Doc Date Range
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Document Type
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Document Description
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                File Name
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Folder Name
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Folder Path
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                File Type
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Bates Stamp
-              </TableHead>
-              <TableHead role="columnheader" scope="col">
-                Notes
-              </TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Date Rcvd</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Doc Year</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Doc Date Range</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Document Type</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Document Description</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">File Name</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Folder Name</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Folder Path</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">File Type</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Bates Stamp</TableHead>
+              <TableHead role="columnheader" scope="col" className="bg-muted/95">Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody
@@ -434,6 +396,7 @@ export function InventoryTable({
                     height: `${rowVirtualizer.getTotalSize()}px`,
                     width: tableWidth ? `${tableWidth}px` : "100%",
                     position: "relative",
+                    display: "table-row-group",
                   }
                 : undefined
             }
@@ -455,7 +418,7 @@ export function InventoryTable({
               virtualItems.map((virtualRow) => {
                 const item = items[virtualRow.index]
                 if (!item) return null
-
+                
                 return (
                   <TableRowMemo
                     key={`${item.absolute_path}-${virtualRow.index}`}

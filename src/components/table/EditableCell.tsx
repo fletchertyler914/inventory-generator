@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Input } from "../ui/input"
-import { Button } from "../ui/button"
 import { DateInput } from "../ui/date-input"
-import { Check, X, Edit2 } from "lucide-react"
+import { Edit2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { isValidDateFormat } from "@/lib/date-utils"
 
@@ -26,6 +25,13 @@ export function EditableCell({
   const [dateError, setDateError] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Use ref to track latest editValue for date blur handler
+  const editValueRef = useRef(editValue)
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    editValueRef.current = editValue
+  }, [editValue])
 
   const handleSave = useCallback(() => {
     if (type === "date" && editValue.trim()) {
@@ -41,9 +47,22 @@ export function EditableCell({
   }, [type, editValue, onSave])
 
   useEffect(() => {
-    if (isEditing && type !== "date" && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
+    if (isEditing) {
+      if (type !== "date" && inputRef.current) {
+        // For text/number inputs, focus immediately
+        // Use setTimeout to ensure it happens after click event completes
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.focus()
+            // Set cursor to end of input
+            const length = inputRef.current.value.length
+            inputRef.current.setSelectionRange(length, length)
+          }
+        }, 0)
+      } else if (type === "date") {
+        // For date inputs, the popover will open via defaultOpen prop
+        // No need to do anything here
+      }
     }
   }, [isEditing, type])
 
@@ -54,35 +73,54 @@ export function EditableCell({
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node | null
       if (!target || !containerRef.current) return
-      
+
       // Check if click is outside our container
       // Also check if it's a popover element (date picker) - Radix UI renders in portal
       const targetElement = target as Element
-      const isPopover = targetElement?.closest?.('[role="dialog"]') || 
-                        targetElement?.closest?.('[data-radix-portal]') ||
-                        targetElement?.closest?.('[data-radix-popper-content-wrapper]') ||
-                        targetElement?.closest?.('[data-radix-popover-content]') ||
-                        // Check if clicking on calendar or popover trigger
-                        targetElement?.closest?.('button[aria-label*="calendar" i]') ||
-                        targetElement?.closest?.('button[aria-label*="date" i]')
-      
+      const isPopover =
+        targetElement?.closest?.('[role="dialog"]') ||
+        targetElement?.closest?.("[data-radix-portal]") ||
+        targetElement?.closest?.("[data-radix-popper-content-wrapper]") ||
+        targetElement?.closest?.("[data-radix-popover-content]") ||
+        targetElement?.closest?.("[data-slot='popover-content']") ||
+        // Check if clicking on calendar or popover trigger button
+        targetElement?.closest?.('button[aria-label*="calendar" i]') ||
+        targetElement?.closest?.('button[aria-label*="date" i]') ||
+        targetElement?.closest?.('[id*="date-picker"]')
+
+      // Check if clicking on the date picker button or its container (should not close)
+      if (type === "date" && containerRef.current?.contains(target)) {
+        // Check if clicking on the date picker button or any part of DateInput component
+        const isDatePickerButton =
+          targetElement?.tagName === "BUTTON" ||
+          targetElement?.closest?.("button") ||
+          targetElement?.closest?.("[data-date-input-wrapper]")
+
+        // If clicking on any part of the DateInput component, don't close
+        if (isDatePickerButton) {
+          return
+        }
+      }
+
+      // If clicking outside container and not on popover, handle save
       if (!containerRef.current.contains(target) && !isPopover) {
-        // For date fields, use a delay to allow DateInput's onBlur to fire first
-        // This ensures the value from calendar selection is properly saved
         if (type === "date") {
-          // Longer delay for date fields to ensure calendar selection completes
-          setTimeout(() => {
-            // Use current editValue, which should be updated by DateInput's onChange
-            if (editValue.trim() && isValidDateFormat(editValue.trim())) {
-              setDateError("")
-              onSave(editValue)
-              setIsEditing(false)
-            } else if (!editValue.trim()) {
-              // Allow empty dates
-              onSave("")
-              setIsEditing(false)
+          // For date fields, the popover's onOpenChange will handle closing and saving
+          // We just need to ensure the popover closes by blurring the input
+          // But only if popover is actually open
+          const popoverContent = document.querySelector('[data-slot="popover-content"]')
+          if (popoverContent) {
+            // Popover is open, blur will trigger it to close via onOpenChange
+            const inputElement = containerRef.current?.querySelector(
+              "input"
+            ) as HTMLInputElement | null
+            if (inputElement) {
+              inputElement.blur()
             }
-          }, 250)
+          } else {
+            // Popover already closed, just save directly
+            handleDateBlur()
+          }
         } else {
           // Save directly for non-date fields
           handleSave()
@@ -125,10 +163,12 @@ export function EditableCell({
     }
   }, [isEditing, type, handleSave, editValue, onSave, setDateError, isValidDateFormat])
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
     setIsEditing(true)
     setEditValue(value.toString())
     setDateError("")
+    // Don't prevent default - let the click complete naturally
   }
 
   const handleCancel = () => {
@@ -137,36 +177,44 @@ export function EditableCell({
     setDateError("")
   }
 
-  const handleDateChange = useCallback((newValue: string) => {
-    setEditValue(newValue)
-    // Clear error when user starts typing
-    if (dateError) {
-      setDateError("")
-    }
-  }, [dateError])
+  const handleDateChange = useCallback(
+    (newValue: string) => {
+      setEditValue(newValue)
+      // Clear error when user starts typing
+      if (dateError) {
+        setDateError("")
+      }
+    },
+    [dateError]
+  )
 
   const handleDateBlur = useCallback(() => {
     // Validate on blur for date fields
-    // Use a small delay to ensure the value from DateInput is properly set
+    // Use a delay to ensure the value from DateInput is properly set
     setTimeout(() => {
       if (type === "date") {
-        if (editValue.trim()) {
-          if (!isValidDateFormat(editValue.trim())) {
+        // Use ref to get the latest value (React state updates are async)
+        const currentValue = editValueRef.current.trim()
+        if (currentValue) {
+          if (!isValidDateFormat(currentValue)) {
             setDateError("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
+            // Don't close if invalid
+            return
           } else {
             setDateError("")
-            onSave(editValue)
+            onSave(currentValue)
             setIsEditing(false)
           }
         } else {
           // Allow empty dates
+          setDateError("")
           onSave("")
           setIsEditing(false)
         }
       }
-    }, 100)
-  }, [type, editValue, onSave])
-  
+    }, 150)
+  }, [type, onSave])
+
   const handleBlur = () => {
     // Auto-save on blur for non-date fields
     // Use setTimeout to check after focus has actually moved
@@ -174,7 +222,7 @@ export function EditableCell({
       // Check if focus is moving to another element within our container (like a button)
       const activeElement = document.activeElement
       const isMovingToContainer = activeElement && containerRef.current?.contains(activeElement)
-      
+
       if (type !== "date" && isEditing && !isMovingToContainer) {
         // Focus is moving outside the container - save immediately
         handleSave()
@@ -206,12 +254,13 @@ export function EditableCell({
   if (isEditing) {
     if (type === "date") {
       return (
-        <div 
+        <div
           ref={containerRef}
-          className={cn("flex items-start gap-1 z-50 relative", className)}
+          className={cn("flex items-center gap-1.5 z-[100] relative w-full", className)}
+          style={{ zIndex: 100, position: "relative" }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="flex-1 min-w-[200px] max-w-[400px]">
+          <div className="flex-1 w-full z-[100] bg-background">
             <DateInput
               value={editValue}
               onChange={handleDateChange}
@@ -219,97 +268,33 @@ export function EditableCell({
               placeholder={placeholder}
               error={dateError}
               className="h-8 text-xs"
+              defaultOpen={isEditing}
             />
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
-              handleSave()
-            }}
-            onMouseDown={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
-            }}
-            aria-label="Save"
-            disabled={!!dateError}
-          >
-            <Check className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
-              handleCancel()
-            }}
-            onMouseDown={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
-            }}
-            aria-label="Cancel"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
         </div>
       )
     }
 
     return (
-      <div 
+      <div
         ref={containerRef}
-        className={cn("flex items-center gap-1 z-50 relative", className)}
+        className={cn("flex items-center gap-1.5 z-[100] relative w-full", className)}
+        style={{ zIndex: 100, position: "relative" }}
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <Input
-          ref={inputRef}
-          type={type}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleBlur}
-          onFocus={(e) => e.stopPropagation()}
-          className="h-8 text-xs w-full min-w-[200px] max-w-[400px]"
-          title={editValue}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 w-8 p-0 flex-shrink-0"
-          onClick={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-            handleSave()
-          }}
-          onMouseDown={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-          }}
-          aria-label="Save"
-        >
-          <Check className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 w-8 p-0 flex-shrink-0"
-          onClick={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-            handleCancel()
-          }}
-          onMouseDown={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-          }}
-          aria-label="Cancel"
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex-1 min-w-[200px] max-w-[400px] z-[100] bg-background">
+          <Input
+            ref={inputRef}
+            type={type}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+            onFocus={(e) => e.stopPropagation()}
+            className="h-8 text-xs w-full"
+            title={editValue}
+          />
+        </div>
       </div>
     )
   }
@@ -326,7 +311,11 @@ export function EditableCell({
         isEmpty && "text-muted-foreground",
         className
       )}
-      title={isEmpty ? "Click to edit (Enter to save, Esc to cancel)" : `${displayValue} - Click to edit (Enter to save, Esc to cancel)`}
+      title={
+        isEmpty
+          ? "Click to edit (Enter to save, Esc to cancel)"
+          : `${displayValue} - Click to edit (Enter to save, Esc to cancel)`
+      }
     >
       <span className="text-xs truncate flex-1 min-w-0" title={displayValue}>
         {isEmpty ? placeholder : displayValue}

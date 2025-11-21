@@ -46,7 +46,7 @@ interface SidebarContentProps {
   onExportDialogOpenChange?: ((open: boolean) => void) | undefined
   importDialogOpen?: boolean | undefined
   onImportDialogOpenChange?: ((open: boolean) => void) | undefined
-  bulkDateInputRef?: React.RefObject<HTMLInputElement> | undefined
+  bulkDateInputRef?: React.RefObject<HTMLButtonElement> | undefined
 }
 
 export function SidebarContent({

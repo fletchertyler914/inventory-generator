@@ -113,15 +113,13 @@ export function TableContent({
       </div>
 
       {/* Table Container - Responsive */}
-      <div className="flex-1 overflow-hidden p-6 min-h-0 min-w-0">
-        <div className="h-full w-full">
+      <div className="flex-1 overflow-hidden p-6 min-h-0 min-w-0 flex flex-col">
           <InventoryTable 
             items={items} 
             onItemsChange={onItemsChange} 
             onSelectionChange={onSelectionChange}
             selectedIndices={selectedIndices}
           />
-        </div>
       </div>
     </div>
   )

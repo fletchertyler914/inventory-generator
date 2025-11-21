@@ -49,7 +49,7 @@ function App() {
     updateLastOpened,
   } = useRecentInventories()
 
-  const bulkDateInputRef = useRef<HTMLInputElement>(null)
+  const bulkDateInputRef = useRef<HTMLButtonElement>(null)
   const desktopLayoutRef = useRef<DesktopLayoutRef>(null)
 
   const handleFolderSelected = async (path: string) => {
