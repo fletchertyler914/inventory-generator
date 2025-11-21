@@ -7,6 +7,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core"
+import { openPath } from "@tauri-apps/plugin-opener"
 import type { InventoryItem } from "@/types/inventory"
 
 /**
@@ -134,4 +135,20 @@ export async function syncInventory(
     folderPath,
     existingItems,
   })
+}
+
+/**
+ * Opens a folder in the system file explorer
+ * 
+ * @param folderPath - Absolute path to the folder to open
+ * @returns Promise that resolves when the folder is opened
+ * @throws Error if the folder cannot be opened
+ * 
+ * @example
+ * ```ts
+ * await openFolder("/path/to/documents")
+ * ```
+ */
+export async function openFolder(folderPath: string): Promise<void> {
+  return openPath(folderPath)
 }

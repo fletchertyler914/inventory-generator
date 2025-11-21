@@ -160,19 +160,25 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange, select
     setSelectedRows,
   } = useTableSelection(items.length)
 
+  // Use ref to track current selectedRows for comparison without causing re-renders
+  const selectedRowsRef = React.useRef(selectedRows)
+  React.useEffect(() => {
+    selectedRowsRef.current = selectedRows
+  }, [selectedRows])
+
   // Sync internal state with external selectedIndices prop
   React.useEffect(() => {
     if (selectedIndices !== undefined) {
       const externalSet = new Set(selectedIndices)
       // Only update if different to avoid unnecessary re-renders
-      const currentArray = Array.from(selectedRows).sort()
+      const currentArray = Array.from(selectedRowsRef.current).sort()
       const externalArray = Array.from(externalSet).sort()
       if (currentArray.length !== externalArray.length || 
           !currentArray.every((val, idx) => val === externalArray[idx])) {
         setSelectedRows(externalSet)
       }
     }
-  }, [selectedIndices, selectedRows, setSelectedRows])
+  }, [selectedIndices, setSelectedRows])
 
   // Notify parent of selection changes
   React.useEffect(() => {

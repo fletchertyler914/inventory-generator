@@ -6,7 +6,10 @@ import { ThemeToggle } from '../ThemeToggle';
 import { KeyboardShortcutsHint } from '../KeyboardShortcutsHint';
 import { Button } from '../ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, FolderOpen } from 'lucide-react';
+import { openFolder } from '@/services/inventoryService';
+import { createAppError, logError, ErrorCode } from '@/lib/error-handler';
+import { toast } from '@/hooks/useToast';
 import type { InventoryItem } from '@/types/inventory';
 
 interface SidebarContentProps {
@@ -85,22 +88,53 @@ export function SidebarContent({
                 Source Folder
               </label>
               {items.length > 0 && selectedFolder && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={onSyncInventory}
-                      disabled={loading || !selectedFolder}
-                      variant='ghost'
-                      size='icon'
-                      className='h-6 w-6'
-                    >
-                      <RefreshCw className='h-4 w-4' />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sync with Folder
-                  </TooltipContent>
-                </Tooltip>
+                <div className='flex items-center gap-1'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={async () => {
+                          if (!selectedFolder) return
+                          try {
+                            await openFolder(selectedFolder)
+                          } catch (error) {
+                            const appError = createAppError(error, ErrorCode.INVALID_PATH)
+                            logError(appError, "SidebarContent")
+                            toast({
+                              title: "Failed to open folder",
+                              description: appError.message,
+                              variant: "destructive",
+                            })
+                          }
+                        }}
+                        disabled={loading || !selectedFolder}
+                        variant='ghost'
+                        size='icon'
+                        className='h-6 w-6'
+                      >
+                        <FolderOpen className='h-4 w-4' />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Open Folder
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={onSyncInventory}
+                        disabled={loading || !selectedFolder}
+                        variant='ghost'
+                        size='icon'
+                        className='h-6 w-6'
+                      >
+                        <RefreshCw className='h-4 w-4' />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Sync with Folder
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               )}
             </div>
             <FolderSelector
