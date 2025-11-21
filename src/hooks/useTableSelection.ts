@@ -16,12 +16,14 @@ export function useTableSelection(totalItems: number) {
   }, [])
 
   const toggleAll = useCallback(() => {
-    if (selectedRows.size === totalItems) {
-      setSelectedRows(new Set())
-    } else {
-      setSelectedRows(new Set(Array.from({ length: totalItems }, (_, i) => i)))
-    }
-  }, [selectedRows.size, totalItems])
+    setSelectedRows((prev) => {
+      if (prev.size === totalItems) {
+        return new Set()
+      } else {
+        return new Set(Array.from({ length: totalItems }, (_, i) => i))
+      }
+    })
+  }, [totalItems])
 
   const clearSelection = useCallback(() => {
     setSelectedRows(new Set())
@@ -32,6 +34,7 @@ export function useTableSelection(totalItems: number) {
 
   return {
     selectedRows,
+    setSelectedRows,
     toggleRow,
     toggleAll,
     clearSelection,

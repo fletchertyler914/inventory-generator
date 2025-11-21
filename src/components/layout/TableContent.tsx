@@ -10,6 +10,7 @@ interface TableContentProps {
   items: InventoryItem[]
   onItemsChange: (items: InventoryItem[]) => void
   onSelectionChange?: ((indices: number[]) => void) | undefined
+  selectedIndices?: number[]
   loading: boolean
   selectedFolder: string | null
   recentInventories?: RecentInventory[]
@@ -21,6 +22,7 @@ export function TableContent({
   items,
   onItemsChange,
   onSelectionChange,
+  selectedIndices,
   loading,
   selectedFolder,
   recentInventories = [],
@@ -113,7 +115,12 @@ export function TableContent({
       {/* Table Container - Responsive */}
       <div className="flex-1 overflow-hidden p-6 min-h-0 min-w-0">
         <div className="h-full w-full">
-          <InventoryTable items={items} onItemsChange={onItemsChange} onSelectionChange={onSelectionChange} />
+          <InventoryTable 
+            items={items} 
+            onItemsChange={onItemsChange} 
+            onSelectionChange={onSelectionChange}
+            selectedIndices={selectedIndices}
+          />
         </div>
       </div>
     </div>

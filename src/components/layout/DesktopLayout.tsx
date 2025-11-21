@@ -122,6 +122,7 @@ export function DesktopLayout({
           items={items}
           onItemsChange={onItemsChange}
           onSelectionChange={onSelectionChange}
+          selectedIndices={selectedIndices}
           loading={loading}
           selectedFolder={selectedFolder}
           recentInventories={recentInventories}

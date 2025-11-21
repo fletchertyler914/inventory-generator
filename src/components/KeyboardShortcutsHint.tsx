@@ -5,8 +5,28 @@ interface KeyboardShortcutsHintProps {
   className?: string
 }
 
+// Detect if running on macOS
+function isMacOS(): boolean {
+  if (typeof navigator === "undefined") return false
+  
+  // Try modern API first
+  if (navigator.userAgentData?.platform) {
+    return navigator.userAgentData.platform.toLowerCase() === "macos"
+  }
+  
+  // Fallback to userAgent
+  const userAgent = navigator.userAgent.toLowerCase()
+  if (userAgent.includes("mac os x") || userAgent.includes("macintosh")) {
+    return true
+  }
+  
+  // Fallback to platform
+  const platform = navigator.platform?.toUpperCase() || ""
+  return platform.indexOf("MAC") >= 0
+}
+
 export function KeyboardShortcutsHint({ className }: KeyboardShortcutsHintProps) {
-  const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0
+  const isMac = isMacOS()
   const modifier = isMac ? "⌘" : "Ctrl"
 
   const shortcuts = [

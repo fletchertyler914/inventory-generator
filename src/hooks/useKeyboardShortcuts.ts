@@ -8,6 +8,26 @@ interface KeyboardShortcuts {
   onBulkDateFocus?: () => void
 }
 
+// Detect if running on macOS
+function isMacOS(): boolean {
+  if (typeof navigator === "undefined") return false
+  
+  // Try modern API first
+  if (navigator.userAgentData?.platform) {
+    return navigator.userAgentData.platform.toLowerCase() === "macos"
+  }
+  
+  // Fallback to userAgent
+  const userAgent = navigator.userAgent.toLowerCase()
+  if (userAgent.includes("mac os x") || userAgent.includes("macintosh")) {
+    return true
+  }
+  
+  // Fallback to platform
+  const platform = navigator.platform?.toUpperCase() || ""
+  return platform.indexOf("MAC") >= 0
+}
+
 export function useKeyboardShortcuts({
   onExport,
   onImport,
@@ -17,37 +37,43 @@ export function useKeyboardShortcuts({
 }: KeyboardShortcuts) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if user is typing in an input/textarea
       const target = e.target as HTMLElement
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
+      const isInput = target.tagName === "INPUT" || 
+                      target.tagName === "TEXTAREA" || 
+                      target.isContentEditable
+
+      const isMac = isMacOS()
+      const modifier = isMac ? e.metaKey : e.ctrlKey
+
+      // Ctrl/Cmd + A: Select All (works even in inputs, but we check if it's a text input)
+      if (modifier && e.key.toLowerCase() === "a") {
+        // Only prevent default and handle if NOT in a text input/textarea
+        // This allows normal text selection in inputs, but selects table rows when not in input
+        if (!isInput) {
+          e.preventDefault()
+          onSelectAll?.()
+          return
+        }
+        // If in input, let browser handle it (normal text selection)
         return
       }
 
-      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0
-      const modifier = isMac ? e.metaKey : e.ctrlKey
+      // For other shortcuts, don't work in inputs
+      if (isInput) {
+        return
+      }
 
       // Ctrl/Cmd + S: Create Inventory
-      if (modifier && e.key === "s") {
+      if (modifier && e.key.toLowerCase() === "s") {
         e.preventDefault()
         onExport?.()
         return
       }
 
       // Ctrl/Cmd + O: Load Inventory
-      if (modifier && e.key === "o") {
+      if (modifier && e.key.toLowerCase() === "o") {
         e.preventDefault()
         onImport?.()
-        return
-      }
-
-      // Ctrl/Cmd + A: Select All (only if not in input)
-      if (modifier && e.key === "a" && !target.tagName.match(/INPUT|TEXTAREA/)) {
-        e.preventDefault()
-        onSelectAll?.()
         return
       }
 
@@ -58,7 +84,7 @@ export function useKeyboardShortcuts({
       }
 
       // Ctrl/Cmd + D: Focus bulk date input
-      if (modifier && e.key === "d") {
+      if (modifier && e.key.toLowerCase() === "d") {
         e.preventDefault()
         onBulkDateFocus?.()
         return

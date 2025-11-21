@@ -20,6 +20,7 @@ interface InventoryTableProps {
   items: InventoryItem[]
   onItemsChange: (items: InventoryItem[]) => void
   onSelectionChange?: ((selectedIndices: number[]) => void) | undefined
+  selectedIndices?: number[]
 }
 
 const TableRowMemo = memo(function TableRowMemo({
@@ -147,7 +148,7 @@ const TableRowMemo = memo(function TableRowMemo({
  * @param onItemsChange - Callback when items are updated
  * @param onSelectionChange - Optional callback when selection changes
  */
-export function InventoryTable({ items, onItemsChange, onSelectionChange }: InventoryTableProps) {
+export function InventoryTable({ items, onItemsChange, onSelectionChange, selectedIndices }: InventoryTableProps) {
   const {
     selectedRows,
     toggleRow,
@@ -156,7 +157,22 @@ export function InventoryTable({ items, onItemsChange, onSelectionChange }: Inve
     isAllSelected,
     isIndeterminate,
     selectedCount,
+    setSelectedRows,
   } = useTableSelection(items.length)
+
+  // Sync internal state with external selectedIndices prop
+  React.useEffect(() => {
+    if (selectedIndices !== undefined) {
+      const externalSet = new Set(selectedIndices)
+      // Only update if different to avoid unnecessary re-renders
+      const currentArray = Array.from(selectedRows).sort()
+      const externalArray = Array.from(externalSet).sort()
+      if (currentArray.length !== externalArray.length || 
+          !currentArray.every((val, idx) => val === externalArray[idx])) {
+        setSelectedRows(externalSet)
+      }
+    }
+  }, [selectedIndices, selectedRows, setSelectedRows])
 
   // Notify parent of selection changes
   React.useEffect(() => {
