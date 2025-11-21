@@ -20,7 +20,7 @@ interface InventoryTableProps {
   items: InventoryItem[]
   onItemsChange: (items: InventoryItem[]) => void
   onSelectionChange?: ((selectedIndices: number[]) => void) | undefined
-  selectedIndices?: number[]
+  selectedIndices?: number[] | undefined
 }
 
 const TableRowMemo = memo(function TableRowMemo({

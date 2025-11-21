@@ -9,9 +9,10 @@ interface KeyboardShortcutsHintProps {
 function isMacOS(): boolean {
   if (typeof navigator === "undefined") return false
   
-  // Try modern API first
-  if (navigator.userAgentData?.platform) {
-    return navigator.userAgentData.platform.toLowerCase() === "macos"
+  // Try modern API first (userAgentData is experimental and may not be in types)
+  const nav = navigator as Navigator & { userAgentData?: { platform: string } }
+  if (nav.userAgentData?.platform) {
+    return nav.userAgentData.platform.toLowerCase() === "macos"
   }
   
   // Fallback to userAgent
