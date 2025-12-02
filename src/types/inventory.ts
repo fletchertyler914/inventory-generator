@@ -3,9 +3,15 @@
  */
 
 /**
+ * File review status
+ */
+export type FileStatus = 'unreviewed' | 'in_progress' | 'reviewed' | 'flagged' | 'finalized'
+
+/**
  * Represents a single inventory item with all document metadata
  */
 export interface InventoryItem {
+  id?: string // File ID from database (UUID) - cloud-ready identifier
   date_rcvd: string
   doc_year: number
   doc_date_range: string
@@ -18,6 +24,8 @@ export interface InventoryItem {
   bates_stamp: string
   notes: string
   absolute_path: string
+  status?: FileStatus
+  tags?: string[]
 }
 
 /**
@@ -35,6 +43,7 @@ export type InventoryItemField = keyof InventoryItem
  */
 export function isInventoryItemField(field: string): field is InventoryItemField {
   return [
+    "id",
     "date_rcvd",
     "doc_year",
     "doc_date_range",
@@ -47,6 +56,8 @@ export function isInventoryItemField(field: string): field is InventoryItemField
     "bates_stamp",
     "notes",
     "absolute_path",
+    "status",
+    "tags",
   ].includes(field)
 }
 
@@ -56,10 +67,18 @@ export function isInventoryItemField(field: string): field is InventoryItemField
 export function updateInventoryItemField(
   item: InventoryItem,
   field: InventoryItemField,
-  value: string | number
+  value: string | number | FileStatus | string[]
 ): InventoryItem {
   if (field === "doc_year") {
     return { ...item, doc_year: typeof value === "number" ? value : parseInt(String(value)) || item.doc_year }
+  }
+  
+  if (field === "status") {
+    return { ...item, status: value as FileStatus }
+  }
+  
+  if (field === "tags") {
+    return { ...item, tags: value as string[] }
   }
   
   return { ...item, [field]: String(value) }

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { FolderSelector } from "../FolderSelector"
 import { ConfigForm } from "../ConfigForm"
 import { ExportDialog } from "../ExportDialog"
@@ -5,9 +6,14 @@ import { ImportDialog } from "../ImportDialog"
 import { SettingsDialog } from "../SettingsDialog"
 import { ThemeToggle } from "../ThemeToggle"
 import { KeyboardShortcutsHint } from "../KeyboardShortcutsHint"
+import { CaseSwitcher } from "../case/CaseSwitcher"
+import { ProgressDashboard } from "../dashboard/ProgressDashboard"
+import { SearchBar } from "../search/SearchBar"
+import { ReportGenerator } from "../reports/ReportGenerator"
+import type { Case } from "@/types/case"
 import { Button } from "../ui/button"
 import { Tooltip, TooltipTrigger, TooltipContent } from "../ui/tooltip"
-import { RefreshCw, FolderOpen, Loader2 } from "lucide-react"
+import { RefreshCw, FolderOpen, Loader2, FileText } from "lucide-react"
 import { openFolder } from "@/services/inventoryService"
 import { createAppError, logError, ErrorCode } from "@/lib/error-handler"
 import { toast } from "@/hooks/useToast"
@@ -47,6 +53,10 @@ interface SidebarContentProps {
   importDialogOpen?: boolean | undefined
   onImportDialogOpenChange?: ((open: boolean) => void) | undefined
   bulkDateInputRef?: React.RefObject<HTMLButtonElement> | undefined
+  currentCaseId?: string | undefined
+  onCaseSelect?: ((case_: Case) => void) | undefined
+  onFileOpen?: ((filePath: string) => void) | undefined
+  currentCase?: Case | undefined
 }
 
 export function SidebarContent({
@@ -68,22 +78,13 @@ export function SidebarContent({
   importDialogOpen,
   onImportDialogOpenChange,
   bulkDateInputRef,
+  currentCaseId,
+  onCaseSelect,
+  onFileOpen,
+  currentCase,
 }: SidebarContentProps) {
-  const syncStatus = useInventoryStore((state) => state.syncStatus)
+  const [reportDialogOpen, setReportDialogOpen] = useState(false)
   const syncing = useInventoryStore((state) => state.syncing)
-
-  const getSyncStatusTooltip = () => {
-    if (syncing) {
-      return "Checking sync status..."
-    }
-    if (syncStatus === "synced") {
-      return "Sync with Folder (Synced)"
-    }
-    if (syncStatus === "out_of_sync") {
-      return "Sync with Folder (Out of Sync)"
-    }
-    return "Sync with Folder"
-  }
 
   return (
     <div className="flex flex-col h-full bg-card border-r border-border">
@@ -96,14 +97,38 @@ export function SidebarContent({
             <ThemeToggle />
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground mb-3">
           Generate comprehensive inventory spreadsheets
         </p>
+        {onCaseSelect && currentCaseId && (
+          <div className="mt-3">
+            <CaseSwitcher
+              currentCaseId={currentCaseId}
+              onSelectCase={onCaseSelect}
+            />
+          </div>
+        )}
       </div>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 space-y-8">
+          {/* Search Bar */}
+          <div>
+            <SearchBar
+              caseId={currentCaseId || undefined}
+              items={items}
+              onFileSelect={onFileOpen || undefined}
+            />
+          </div>
+          
+          {/* Progress Dashboard */}
+          {items.length > 0 && (
+            <div>
+              <ProgressDashboard items={items} />
+            </div>
+          )}
+          
           {/* Source Folder Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -146,24 +171,16 @@ export function SidebarContent({
                         disabled={loading || !selectedFolder}
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 relative"
+                        className="h-6 w-6"
                       >
                         {syncing ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <RefreshCw className="h-4 w-4" />
                         )}
-                        {syncStatus && !syncing && (
-                          <span
-                            className={`absolute top-0 right-0 h-2 w-2 rounded-full ${
-                              syncStatus === "synced" ? "bg-green-500" : "bg-red-500"
-                            }`}
-                            style={{ transform: "translate(25%, -25%)" }}
-                          />
-                        )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{getSyncStatusTooltip()}</TooltipContent>
+                    <TooltipContent>Sync with Folder</TooltipContent>
                   </Tooltip>
                 </div>
               )}
@@ -200,6 +217,25 @@ export function SidebarContent({
                 onOpenChange={onExportDialogOpenChange}
               />
             </div>
+            {currentCase && items.length > 0 && (
+              <div className="mt-2">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setReportDialogOpen(true)}
+                  disabled={items.length === 0}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Generate Report
+                </Button>
+                <ReportGenerator
+                  items={items}
+                  case_={currentCase}
+                  open={reportDialogOpen}
+                  onOpenChange={setReportDialogOpen}
+                />
+              </div>
+            )}
           </div>
 
           {/* Configuration */}

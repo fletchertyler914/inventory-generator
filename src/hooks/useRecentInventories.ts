@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import type { InventoryItem } from "@/types/inventory"
+import { getStoreValue, setStoreValue } from "@/lib/store-utils"
 
 export interface RecentInventory {
   id: string
@@ -16,28 +17,38 @@ const MAX_RECENT = 10
 
 export function useRecentInventories() {
   const [recentInventories, setRecentInventories] = useState<RecentInventory[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Load from localStorage on mount
+  // Load from Tauri store on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored) as RecentInventory[]
-        setRecentInventories(parsed)
-      }
-    } catch (error) {
-      console.error("Error loading recent inventories:", error)
+    let mounted = true
+    getStoreValue<RecentInventory[]>(STORAGE_KEY, [], "app")
+      .then((stored) => {
+        if (mounted) {
+          setRecentInventories(stored)
+          setIsLoading(false)
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading recent inventories:", error)
+        if (mounted) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      mounted = false
     }
   }, [])
 
-  // Save to localStorage whenever it changes
+  // Save to Tauri store whenever it changes
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(recentInventories))
-    } catch (error) {
+    if (isLoading) return // Don't save during initial load
+
+    setStoreValue(STORAGE_KEY, recentInventories, "app").catch((error) => {
       console.error("Error saving recent inventories:", error)
-    }
-  }, [recentInventories])
+    })
+  }, [recentInventories, isLoading])
 
   const addRecentInventory = (
     filePath: string,
@@ -47,7 +58,7 @@ export function useRecentInventories() {
   ) => {
     const fileName = filePath.split(/[/\\]/).pop() || "inventory"
     const id = `${filePath}-${Date.now()}`
-    
+
     const newRecent: RecentInventory = {
       id,
       name: fileName,
@@ -78,11 +89,7 @@ export function useRecentInventories() {
 
   const updateLastOpened = (filePath: string) => {
     setRecentInventories((prev) =>
-      prev.map((inv) =>
-        inv.filePath === filePath
-          ? { ...inv, lastOpened: Date.now() }
-          : inv
-      )
+      prev.map((inv) => (inv.filePath === filePath ? { ...inv, lastOpened: Date.now() } : inv))
     )
   }
 
@@ -94,4 +101,3 @@ export function useRecentInventories() {
     updateLastOpened,
   }
 }
-

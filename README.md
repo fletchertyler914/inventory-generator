@@ -1,4 +1,4 @@
-# Document Inventory Generator
+# CaseSpace
 
 A production-grade Tauri application for generating comprehensive document inventory spreadsheets from folder structures.
 
@@ -33,7 +33,7 @@ A production-grade Tauri application for generating comprehensive document inven
 ### Project Structure
 
 ```
-inventory-generator/
+casespace/
 ├── src/
 │   ├── components/        # React components
 │   │   ├── layout/        # Layout components

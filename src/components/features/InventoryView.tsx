@@ -12,6 +12,7 @@ interface InventoryViewProps {
   onBulkSetDateRcvd: (date: string) => void
   loading: boolean
   selectedFolder: string | null
+  onFileOpen?: (filePath: string) => void
 }
 
 export function InventoryView({
@@ -22,6 +23,7 @@ export function InventoryView({
   onBulkSetDateRcvd,
   loading,
   selectedFolder,
+  onFileOpen,
 }: InventoryViewProps) {
   if (loading) {
     return (
@@ -81,7 +83,7 @@ export function InventoryView({
             )}
           </p>
         </div>
-        <InventoryTable items={items} onItemsChange={onItemsChange} />
+        <InventoryTable items={items} onItemsChange={onItemsChange} onFileOpen={onFileOpen} />
       </div>
     </div>
   )

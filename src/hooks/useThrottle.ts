@@ -18,15 +18,19 @@ export function useThrottle<T extends (...args: unknown[]) => void>(
     callbackRef.current = callback
   }, [callback])
 
+  // Note: Using inline arrow function for React Compiler compatibility
+  // Ref-based callback pattern ensures stable reference
+  // This pattern is intentional - we need stable reference with ref-based callback
+   
   return useCallback(
-    ((...args: Parameters<T>) => {
-      const now = Date.now()
-      if (now - lastRun.current >= delay) {
-        callbackRef.current(...args)
-        lastRun.current = now
-      }
-    }) as T,
-    [delay] // Only depend on delay, use ref for callback
-  )
+      ((...args: Parameters<T>) => {
+        const now = Date.now()
+        if (now - lastRun.current >= delay) {
+          callbackRef.current(...args)
+          lastRun.current = now
+        }
+      }) as T,
+      [delay] // Only depend on delay, use ref for callback
+    )
 }
 

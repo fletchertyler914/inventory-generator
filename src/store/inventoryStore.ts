@@ -32,10 +32,6 @@ interface InventoryState {
   importing: boolean
   syncing: boolean
   
-  // Sync status
-  syncStatus: 'synced' | 'out_of_sync' | null
-  folderFileCount: number | null
-  
   // UI state
   exportDialogOpen: boolean
   importDialogOpen: boolean
@@ -52,7 +48,6 @@ interface InventoryState {
   setExporting: (exporting: boolean) => void
   setImporting: (importing: boolean) => void
   setSyncing: (syncing: boolean) => void
-  setSyncStatus: (status: 'synced' | 'out_of_sync' | null, fileCount?: number) => void
   setExportDialogOpen: (open: boolean) => void
   setImportDialogOpen: (open: boolean) => void
   reset: () => void
@@ -68,8 +63,6 @@ const initialState = {
   exporting: false,
   importing: false,
   syncing: false,
-  syncStatus: null as 'synced' | 'out_of_sync' | null,
-  folderFileCount: null as number | null,
   exportDialogOpen: false,
   importDialogOpen: false,
 }
@@ -97,19 +90,21 @@ export const useInventoryStore = create<InventoryState>((set) => ({
       return { items: updated }
     }),
   
+  // ELITE: Optimized bulk update with batch processing for large datasets
   bulkUpdateItems: (updates, indices) =>
     set((state) => {
       if (indices && indices.length > 0) {
-        // Update only selected items
-        const updated = [...state.items]
-        indices.forEach((index) => {
-          if (index >= 0 && index < updated.length) {
-            updated[index] = { ...updated[index], ...updates } as InventoryItem
+        // ELITE: Batch update selected items - use Map for O(1) lookups
+        const indexSet = new Set(indices);
+        const updated = state.items.map((item, index) => {
+          if (indexSet.has(index)) {
+            return { ...item, ...updates } as InventoryItem;
           }
-        })
-        return { items: updated }
+          return item;
+        });
+        return { items: updated };
       } else {
-        // Update all items
+        // ELITE: For all items, use map with single pass
         return {
           items: state.items.map((item) => ({ ...item, ...updates } as InventoryItem)),
         }
@@ -131,12 +126,7 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   
   setSyncing: (syncing) => set({ syncing, loading: syncing }),
   
-  setSyncStatus: (status, fileCount) => set({ 
-    syncStatus: status, 
-    folderFileCount: fileCount !== undefined ? fileCount : null 
-  }),
-  
-  setSelectedFolder: (folder) => set({ selectedFolder: folder, syncStatus: null }),
+  setSelectedFolder: (folder) => set({ selectedFolder: folder }),
   
   setExportDialogOpen: (open) => set({ exportDialogOpen: open }),
   

@@ -47,7 +47,7 @@ export function ConfigForm({
     setCaseNumberError(error)
   }
 
-  const handleBulkSetDate = () => {
+  const handleBulkSetDate = async () => {
     const trimmed = bulkDate.trim()
     if (!trimmed) {
       setDateError("Please enter a date")
@@ -60,6 +60,9 @@ export function ConfigForm({
     }
 
     setDateError("")
+    
+    // Note: File change checking for bulk operations would require caseId and fileIds
+    // This is handled at a higher level if needed
     onBulkSetDateRcvd(trimmed, hasSelection ? selectedIndices : undefined)
     setBulkDate("")
     setShowSuccess(true)
@@ -69,9 +72,14 @@ export function ConfigForm({
   // Reset success message when selection changes
   useEffect(() => {
     if (showSuccess) {
-      setShowSuccess(false)
+      // Use setTimeout to avoid cascading renders
+      const timer = setTimeout(() => {
+        setShowSuccess(false)
+      }, 0)
+      return () => clearTimeout(timer)
     }
-  }, [selectedIndices])
+    return undefined
+  }, [selectedIndices, showSuccess])
 
   const handleDateChange = (value: string) => {
     setBulkDate(value)
@@ -150,7 +158,7 @@ export function ConfigForm({
               size="default"
             className={cn(
                 "shrink-0 px-4 transition-all duration-200",
-              showSuccess && "bg-green-600 hover:bg-green-700"
+              showSuccess && "bg-success hover:bg-success/90"
             )}
           >
             {showSuccess ? (
@@ -165,7 +173,7 @@ export function ConfigForm({
           </div>
           
           {showSuccess && (
-            <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1.5 animate-in fade-in-0">
+            <p className="text-xs text-success flex items-center gap-1.5 animate-in fade-in-0">
               <CheckCircle2 className="h-3 w-3" />
               Applied to {hasSelection ? selectedIndices.length : totalItems} item{hasSelection ? (selectedIndices.length !== 1 ? 's' : '') : (totalItems !== 1 ? 's' : '')}
             </p>

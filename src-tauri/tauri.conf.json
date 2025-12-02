@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Document Inventory Generator",
+  "productName": "CaseSpace",
   "version": "0.1.0",
-  "identifier": "com.inventory-generator",
+  "identifier": "com.casespace",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,18 +12,28 @@
   "app": {
     "windows": [
       {
-        "title": "Document Inventory Generator",
+        "title": "CaseSpace",
         "width": 1600,
         "height": 1000,
         "minWidth": 1200,
         "minHeight": 700,
         "center": true,
-        "resizable": true
+        "resizable": true,
+        "visible": true,
+        "decorations": true
       }
     ],
     "security": {
       "csp": null
     }
+  },
+  "plugins": {
+    "sql": {
+      "preload": [
+        "sqlite:casespace.db"
+      ]
+    },
+    "store": {}
   },
   "bundle": {
     "active": true,

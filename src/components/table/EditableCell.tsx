@@ -46,19 +46,23 @@ function EditableCellComponent({
 
   // Use ref-based handler to avoid dependency array issues
   const handleSaveRef = useRef<() => void>()
-  handleSaveRef.current = () => {
-    const currentValue = editValueRef.current
-    if (typeRef.current === "date" && currentValue.trim()) {
-      // Validate date before saving
-      if (!isValidDateFormat(currentValue.trim())) {
-        setDateErrorRef.current("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
-        return
+  
+  // Update ref in effect to avoid React Compiler error
+  useEffect(() => {
+    handleSaveRef.current = () => {
+      const currentValue = editValueRef.current
+      if (typeRef.current === "date" && currentValue.trim()) {
+        // Validate date before saving
+        if (!isValidDateFormat(currentValue.trim())) {
+          setDateErrorRef.current("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
+          return
+        }
       }
+      setDateErrorRef.current("")
+      onSaveRef.current(currentValue)
+      setIsEditing(false)
     }
-    setDateErrorRef.current("")
-    onSaveRef.current(currentValue)
-    setIsEditing(false)
-  }
+  })
 
   const handleSave = useCallback(() => {
     handleSaveRef.current?.()
@@ -77,6 +81,30 @@ function EditableCellComponent({
       })
     }
   }, [isEditing, type])
+
+  // Handle date blur with validation - define before useEffect that uses it
+  const handleDateBlur = useCallback(() => {
+    // Use requestAnimationFrame for immediate execution with ref value
+    requestAnimationFrame(() => {
+      if (typeRef.current === "date") {
+        const currentValue = editValueRef.current.trim()
+        if (currentValue) {
+          if (!isValidDateFormat(currentValue)) {
+            setDateErrorRef.current("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
+            return
+          } else {
+            setDateErrorRef.current("")
+            onSaveRef.current(currentValue)
+            setIsEditing(false)
+          }
+        } else {
+          setDateErrorRef.current("")
+          onSaveRef.current("")
+          setIsEditing(false)
+        }
+      }
+    })
+  }, [])
 
   // Handle click outside to blur and save - optimized with refs
   useEffect(() => {
@@ -129,7 +157,7 @@ function EditableCellComponent({
             }
           } else {
             // Popover already closed, save directly
-            handleDateBlurRef.current?.()
+            handleDateBlur()
           }
         } else {
           // Save directly for non-date fields
@@ -165,7 +193,7 @@ function EditableCellComponent({
       document.removeEventListener("touchstart", handleClickOutside, true)
       document.removeEventListener("focusin", handleFocusChange, true)
     }
-  }, [isEditing])
+  }, [isEditing, handleDateBlur])
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -191,35 +219,6 @@ function EditableCellComponent({
     },
     [dateError, setEditValueWithRef]
   )
-
-  // Use ref-based handler for date blur
-  const handleDateBlurRef = useRef<() => void>()
-  handleDateBlurRef.current = () => {
-    // Use requestAnimationFrame for immediate execution with ref value
-    requestAnimationFrame(() => {
-      if (typeRef.current === "date") {
-        const currentValue = editValueRef.current.trim()
-        if (currentValue) {
-          if (!isValidDateFormat(currentValue)) {
-            setDateErrorRef.current("Invalid date format. Use MM/DD/YYYY (e.g., 11/20/2025)")
-            return
-          } else {
-            setDateErrorRef.current("")
-            onSaveRef.current(currentValue)
-            setIsEditing(false)
-          }
-        } else {
-          setDateErrorRef.current("")
-          onSaveRef.current("")
-          setIsEditing(false)
-        }
-      }
-    })
-  }
-
-  const handleDateBlur = useCallback(() => {
-    handleDateBlurRef.current?.()
-  }, [])
 
   const handleBlur = useCallback(() => {
     // Auto-save on blur for non-date fields
@@ -321,6 +320,7 @@ function EditableCellComponent({
   return (
     <div
       onClick={handleClick}
+      data-editable-cell
       className={cn(
         "group relative flex items-center gap-1 cursor-pointer rounded px-2 py-1 -mx-2 -my-1 transition-colors duration-150 min-h-[24px] min-w-0",
         "hover:bg-muted/40",

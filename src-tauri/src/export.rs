@@ -2,6 +2,7 @@ use rust_xlsxwriter::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Write, BufReader};
+use std::path::Path;
 use serde_json;
 use calamine::{open_workbook, Reader, Xlsx, Data};
 
@@ -22,6 +23,7 @@ pub struct InventoryRow {
 
 pub fn generate_xlsx(
     rows: &[InventoryRow],
+    absolute_paths: &[String],
     case_number: Option<&str>,
     folder_path: Option<&str>,
     output_path: &str,
@@ -108,7 +110,7 @@ pub fn generate_xlsx(
     current_row += 1;
     
     // Write data rows
-    for row in rows {
+    for (idx, row) in rows.iter().enumerate() {
         worksheet.write_string(current_row, 0, &row.date_rcvd)?;
         worksheet.write_number(current_row, 1, row.doc_year as f64)?;
         worksheet.write_string(current_row, 2, &row.doc_date_range)?;
@@ -116,7 +118,34 @@ pub fn generate_xlsx(
         worksheet.write_string(current_row, 4, &row.document_description)?;
         worksheet.write_string(current_row, 5, &row.file_name)?;
         worksheet.write_string(current_row, 6, &row.folder_name)?;
-        worksheet.write_string(current_row, 7, &row.folder_path)?;
+        
+        // Write folder_path as hyperlink if absolute_path is available
+        if let Some(absolute_path) = absolute_paths.get(idx) {
+            if !absolute_path.is_empty() {
+                // Convert path to file:// URL format
+                // For file:// URLs: Unix/Mac uses file:///path, Windows uses file:///C:/path
+                // Both require three slashes after "file:"
+                let path = Path::new(absolute_path);
+                let normalized_path = path.to_string_lossy().replace('\\', "/");
+                
+                // Ensure we have three slashes after file: (file:///)
+                let file_url = if normalized_path.starts_with('/') {
+                    format!("file://{}", normalized_path)
+                } else {
+                    // Windows path - add leading slash for proper URL format
+                    format!("file:///{}", normalized_path)
+                };
+                
+                // Write URL - this creates a clickable hyperlink
+                // The display text will be the URL itself
+                worksheet.write_url(current_row, 7, Url::new(&file_url))?;
+            } else {
+                worksheet.write_string(current_row, 7, &row.folder_path)?;
+            }
+        } else {
+            worksheet.write_string(current_row, 7, &row.folder_path)?;
+        }
+        
         worksheet.write_string(current_row, 8, &row.file_type)?;
         worksheet.write_string(current_row, 9, &row.bates_stamp)?;
         worksheet.write_string(current_row, 10, &row.notes)?;
@@ -129,6 +158,7 @@ pub fn generate_xlsx(
 
 pub fn generate_csv(
     rows: &[InventoryRow],
+    absolute_paths: &[String],
     case_number: Option<&str>,
     folder_path: Option<&str>,
     output_path: &str,
@@ -203,7 +233,29 @@ pub fn generate_csv(
     ])?;
     
     // Write data rows
-    for row in rows {
+    for (idx, row) in rows.iter().enumerate() {
+        // Convert folder_path to file:// URL if absolute_path is available
+        let folder_path_value = if let Some(absolute_path) = absolute_paths.get(idx) {
+            if !absolute_path.is_empty() {
+                // Convert path to file:// URL format
+                // For file:// URLs: Unix/Mac uses file:///path, Windows uses file:///C:/path
+                let path = Path::new(absolute_path);
+                let normalized_path = path.to_string_lossy().replace('\\', "/");
+                
+                // Ensure we have three slashes after file: (file:///)
+                if normalized_path.starts_with('/') {
+                    format!("file://{}", normalized_path)
+                } else {
+                    // Windows path - add leading slash for proper URL format
+                    format!("file:///{}", normalized_path)
+                }
+            } else {
+                row.folder_path.clone()
+            }
+        } else {
+            row.folder_path.clone()
+        };
+        
         wtr.write_record(&[
             &row.date_rcvd,
             &row.doc_year.to_string(),
@@ -212,7 +264,7 @@ pub fn generate_csv(
             &row.document_description,
             &row.file_name,
             &row.folder_name,
-            &row.folder_path,
+            &folder_path_value,
             &row.file_type,
             &row.bates_stamp,
             &row.notes,

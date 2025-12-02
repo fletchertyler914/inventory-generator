@@ -39,8 +39,8 @@ export function LargeFolderWarningDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-500/10 dark:bg-yellow-400/10">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning/10 dark:bg-warning/20">
+              <AlertTriangle className="h-5 w-5 text-warning" />
             </div>
             <DialogTitle className="text-lg font-semibold">
               Large Folder Detected

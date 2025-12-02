@@ -1,4 +1,4 @@
-/// Custom error types for the inventory generator application
+/// Custom error types for the casespace application
 /// Uses thiserror for clean error handling and propagation
 
 use thiserror::Error;

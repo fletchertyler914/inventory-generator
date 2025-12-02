@@ -23,7 +23,7 @@ export function Header({
           <div className="flex items-center gap-3">
             <div className="h-8 w-0.5 bg-border" />
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              Document Inventory Generator
+              CaseSpace
             </h1>
           </div>
           <div className="flex items-center gap-3">

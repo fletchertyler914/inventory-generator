@@ -33,6 +33,10 @@ interface DesktopLayoutProps {
   importDialogOpen?: boolean;
   onImportDialogOpenChange?: (open: boolean) => void;
   bulkDateInputRef?: React.RefObject<HTMLButtonElement>;
+  onFileOpen?: ((filePath: string) => void) | undefined;
+  currentCaseId?: string | undefined;
+  onCaseSelect?: ((case_: import('@/types/case').Case) => void) | undefined;
+  currentCase?: import('@/types/case').Case | undefined;
 }
 
 export const DesktopLayout = forwardRef<DesktopLayoutRef, DesktopLayoutProps>(function DesktopLayout({
@@ -58,6 +62,10 @@ export const DesktopLayout = forwardRef<DesktopLayoutRef, DesktopLayoutProps>(fu
   importDialogOpen,
   onImportDialogOpenChange,
   bulkDateInputRef,
+  onFileOpen,
+  currentCaseId,
+  onCaseSelect,
+  currentCase,
 }, ref) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -72,8 +80,8 @@ export const DesktopLayout = forwardRef<DesktopLayoutRef, DesktopLayoutProps>(fu
       {/* Left Sidebar */}
       <aside
         className={`
-          border-r border-border bg-card flex flex-col flex-shrink-0 transition-all duration-200 ease-in-out relative
-          ${isSidebarCollapsed ? 'w-0 overflow-hidden' : 'w-80'}
+          bg-card flex flex-col flex-shrink-0 transition-all duration-200 ease-in-out relative
+          ${isSidebarCollapsed ? 'w-0 overflow-hidden border-r border-border' : 'w-80'}
         `}
       >
         <SidebarContent
@@ -95,6 +103,10 @@ export const DesktopLayout = forwardRef<DesktopLayoutRef, DesktopLayoutProps>(fu
           importDialogOpen={importDialogOpen}
           onImportDialogOpenChange={onImportDialogOpenChange}
           bulkDateInputRef={bulkDateInputRef}
+          currentCaseId={currentCaseId || undefined}
+          onCaseSelect={onCaseSelect || undefined}
+          onFileOpen={onFileOpen || undefined}
+          currentCase={currentCase || undefined}
         />
         
         {/* Toggle Button - Inside Sidebar */}
@@ -138,6 +150,8 @@ export const DesktopLayout = forwardRef<DesktopLayoutRef, DesktopLayoutProps>(fu
           recentInventories={recentInventories}
           onOpenRecentInventory={onOpenRecentInventory}
           onRemoveRecentInventory={onRemoveRecentInventory}
+          onFileOpen={onFileOpen}
+          currentCaseId={currentCaseId}
         />
       </main>
     </div>

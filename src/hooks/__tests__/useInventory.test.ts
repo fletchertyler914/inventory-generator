@@ -74,7 +74,7 @@ describe("useInventory", () => {
     await act(async () => {
       try {
         await result.current.scanFolder("/test/path")
-      } catch (e) {
+      } catch {
         // Expected error
       }
     })
