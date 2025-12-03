@@ -8,32 +8,46 @@ interface SplashScreenProps {
 }
 
 export function SplashScreen({ isVisible, onAnimationComplete }: SplashScreenProps) {
+  console.log('[Frontend] [SplashScreen] Component render - isVisible:', isVisible);
+  
   const [isAnimating, setIsAnimating] = useState(true);
   const [shouldRender, setShouldRender] = useState(true);
+  
+  console.log('[Frontend] [SplashScreen] State - isAnimating:', isAnimating, 'shouldRender:', shouldRender);
 
   useEffect(() => {
+    console.log('[Frontend] [SplashScreen] useEffect triggered - isVisible:', isVisible);
+    
     if (!isVisible) {
+      console.log('[Frontend] [SplashScreen] Hiding splash screen...');
       // Start fade out animation
       setIsAnimating(false);
       // Remove from DOM after animation completes
       const timer = setTimeout(() => {
+        console.log('[Frontend] [SplashScreen] Removing splash screen from DOM');
         setShouldRender(false);
         onAnimationComplete?.();
       }, 300); // Match animation duration
       return () => clearTimeout(timer);
     } else {
+      console.log('[Frontend] [SplashScreen] Showing splash screen...');
       // Show splash screen
       setShouldRender(true);
       // Small delay to ensure DOM is ready before starting animation
-      const timer = setTimeout(() => setIsAnimating(true), 10);
+      const timer = setTimeout(() => {
+        console.log('[Frontend] [SplashScreen] Starting splash animation');
+        setIsAnimating(true);
+      }, 10);
       return () => clearTimeout(timer);
     }
   }, [isVisible, onAnimationComplete]);
 
   if (!shouldRender) {
+    console.log('[Frontend] [SplashScreen] Not rendering (shouldRender=false)');
     return null;
   }
 
+  console.log('[Frontend] [SplashScreen] Rendering splash screen UI');
   return (
     <div
       className={cn(
@@ -54,7 +68,7 @@ export function SplashScreen({ isVisible, onAnimationComplete }: SplashScreenPro
         >
           <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full animate-pulse" />
           <img
-            src="/owl-logo-square.png"
+            src="./logo.png"
             alt="CaseSpace"
             className="relative w-24 h-24 md:w-32 md:h-32 object-contain drop-shadow-lg"
           />

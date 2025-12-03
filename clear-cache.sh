@@ -35,6 +35,22 @@ elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
     echo "  rmdir /s %LOCALAPPDATA%\\com.casespace\\cache"
 fi
 
+# Clear log files
+echo "Clearing log files..."
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    rm -f ~/Library/Logs/com.casespace/casespace.log*
+    echo "  Cleared macOS logs: ~/Library/Logs/com.casespace/casespace.log*"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Linux
+    rm -f ~/.local/share/com.casespace/logs/casespace.log*
+    echo "  Cleared Linux logs: ~/.local/share/com.casespace/logs/casespace.log*"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+    # Windows
+    echo "Windows log clearing - run manually:"
+    echo "  del /f %LOCALAPPDATA%\\com.casespace\\logs\\casespace.log*"
+fi
+
 echo "✅ Cache cleared!"
 echo ""
 echo "Next steps:"

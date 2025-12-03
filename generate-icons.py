@@ -198,7 +198,7 @@ def generate_ico(icon_512_path, output_path):
 def main():
     if len(sys.argv) < 2:
         print("Usage: python generate-icons.py <source-image>")
-        print("Example: python generate-icons.py owl-logo.png")
+        print("Example: python generate-icons.py logo.png")
         sys.exit(1)
     
     source_path = sys.argv[1]

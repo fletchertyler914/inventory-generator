@@ -2,5 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    casespace_lib::run()
+    eprintln!("[CaseSpace] ===== MAIN ENTRY POINT ===== ");
+    eprintln!("[CaseSpace] Application binary started");
+    eprintln!("[CaseSpace] Calling casespace_lib::run()...");
+    casespace_lib::run();
+    eprintln!("[CaseSpace] casespace_lib::run() returned (should not happen normally)");
 }

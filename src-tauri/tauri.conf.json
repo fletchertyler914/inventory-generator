@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "CaseSpace",
         "width": 1600,
         "height": 1000,
@@ -20,11 +21,16 @@
         "center": true,
         "resizable": true,
         "visible": true,
-        "decorations": true
+        "decorations": true,
+        "url": "index.html"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' asset: data: blob:; img-src 'self' asset: data: blob:;",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDIR/**"]
+      }
     }
   },
   "plugins": {

@@ -21,6 +21,7 @@ use std::sync::Arc;
 use sqlx::Row;
 use uuid::Uuid;
 use futures::future;
+use tauri::Manager;
 
 /// Schema-driven inventory item structure
 /// ELITE: Flexible structure based on global/case schema configuration
@@ -2972,21 +2973,25 @@ pub fn run() {
     use tauri_plugin_log::{Builder, Target, TargetKind, RotationStrategy};
     
     // Configure logging based on build mode
+    // Temporarily use Debug level in production for troubleshooting
     let log_level = if cfg!(debug_assertions) {
         LevelFilter::Debug
     } else {
-        LevelFilter::Info
+        LevelFilter::Debug // Changed to Debug for troubleshooting
     };
     
     // Configure log targets: stdout + file for dev, file only for production
+    // Note: tauri-plugin-log automatically appends .log extension, so use "casespace" not "casespace.log"
+    // Temporarily enable stdout in production for debugging
     let log_targets = if cfg!(debug_assertions) {
         vec![
             Target::new(TargetKind::Stdout),
-            Target::new(TargetKind::LogDir { file_name: Some("casespace.log".to_string()) }),
+            Target::new(TargetKind::LogDir { file_name: Some("casespace".to_string()) }),
         ]
     } else {
         vec![
-            Target::new(TargetKind::LogDir { file_name: Some("casespace.log".to_string()) }),
+            Target::new(TargetKind::Stdout), // Enable stdout for debugging
+            Target::new(TargetKind::LogDir { file_name: Some("casespace".to_string()) }),
         ]
     };
     
@@ -2998,13 +3003,69 @@ pub fn run() {
         .rotation_strategy(RotationStrategy::KeepSome(5))
         .build();
     
+    // Initialize logger early - before any other operations
+    // This ensures we can log even if something fails
+    eprintln!("[CaseSpace] Starting application initialization...");
+    
     log::info!("CaseSpace application starting");
     
-    tauri::Builder::default()
-        .plugin(log_plugin)
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
+    eprintln!("[CaseSpace] Creating Tauri builder...");
+    eprintln!("[CaseSpace] Builder created, registering handlers...");
+    eprintln!("[CaseSpace] Starting Tauri application...");
+    eprintln!("[CaseSpace] About to call Builder::default()...");
+    let builder = tauri::Builder::default();
+    eprintln!("[CaseSpace] Builder::default() returned");
+    
+    eprintln!("[CaseSpace] Registering log plugin...");
+    let builder = builder.plugin(log_plugin);
+    eprintln!("[CaseSpace] Log plugin registered");
+    
+    eprintln!("[CaseSpace] Registering opener plugin...");
+    let builder = builder.plugin(tauri_plugin_opener::init());
+    eprintln!("[CaseSpace] Opener plugin registered");
+    
+    eprintln!("[CaseSpace] Registering dialog plugin...");
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+    eprintln!("[CaseSpace] Dialog plugin registered");
+    
+    eprintln!("[CaseSpace] Registering store plugin...");
+    let builder = builder.plugin(tauri_plugin_store::Builder::default().build());
+    eprintln!("[CaseSpace] Store plugin registered");
+    
+    eprintln!("[CaseSpace] Setting up setup callback...");
+    let builder = builder
+        .setup(|app| {
+            eprintln!("[CaseSpace] ===== SETUP CALLBACK STARTED =====");
+            log::info!("[Setup] Setup callback called");
+            
+            // Check main window URL (should be tauri://localhost/index.html by default)
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(url) = window.url() {
+                    let url_str = url.to_string();
+                    eprintln!("[CaseSpace] Main window URL: {}", url_str);
+                    log::info!("[Setup] Main window URL: {}", url_str);
+                    
+                    // In Tauri v2, tauri://localhost should automatically serve index.html
+                    // If it's just tauri://localhost, that's actually correct - the asset protocol handles it
+                    if url_str == "tauri://localhost" {
+                        eprintln!("[CaseSpace] Window URL is tauri://localhost (this is correct for v2)");
+                        log::info!("[Setup] Window URL is tauri://localhost - asset protocol should serve index.html");
+                    } else if url_str.contains("index.html") {
+                        eprintln!("[CaseSpace] Window URL contains index.html path");
+                        log::info!("[Setup] Window URL contains index.html");
+                    }
+                }
+            } else {
+                eprintln!("[CaseSpace] WARNING: Main window not found!");
+                log::warn!("[Setup] Main window not found");
+            }
+            
+            eprintln!("[CaseSpace] ===== SETUP CALLBACK COMPLETE =====");
+            log::info!("[Setup] Application setup complete");
+            Ok(())
+        });
+    eprintln!("[CaseSpace] Registering invoke handlers...");
+    let builder = builder
         .invoke_handler(tauri::generate_handler![
             get_database_path,
             count_directory_files,
@@ -3055,7 +3116,24 @@ pub fn run() {
             save_column_config_db,
             get_mapping_config_db,
             save_mapping_config_db
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        ]);
+    eprintln!("[CaseSpace] Invoke handlers registered");
+    
+    eprintln!("[CaseSpace] Generating Tauri context...");
+    let context = tauri::generate_context!();
+    eprintln!("[CaseSpace] Tauri context generated");
+    
+    eprintln!("[CaseSpace] Calling builder.run() - this will block until app exits...");
+    eprintln!("[CaseSpace] ===== ABOUT TO START TAURI EVENT LOOP =====");
+    builder
+        .run(context)
+        .unwrap_or_else(|e| {
+            eprintln!("[CaseSpace] ===== FATAL ERROR ===== ");
+            eprintln!("[CaseSpace] FATAL ERROR: Failed to run Tauri application: {}", e);
+            eprintln!("[CaseSpace] Error details: {:?}", e);
+            log::error!("Failed to run Tauri application: {}", e);
+            std::process::exit(1);
+        });
+    
+    eprintln!("[CaseSpace] ===== APPLICATION EXITED =====");
 }

@@ -26,8 +26,12 @@ import type { Case } from "./types/case"
  * - Native desktop only: Built with Tauri for Windows, macOS, Linux
  */
 function App() {
+  console.log("[Frontend] [App] ===== APP COMPONENT RENDER START =====")
+
   // App initialization state
   const [isInitializing, setIsInitializing] = useState(true)
+
+  console.log("[Frontend] [App] Initial state - isInitializing:", isInitializing)
 
   // Case-first state management
   const [currentCase, setCurrentCase] = useState<Case | null>(null)
@@ -46,12 +50,20 @@ function App() {
    * Initialize app - wait for theme and React to be ready
    */
   useEffect(() => {
+    console.log("[Frontend] [App] useEffect: Initialization effect running")
+    console.log("[Frontend] [App] Setting 800ms timer to complete initialization...")
+
     // Wait for theme initialization and initial render
     const initTimer = setTimeout(() => {
+      console.log("[Frontend] [App] Initialization timer fired, setting isInitializing to false")
       setIsInitializing(false)
+      console.log("[Frontend] [App] Initialization complete")
     }, 800) // Give enough time for theme detection and smooth splash display
 
-    return () => clearTimeout(initTimer)
+    return () => {
+      console.log("[Frontend] [App] Cleanup: Clearing initialization timer")
+      clearTimeout(initTimer)
+    }
   }, [])
 
   /**
@@ -265,8 +277,12 @@ function App() {
     [currentCase, setItems]
   )
 
+  console.log("[Frontend] [App] Render decision - currentCase:", !!currentCase)
+  console.log("[Frontend] [App] Render decision - isInitializing:", isInitializing)
+
   // Render case list view (case-first workflow)
   if (!currentCase) {
+    console.log("[Frontend] [App] Rendering case list view (no current case)")
     return (
       <ErrorBoundary>
         <div className="h-screen w-screen bg-background text-foreground antialiased overflow-hidden">
@@ -287,6 +303,7 @@ function App() {
   }
 
   // Render case workspace (integrated multi-pane layout)
+  console.log("[Frontend] [App] Rendering case workspace (current case exists)")
   return (
     <ErrorBoundary>
       <div className="h-screen w-screen bg-background text-foreground antialiased overflow-hidden">

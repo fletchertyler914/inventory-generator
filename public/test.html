@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CaseSpace Test Page</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 40px;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #1a1a1a;
+        color: #ffffff;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      h1 {
+        color: #4ade80;
+      }
+      .status {
+        padding: 20px;
+        background: #2a2a2a;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+      .success {
+        color: #4ade80;
+      }
+      .error {
+        color: #f87171;
+      }
+      pre {
+        background: #0a0a0a;
+        padding: 15px;
+        border-radius: 4px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>CaseSpace Test Page</h1>
+      <p>If you can see this, the webview is loading HTML!</p>
+      
+      <div class="status">
+        <h2>Status Checks:</h2>
+        <div id="checks"></div>
+      </div>
+      
+      <div class="status">
+        <h2>Console Logs:</h2>
+        <pre id="logs"></pre>
+      </div>
+    </div>
+
+    <script>
+      const checksEl = document.getElementById('checks');
+      const logsEl = document.getElementById('logs');
+      const logs = [];
+
+      function log(message, type = 'info') {
+        const timestamp = new Date().toISOString();
+        const logEntry = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+        logs.push(logEntry);
+        logsEl.textContent = logs.join('\n');
+        console.log(logEntry);
+      }
+
+      function addCheck(name, status, details = '') {
+        const div = document.createElement('div');
+        div.innerHTML = `<strong>${name}:</strong> <span class="${status ? 'success' : 'error'}">${status ? '✓ PASS' : '✗ FAIL'}</span> ${details ? `- ${details}` : ''}`;
+        checksEl.appendChild(div);
+      }
+
+      log('===== TEST PAGE LOADING =====');
+      log('Document ready state: ' + document.readyState);
+      log('Window location: ' + window.location.href);
+      log('Document URL: ' + document.URL);
+
+      // Check 1: HTML loaded
+      addCheck('HTML Loaded', true, 'This page is visible');
+      log('HTML content is visible');
+
+      // Check 2: JavaScript executing
+      addCheck('JavaScript Executing', true, 'Scripts are running');
+      log('JavaScript is executing');
+
+      // Check 3: Tauri available
+      const tauriAvailable = typeof window.__TAURI__ !== 'undefined';
+      addCheck('Tauri API Available', tauriAvailable, tauriAvailable ? 'Tauri APIs detected' : 'Tauri APIs not found');
+      log('Tauri available: ' + tauriAvailable);
+
+      // Check 4: Window object
+      addCheck('Window Object', typeof window !== 'undefined', 'Window object exists');
+      log('Window object exists: ' + (typeof window !== 'undefined'));
+
+      // Check 5: Document object
+      addCheck('Document Object', typeof document !== 'undefined', 'Document object exists');
+      log('Document object exists: ' + (typeof document !== 'undefined'));
+
+      // Check 6: Root element
+      const rootExists = !!document.getElementById('root');
+      addCheck('Root Element (#root)', rootExists, rootExists ? 'Found' : 'Not found (expected for test page)');
+      log('Root element exists: ' + rootExists);
+
+      // Check 7: Console logging
+      addCheck('Console Logging', true, 'Console.log works');
+      log('Console logging is working');
+
+      // Test error handling
+      window.addEventListener('error', (e) => {
+        log('Global error caught: ' + e.message + ' at ' + e.filename + ':' + e.lineno, 'error');
+        addCheck('Error Handling', true, 'Errors are being caught');
+      });
+
+      // Test unhandled rejections
+      window.addEventListener('unhandledrejection', (e) => {
+        log('Unhandled rejection: ' + e.reason, 'error');
+        addCheck('Promise Rejection Handling', true, 'Rejections are being caught');
+      });
+
+      log('===== TEST PAGE INITIALIZATION COMPLETE =====');
+      log('All checks completed. If you see this, the webview is fully functional!');
+      
+      // Periodic heartbeat
+      let heartbeatCount = 0;
+      setInterval(() => {
+        heartbeatCount++;
+        log(`Heartbeat #${heartbeatCount} - Webview is alive and responsive`);
+      }, 2000);
+    </script>
+  </body>
+</html>
+

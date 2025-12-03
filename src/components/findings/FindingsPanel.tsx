@@ -1,91 +1,97 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, AlertCircle, AlertTriangle, Info, XCircle } from 'lucide-react';
-import { Button } from '../ui/button';
-import { ScrollArea } from '../ui/scroll-area';
-import { Badge } from '../ui/badge';
-import { findingService } from '@/services/findingService';
-import type { Finding } from '@/types/finding';
-import { CreateFindingDialog } from './CreateFindingDialog';
+import { useState, useEffect, useCallback } from "react"
+import { Plus, AlertCircle, AlertTriangle, Info, XCircle, X } from "lucide-react"
+import { Button } from "../ui/button"
+import { ScrollArea } from "../ui/scroll-area"
+import { Badge } from "../ui/badge"
+import { findingService } from "@/services/findingService"
+import type { Finding } from "@/types/finding"
+import { CreateFindingDialog } from "./CreateFindingDialog"
 
 interface FindingsPanelProps {
-  caseId: string;
-  onClose?: () => void;
+  caseId: string
+  onClose?: () => void
 }
 
-const severityConfig: Record<Finding['severity'], { label: string; icon: typeof AlertCircle; variant: 'default' | 'destructive' | 'secondary' | 'outline' }> = {
-  low: { label: 'Low', icon: Info, variant: 'secondary' },
-  medium: { label: 'Medium', icon: AlertCircle, variant: 'outline' },
-  high: { label: 'High', icon: AlertTriangle, variant: 'default' },
-  critical: { label: 'Critical', icon: XCircle, variant: 'destructive' },
-};
+const severityConfig: Record<
+  Finding["severity"],
+  {
+    label: string
+    icon: typeof AlertCircle
+    variant: "default" | "destructive" | "secondary" | "outline"
+  }
+> = {
+  low: { label: "Low", icon: Info, variant: "secondary" },
+  medium: { label: "Medium", icon: AlertCircle, variant: "outline" },
+  high: { label: "High", icon: AlertTriangle, variant: "default" },
+  critical: { label: "Critical", icon: XCircle, variant: "destructive" },
+}
 
 export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
-  const [findings, setFindings] = useState<Finding[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editingFinding, setEditingFinding] = useState<Finding | null>(null);
+  const [findings, setFindings] = useState<Finding[]>([])
+  const [loading, setLoading] = useState(true)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editingFinding, setEditingFinding] = useState<Finding | null>(null)
 
   const loadFindings = useCallback(async () => {
     try {
-      setLoading(true);
-      const loadedFindings = await findingService.listFindings(caseId);
-      setFindings(loadedFindings);
+      setLoading(true)
+      const loadedFindings = await findingService.listFindings(caseId)
+      setFindings(loadedFindings)
     } catch (error) {
-      console.error('Failed to load findings:', error);
+      console.error("Failed to load findings:", error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [caseId]);
+  }, [caseId])
 
   useEffect(() => {
-    loadFindings();
-  }, [loadFindings]);
+    loadFindings()
+  }, [loadFindings])
 
   const handleCreate = useCallback(() => {
-    setEditingFinding(null);
-    setCreateDialogOpen(true);
-  }, []);
+    setEditingFinding(null)
+    setCreateDialogOpen(true)
+  }, [])
 
   const handleEdit = useCallback((finding: Finding) => {
-    setEditingFinding(finding);
-    setCreateDialogOpen(true);
-  }, []);
+    setEditingFinding(finding)
+    setCreateDialogOpen(true)
+  }, [])
 
   // Delete functionality - can be added to UI later if needed
 
-  const handleDialogClose = useCallback((saved: boolean) => {
-    setCreateDialogOpen(false);
-    setEditingFinding(null);
-    if (saved) {
-      loadFindings();
-    }
-  }, [loadFindings]);
+  const handleDialogClose = useCallback(
+    (saved: boolean) => {
+      setCreateDialogOpen(false)
+      setEditingFinding(null)
+      if (saved) {
+        loadFindings()
+      }
+    },
+    [loadFindings]
+  )
 
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-sm text-muted-foreground">Loading findings...</div>
       </div>
-    );
+    )
   }
 
   return (
     <div className="h-full flex flex-col bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0">
-        <h3 className="text-sm font-semibold">Findings</h3>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <h3 className="text-sm font-semibold text-foreground">Findings</h3>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCreate}
-          >
+          <Button variant="outline" size="sm" onClick={handleCreate}>
             <Plus className="h-4 w-4 mr-1" />
             New
           </Button>
           {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <XCircle className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-6 w-6 p-0">
+              <X className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
@@ -93,20 +99,24 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
 
       {/* Content */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="p-3 space-y-3">
+        <div className="p-2 space-y-2">
           {findings.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              No findings yet. Click &quot;New&quot; to create one.
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                <Plus className="h-6 w-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm font-medium text-foreground mb-1">No findings yet</p>
+              <p className="text-xs text-muted-foreground">Click &quot;New&quot; to create one.</p>
             </div>
           ) : (
             findings.map((finding) => {
-              const config = severityConfig[finding.severity];
-              const SeverityIcon = config.icon;
-              
+              const config = severityConfig[finding.severity]
+              const SeverityIcon = config.icon
+
               return (
                 <div
                   key={finding.id}
-                  className="p-3 rounded-lg border border-border bg-background hover:bg-muted/50 transition-colors cursor-pointer"
+                  className="p-2 rounded-md border border-border/30 hover:border-border/50 bg-background hover:bg-muted/30 transition-all duration-150 cursor-pointer"
                   onClick={() => handleEdit(finding)}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -121,7 +131,7 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
                       {config.label}
                     </Badge>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 mt-2">
                     {finding.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
@@ -139,16 +149,17 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
                     )}
                     {finding.linked_files.length > 0 && (
                       <span className="text-xs text-muted-foreground">
-                        {finding.linked_files.length} file{finding.linked_files.length !== 1 ? 's' : ''}
+                        {finding.linked_files.length} file
+                        {finding.linked_files.length !== 1 ? "s" : ""}
                       </span>
                     )}
                   </div>
-                  
+
                   <div className="text-xs text-muted-foreground mt-2">
                     {new Date(finding.updated_at * 1000).toLocaleString()}
                   </div>
                 </div>
-              );
+              )
             })
           )}
         </div>
@@ -159,8 +170,8 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
         open={createDialogOpen}
         onOpenChange={(open) => {
           if (!open) {
-            setCreateDialogOpen(false);
-            setEditingFinding(null);
+            setCreateDialogOpen(false)
+            setEditingFinding(null)
           }
         }}
         caseId={caseId}
@@ -168,6 +179,5 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
         onSave={handleDialogClose}
       />
     </div>
-  );
+  )
 }
-

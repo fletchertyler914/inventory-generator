@@ -2,13 +2,54 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tauri + React + Typescript</title>
   </head>
 
   <body>
     <div id="root"></div>
+    <script>
+      // Immediate logging to verify HTML is loading (before React)
+      console.log('[Frontend] ===== HTML SCRIPT EXECUTING =====');
+      console.log('[Frontend] [HTML] Script tag executed at:', new Date().toISOString());
+      console.log('[Frontend] [HTML] Document ready state:', document.readyState);
+      console.log('[Frontend] [HTML] Document location:', window.location.href);
+      console.log('[Frontend] [HTML] Document URL:', document.URL);
+      console.log('[Frontend] [HTML] Tauri available:', typeof window.__TAURI__ !== 'undefined');
+      console.log('[Frontend] [HTML] Root element exists:', !!document.getElementById('root'));
+      console.log('[Frontend] [HTML] Body exists:', !!document.body);
+      console.log('[Frontend] [HTML] Head exists:', !!document.head);
+      
+      // Log when DOM is ready
+      if (document.readyState === 'loading') {
+        console.log('[Frontend] [HTML] Document still loading, waiting for DOMContentLoaded...');
+        document.addEventListener('DOMContentLoaded', () => {
+          console.log('[Frontend] [HTML] ✓ DOMContentLoaded fired');
+          console.log('[Frontend] [HTML] Root element after DOMContentLoaded:', !!document.getElementById('root'));
+        });
+      } else {
+        console.log('[Frontend] [HTML] ✓ DOM already ready');
+        console.log('[Frontend] [HTML] Root element check:', !!document.getElementById('root'));
+      }
+      
+      // Log any script loading errors
+      window.addEventListener('error', (e) => {
+        console.error('[Frontend] [HTML] ✗ Script error detected:', {
+          filename: e.filename,
+          message: e.message,
+          lineno: e.lineno,
+          colno: e.colno,
+          error: e.error
+        });
+      }, true);
+      
+      // Log resource loading
+      window.addEventListener('load', () => {
+        console.log('[Frontend] [HTML] ✓ Window load event fired');
+      });
+      
+      console.log('[Frontend] [HTML] ===== HTML SCRIPT COMPLETE =====');
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

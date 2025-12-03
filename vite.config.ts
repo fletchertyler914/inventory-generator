@@ -6,7 +6,11 @@ import path from "path";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vitejs.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(async () => {
+  // For Tauri apps, always use relative paths (required for bundled assets)
+  // Tauri's dev server and production builds both work with relative paths
+  return {
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
@@ -75,10 +79,10 @@ export default defineConfig(async () => ({
             return 'findings';
           }
         },
+               },
+        },
         // Optimize chunk size limits
         chunkSizeWarningLimit: 1000, // 1MB per chunk (reasonable for desktop app)
-      },
-    },
     // Enable minification
     minify: 'esbuild',
     // Source maps for debugging (can be disabled in production)
@@ -108,4 +112,5 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
-}));
+  };
+});
