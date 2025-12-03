@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Pin, PinOff, Plus, Trash2, Save, Download, Clock, Edit2 } from 'lucide-react';
+import { X, Pin, PinOff, Plus, Trash2, Save, Download, Edit2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
-import { Separator } from '../ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { cn } from '@/lib/utils';
 import { noteService } from '@/services/noteService';
