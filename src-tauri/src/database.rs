@@ -154,7 +154,6 @@ pub struct Case {
     pub case_id: Option<String>,
     pub department: Option<String>,
     pub client: Option<String>,
-    pub folder_path: String,
     pub deployment_mode: String, // "local" or "cloud"
     pub cloud_sync_enabled: bool,
     pub created_at: i64,
@@ -215,6 +214,144 @@ pub struct TimelineEvent {
     pub created_at: i64,
 }
 
+/// Get column configuration from database (global or case-specific)
+/// Returns None if not found
+pub async fn get_column_config(
+    pool: &SqlitePool,
+    case_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    let result = if let Some(cid) = case_id {
+        // Get case-specific config
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT config_data FROM column_configs WHERE case_id = ?"
+        )
+        .bind(cid)
+        .fetch_optional(pool)
+        .await
+    } else {
+        // Get global config (case_id IS NULL)
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT config_data FROM column_configs WHERE case_id IS NULL"
+        )
+        .fetch_optional(pool)
+        .await
+    }
+    .map_err(|e| format!("Failed to get column config: {}", e))?;
+
+    Ok(result.flatten())
+}
+
+/// Save column configuration to database (global or case-specific)
+pub async fn save_column_config(
+    pool: &SqlitePool,
+    case_id: Option<&str>,
+    config_data: &str,
+    version: i32,
+) -> Result<(), String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let config_id = if let Some(cid) = case_id {
+        format!("col_config_{}", cid)
+    } else {
+        "col_config_global".to_string()
+    };
+
+    // Use INSERT OR REPLACE to handle both new and existing configs
+    sqlx::query(
+        r#"
+        INSERT OR REPLACE INTO column_configs 
+        (id, case_id, config_data, version, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 
+            COALESCE((SELECT created_at FROM column_configs WHERE id = ?), ?),
+            ?)
+        "#,
+    )
+    .bind(&config_id)
+    .bind(case_id)
+    .bind(config_data)
+    .bind(version)
+    .bind(&config_id)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to save column config: {}", e))?;
+
+    Ok(())
+}
+
+/// Get mapping configuration from database (global or case-specific)
+/// Returns None if not found
+pub async fn get_mapping_config(
+    pool: &SqlitePool,
+    case_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    let result = if let Some(cid) = case_id {
+        // Get case-specific config
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT config_data FROM mapping_configs WHERE case_id = ?"
+        )
+        .bind(cid)
+        .fetch_optional(pool)
+        .await
+    } else {
+        // Get global config (case_id IS NULL)
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT config_data FROM mapping_configs WHERE case_id IS NULL"
+        )
+        .fetch_optional(pool)
+        .await
+    }
+    .map_err(|e| format!("Failed to get mapping config: {}", e))?;
+
+    Ok(result.flatten())
+}
+
+/// Save mapping configuration to database (global or case-specific)
+pub async fn save_mapping_config(
+    pool: &SqlitePool,
+    case_id: Option<&str>,
+    config_data: &str,
+    version: i32,
+) -> Result<(), String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let config_id = if let Some(cid) = case_id {
+        format!("map_config_{}", cid)
+    } else {
+        "map_config_global".to_string()
+    };
+
+    // Use INSERT OR REPLACE to handle both new and existing configs
+    sqlx::query(
+        r#"
+        INSERT OR REPLACE INTO mapping_configs 
+        (id, case_id, config_data, version, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 
+            COALESCE((SELECT created_at FROM mapping_configs WHERE id = ?), ?),
+            ?)
+        "#,
+    )
+    .bind(&config_id)
+    .bind(case_id)
+    .bind(config_data)
+    .bind(version)
+    .bind(&config_id)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to save mapping config: {}", e))?;
+
+    Ok(())
+}
+
 /// Initialize database with migrations
 /// ELITE: Single comprehensive migration with all optimizations
 pub fn get_migrations() -> Vec<Migration> {
@@ -231,7 +368,6 @@ pub fn get_migrations() -> Vec<Migration> {
                     case_id TEXT,
                     department TEXT,
                     client TEXT,
-                    folder_path TEXT UNIQUE NOT NULL,
                     deployment_mode TEXT DEFAULT 'local',
                     cloud_sync_enabled INTEGER DEFAULT 0,
                     created_at INTEGER NOT NULL,
@@ -281,6 +417,7 @@ pub fn get_migrations() -> Vec<Migration> {
                     case_id TEXT NOT NULL,
                     source_path TEXT NOT NULL,
                     source_type TEXT DEFAULT 'folder',
+                    source_location TEXT DEFAULT 'local',
                     added_at INTEGER NOT NULL,
                     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
                     UNIQUE(case_id, source_path)
@@ -320,7 +457,6 @@ pub fn get_migrations() -> Vec<Migration> {
                 CREATE INDEX IF NOT EXISTS idx_files_absolute_path ON files(absolute_path);
                 CREATE INDEX IF NOT EXISTS idx_notes_case_id ON notes(case_id);
                 CREATE INDEX IF NOT EXISTS idx_notes_file_id ON notes(file_id);
-                CREATE INDEX IF NOT EXISTS idx_cases_folder_path ON cases(folder_path);
                 CREATE INDEX IF NOT EXISTS idx_file_metadata_file_id ON file_metadata(file_id);
                 CREATE INDEX IF NOT EXISTS idx_case_sources_case_id ON case_sources(case_id);
                 CREATE INDEX IF NOT EXISTS idx_findings_case_id ON findings(case_id);
@@ -419,62 +555,38 @@ pub fn get_migrations() -> Vec<Migration> {
                 END;
             "#,
         },
-        // Placeholder migrations to satisfy version tracking for existing databases
-        // These do nothing but allow the migration system to recognize them as applied
         Migration {
             version: 2,
-            description: "placeholder - FTS5 already in migration 1",
-            kind: MigrationKind::Up,
-            sql: "-- This migration was consolidated into migration 1",
-        },
-        Migration {
-            version: 4,
-            description: "placeholder - case_sources already in migration 1",
-            kind: MigrationKind::Up,
-            sql: "-- This migration was consolidated into migration 1",
-        },
-        Migration {
-            version: 5,
-            description: "placeholder - performance indexes already in migration 1",
-            kind: MigrationKind::Up,
-            sql: "-- This migration was consolidated into migration 1",
-        },
-        Migration {
-            version: 6,
-            description: "add findings and timeline_events tables",
+            description: "add column_configs and mapping_configs tables",
             kind: MigrationKind::Up,
             sql: r#"
-                CREATE TABLE IF NOT EXISTS findings (
+                -- Table for column configurations (global and case-specific)
+                CREATE TABLE IF NOT EXISTS column_configs (
                     id TEXT PRIMARY KEY,
-                    case_id TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    severity TEXT DEFAULT 'medium',
-                    linked_files TEXT, -- JSON array of file IDs
-                    tags TEXT, -- JSON array
+                    case_id TEXT, -- NULL for global config, case_id for case-specific
+                    config_data TEXT NOT NULL, -- JSON string of TableColumnConfig
+                    version INTEGER DEFAULT 1,
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL,
-                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_findings_case_id ON findings(case_id);
-                CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
-
-                CREATE TABLE IF NOT EXISTS timeline_events (
-                    id TEXT PRIMARY KEY,
-                    case_id TEXT NOT NULL,
-                    event_date INTEGER NOT NULL, -- Unix timestamp
-                    description TEXT NOT NULL,
-                    source_file_id TEXT, -- Optional file reference
-                    event_type TEXT DEFAULT 'manual', -- 'auto', 'manual', 'extracted'
-                    metadata TEXT, -- JSON for additional data
-                    created_at INTEGER NOT NULL,
                     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
-                    FOREIGN KEY (source_file_id) REFERENCES files(id) ON DELETE SET NULL
+                    UNIQUE(case_id) -- Only one config per case (or global)
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_timeline_events_case_id ON timeline_events(case_id);
-                CREATE INDEX IF NOT EXISTS idx_timeline_events_date ON timeline_events(event_date);
+                -- Table for mapping configurations (global and case-specific)
+                CREATE TABLE IF NOT EXISTS mapping_configs (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT, -- NULL for global config, case_id for case-specific
+                    config_data TEXT NOT NULL, -- JSON string of MappingConfig
+                    version INTEGER DEFAULT 1,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+                    UNIQUE(case_id) -- Only one config per case (or global)
+                );
+
+                -- Indexes for fast lookups
+                CREATE INDEX IF NOT EXISTS idx_column_configs_case_id ON column_configs(case_id);
+                CREATE INDEX IF NOT EXISTS idx_mapping_configs_case_id ON mapping_configs(case_id);
             "#,
         },
     ]

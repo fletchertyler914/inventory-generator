@@ -30,7 +30,7 @@ export function useInventory() {
           }
         } catch (error) {
           // If count fails, proceed with scan anyway
-          console.warn("Failed to count files, proceeding with scan:", error)
+          // Error is non-critical, so we continue with full scan
         }
       }
       

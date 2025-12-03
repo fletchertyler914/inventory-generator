@@ -77,12 +77,11 @@ export function createAppError(error: unknown, defaultCode: ErrorCode = ErrorCod
 }
 
 /**
- * Logs error to console (and potentially to backend in the future)
+ * Logs error to console
+ * In production, errors should be sent to a logging service
  */
 export function logError(error: AppError, context?: string): void {
   const prefix = context ? `[${context}]` : "[Error]"
   console.error(`${prefix} ${error.code}: ${error.message}`, error.originalError)
-  
-  // TODO: In production, send to backend logging service
 }
 

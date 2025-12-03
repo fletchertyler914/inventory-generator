@@ -2,29 +2,9 @@
 /// Optimized for maximum performance: parallel processing, fast hashing, async I/O
 
 use sha2::{Digest, Sha256};
-use xxhash_rust::xxh3::Xxh3Builder;
 use std::path::Path;
 use tokio::fs;
 use tokio::io::AsyncReadExt;
-
-/// Calculate fast hash (xxHash) for deduplication
-/// 10x faster than SHA-256, still collision-resistant for this use case
-/// Returns hex-encoded hash string
-pub async fn calculate_file_hash_fast(file_path: &Path) -> std::io::Result<String> {
-    let mut file = fs::File::open(file_path).await?;
-    let mut hasher = Xxh3Builder::new().build();
-    let mut buffer = vec![0u8; 65536]; // 64KB buffer for optimal performance
-    
-    loop {
-        let bytes_read = file.read(&mut buffer).await?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
-    }
-    
-    Ok(format!("{:x}", hasher.digest()))
-}
 
 /// Calculate SHA-256 hash (for cases where cryptographic security is needed)
 /// Slower but cryptographically secure

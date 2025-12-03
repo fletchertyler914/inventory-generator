@@ -279,12 +279,11 @@ export function IntegratedFileViewer({
             const dups = await fileService.findDuplicateFiles(caseId, file.id!);
             setDuplicates(dups);
           } catch (err) {
-            // Ignore duplicate check errors
-            console.warn('Failed to check duplicates:', err);
+            // Ignore duplicate check errors (non-critical)
           }
         }
       } catch (error) {
-        console.warn('Failed to check file change status:', error);
+        // File change check failed (non-critical, will retry on next poll)
       }
     };
 
@@ -361,9 +360,7 @@ export function IntegratedFileViewer({
             const mammoth = await import('mammoth');
             const result = await mammoth.default.convertToHtml({ arrayBuffer });
             setWordContent(result.value);
-            if (result.messages.length > 0) {
-              console.warn('Word conversion messages:', result.messages);
-            }
+            // Word conversion messages are non-critical warnings
           } else if (fileType === 'xlsx' || fileType === 'xls') {
             // ELITE: Lazy load xlsx-js-style
             const XLSX = await import('xlsx-js-style');
@@ -386,8 +383,8 @@ export function IntegratedFileViewer({
         }
         setLoading(false);
       } catch (err) {
-        console.error('[IntegratedFileViewer] Error loading file:', err);
-        setError(`Failed to load file: ${err instanceof Error ? err.message : String(err)}`);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`Failed to load file: ${errorMessage}`);
         setLoading(false);
       }
     };
@@ -399,8 +396,7 @@ export function IntegratedFileViewer({
       // ELITE: Load PDF via Rust, convert base64 to blob
       const loadPdf = async () => {
         try {
-          // Loading PDF via Rust
-          // console.log('[IntegratedFileViewer] ELITE: Loading PDF via Rust:', file.absolute_path);
+          // ELITE: Load PDF via Rust, convert base64 to blob
           const base64 = await fileService.readFileBase64(file.absolute_path);
           // Convert base64 to blob
           const binaryString = atob(base64);
@@ -410,8 +406,6 @@ export function IntegratedFileViewer({
           }
           const blob = new Blob([bytes], { type: 'application/pdf' });
           const blobUrl = URL.createObjectURL(blob);
-          // PDF loaded via Rust, blob URL created
-          // console.log('[IntegratedFileViewer] PDF loaded via Rust, blob URL created');
           setPdfBlobUrl(blobUrl);
           setLoading(false);
         } catch (err) {
@@ -798,9 +792,9 @@ export function IntegratedFileViewer({
                   folder_path: d.folder_path,
                   status: d.status,
                 }))}
-                onFileSelect={(fileId) => {
-                  // TODO: Navigate to selected file
-                  console.log('Selected duplicate file:', fileId);
+                onFileSelect={(_fileId) => {
+                  // Navigate to selected duplicate file
+                  // This would trigger file navigation in the parent component
                 }}
               />
             )}

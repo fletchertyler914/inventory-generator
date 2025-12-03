@@ -4,7 +4,7 @@ import type { Case } from '../types/case';
 export const caseService = {
   async createCase(
     name: string,
-    folderPath: string,
+    sources: string[],
     caseId?: string,
     department?: string,
     client?: string
@@ -14,7 +14,7 @@ export const caseService = {
       caseId, // Tauri converts camelCase to snake_case automatically
       department,
       client,
-      folderPath, // Tauri converts camelCase to snake_case automatically
+      sources, // Array of file/folder paths
     });
   },
 

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
+import { useMemo } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -21,8 +22,37 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  style,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  // Get computed popover background color
+  const popoverBgColor = useMemo(() => {
+    if (typeof window === 'undefined') return '#1a1a1a';
+    try {
+      // Create a temporary element to get the computed color
+      const testEl = document.createElement('div');
+      testEl.className = 'bg-popover';
+      testEl.style.display = 'none';
+      document.body.appendChild(testEl);
+      const computedColor = getComputedStyle(testEl).backgroundColor;
+      document.body.removeChild(testEl);
+      // If we got a valid color (not transparent), use it
+      if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)' && computedColor !== 'transparent') {
+        return computedColor;
+      }
+    } catch (e) {
+      console.warn('Failed to compute popover color:', e);
+    }
+    // Fallback: use the oklch value directly
+    const root = document.documentElement;
+    const popoverValue = getComputedStyle(root).getPropertyValue('--popover').trim();
+    if (popoverValue) {
+      return popoverValue;
+    }
+    // Final fallback for dark mode
+    return '#1a1a1a';
+  }, []);
+
   return (
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Content
@@ -34,9 +64,11 @@ function PopoverContent({
         className
       )}
         style={{
-          backgroundColor: "hsl(var(--popover))",
+          backgroundColor: popoverBgColor,
           opacity: 1,
           zIndex: 9999,
+          backdropFilter: 'none',
+          ...style,
         }}
       {...props}
     />

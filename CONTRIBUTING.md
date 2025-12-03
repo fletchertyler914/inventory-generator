@@ -73,19 +73,30 @@ test: add tests for error handling
 - Keep component state local when possible
 - Avoid prop drilling - use store or context
 
+### Schema-Driven Inventory
+
+- Inventory structure is schema-driven (global/case-specific)
+- All inventory data stored in flexible `inventory_data` JSON
+- Core fields: `id`, `absolute_path`, `status`, `tags`, `file_name`, `folder_name`, `folder_path`, `file_type`
+- All other fields accessed via schema-defined field paths
+- Exports use current column configuration dynamically
+
 ### Error Handling
 
 - Use error boundaries for React errors
 - Use toast notifications for user feedback
-- Log errors to console (and backend in production)
+- Centralized error handling with error codes
 - Provide user-friendly error messages
+- Structured logging in Rust backend
 
 ### Performance
 
-- Use virtual scrolling for large lists
+- Use virtual scrolling for large lists (10k+ files)
 - Debounce user input
 - Memoize expensive computations
 - Lazy load heavy components
+- Cache JSON parsing and field path parsing
+- Optimize exports with single JSON parse per item
 
 ## Questions?
 

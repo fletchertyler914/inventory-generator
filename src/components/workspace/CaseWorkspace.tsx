@@ -9,8 +9,8 @@ import { FindingsPanel } from "../findings/FindingsPanel"
 import { TimelineView } from "../timeline/TimelineView"
 import { InventoryTable } from "../InventoryTable"
 import { ProgressDashboard } from "../dashboard/ProgressDashboard"
-import { ColumnManager } from "../table/ColumnManager"
-import { getColumnConfig, saveColumnConfig, type TableColumnConfig } from "@/types/tableColumns"
+import { getColumnConfig, type TableColumnConfig } from "@/types/tableColumns"
+import { getStoreValue, setStoreValue } from "@/lib/store-utils"
 import type { Case } from "@/types/case"
 import type { InventoryItem } from "@/types/inventory"
 
@@ -23,7 +23,6 @@ interface CaseWorkspaceProps {
   loading: boolean
   onCloseCase: () => void
   onAddFiles: (folderPath: string) => void
-  onSyncCase: () => void
   onBulkUpdate: (updates: Partial<InventoryItem>, indices?: number[]) => void
 }
 
@@ -52,7 +51,6 @@ export function CaseWorkspace({
   onSelectionChange,
   onCloseCase,
   onAddFiles,
-  onSyncCase,
 }: CaseWorkspaceProps) {
   const [viewingFile, setViewingFile] = useState<InventoryItem | null>(null)
   // Default to table view for better initial experience - switch to split when file is selected
@@ -61,47 +59,82 @@ export function CaseWorkspace({
   const [columnConfig, setColumnConfig] = useState<TableColumnConfig>(() =>
     getColumnConfig(case_.id)
   )
-  const [columnManagerOpen, setColumnManagerOpen] = useState(false)
 
-  // Pane visibility state (stored in localStorage per case)
-  const [tableVisible, setTableVisible] = useState(() => {
-    const stored = localStorage.getItem(`casespace-pane-table-${case_.id}`)
-    return stored ? JSON.parse(stored) : true
-  })
-  const [notesVisible, setNotesVisible] = useState(() => {
-    const stored = localStorage.getItem(`casespace-pane-notes-${case_.id}`)
-    return stored ? JSON.parse(stored) : false
-  })
-  const [findingsVisible, setFindingsVisible] = useState(() => {
-    const stored = localStorage.getItem(`casespace-pane-findings-${case_.id}`)
-    return stored ? JSON.parse(stored) : false
-  })
-  const [timelineVisible, setTimelineVisible] = useState(() => {
-    const stored = localStorage.getItem(`casespace-pane-timeline-${case_.id}`)
-    return stored ? JSON.parse(stored) : false
-  })
+  // Pane visibility state (stored in Tauri store per case)
+  const [tableVisible, setTableVisible] = useState<boolean>(true)
+  const [notesVisible, setNotesVisible] = useState<boolean>(false)
+  const [findingsVisible, setFindingsVisible] = useState<boolean>(false)
+  const [timelineVisible, setTimelineVisible] = useState<boolean>(false)
+  const [panesLoaded, setPanesLoaded] = useState<boolean>(false)
+
+  // Load pane visibility from Tauri store on mount
+  useEffect(() => {
+    let mounted = true
+
+    const loadPanes = async () => {
+      try {
+        const [table, notes, findings, timeline] = await Promise.all([
+          getStoreValue<boolean>(`casespace-pane-table-${case_.id}`, true, "settings"),
+          getStoreValue<boolean>(`casespace-pane-notes-${case_.id}`, false, "settings"),
+          getStoreValue<boolean>(`casespace-pane-findings-${case_.id}`, false, "settings"),
+          getStoreValue<boolean>(`casespace-pane-timeline-${case_.id}`, false, "settings"),
+        ])
+
+        if (mounted) {
+          setTableVisible(table)
+          setNotesVisible(notes)
+          setFindingsVisible(findings)
+          setTimelineVisible(timeline)
+          setPanesLoaded(true)
+        }
+      } catch (error) {
+        console.error("Failed to load pane visibility from store:", error)
+        if (mounted) {
+          setPanesLoaded(true)
+        }
+      }
+    }
+
+    loadPanes()
+
+    return () => {
+      mounted = false
+    }
+  }, [case_.id])
 
   // ELITE UX: Contextual filtering - default to unreviewed (what needs work)
   const [statusFilter, setStatusFilter] = useState<TableFilter>("unreviewed")
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState<string>("")
 
-  // Save pane visibility to localStorage
+  // Save pane visibility to Tauri store
   useEffect(() => {
-    localStorage.setItem(`casespace-pane-table-${case_.id}`, JSON.stringify(tableVisible))
-  }, [tableVisible, case_.id])
+    if (!panesLoaded) return // Don't save during initial load
+    setStoreValue(`casespace-pane-table-${case_.id}`, tableVisible, "settings").catch(
+      console.error
+    )
+  }, [tableVisible, case_.id, panesLoaded])
 
   useEffect(() => {
-    localStorage.setItem(`casespace-pane-notes-${case_.id}`, JSON.stringify(notesVisible))
-  }, [notesVisible, case_.id])
+    if (!panesLoaded) return // Don't save during initial load
+    setStoreValue(`casespace-pane-notes-${case_.id}`, notesVisible, "settings").catch(
+      console.error
+    )
+  }, [notesVisible, case_.id, panesLoaded])
 
   useEffect(() => {
-    localStorage.setItem(`casespace-pane-findings-${case_.id}`, JSON.stringify(findingsVisible))
-  }, [findingsVisible, case_.id])
+    if (!panesLoaded) return // Don't save during initial load
+    setStoreValue(`casespace-pane-findings-${case_.id}`, findingsVisible, "settings").catch(
+      console.error
+    )
+  }, [findingsVisible, case_.id, panesLoaded])
 
   useEffect(() => {
-    localStorage.setItem(`casespace-pane-timeline-${case_.id}`, JSON.stringify(timelineVisible))
-  }, [timelineVisible, case_.id])
+    if (!panesLoaded) return // Don't save during initial load
+    setStoreValue(`casespace-pane-timeline-${case_.id}`, timelineVisible, "settings").catch(
+      console.error
+    )
+  }, [timelineVisible, case_.id, panesLoaded])
 
   // Keyboard shortcuts for pane toggles
   useEffect(() => {
@@ -159,14 +192,25 @@ export function CaseWorkspace({
       filtered = filtered.filter((item) => item.folder_path === selectedFolderPath)
     }
 
+    // Helper to get field from inventory_data
+    const getInventoryField = (item: InventoryItem, field: string): string => {
+      if (!item.inventory_data) return '';
+      try {
+        const data = JSON.parse(item.inventory_data);
+        return data[field] || '';
+      } catch {
+        return '';
+      }
+    };
+
     // Apply search filter (when search active)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
         (item) =>
           item.file_name.toLowerCase().includes(query) ||
-          item.document_description?.toLowerCase().includes(query) ||
-          item.document_type?.toLowerCase().includes(query) ||
+          getInventoryField(item, 'document_description').toLowerCase().includes(query) ||
+          getInventoryField(item, 'document_type').toLowerCase().includes(query) ||
           item.folder_path.toLowerCase().includes(query)
       )
     }
@@ -207,6 +251,8 @@ export function CaseWorkspace({
       setViewingFile(file)
       // Automatically switch to split view when a file is selected
       setViewMode("split")
+      // Hide table panel by default when file is selected
+      setTableVisible(false)
       // Show notes panel when file is selected (if not already visible)
       if (!notesVisible && file) {
         setNotesVisible(true)
@@ -261,12 +307,9 @@ export function CaseWorkspace({
         items={items}
         onClose={onCloseCase}
         onAddFiles={handleAddFilesClick}
-        onSync={onSyncCase}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        navigatorOpen={navigatorOpen}
-        onToggleNavigator={() => setNavigatorOpen((prev: boolean) => !prev)}
-        onCustomizeColumns={() => setColumnManagerOpen(true)}
+        viewingFile={viewingFile}
         tableVisible={tableVisible}
         onToggleTable={() => setTableVisible((prev: boolean) => !prev)}
         notesVisible={notesVisible}
@@ -321,6 +364,8 @@ export function CaseWorkspace({
                   onFileSelect={handleFileSelect}
                   selectedFolderPath={selectedFolderPath}
                   onFolderSelect={setSelectedFolderPath}
+                  navigatorOpen={navigatorOpen}
+                  onToggleNavigator={() => setNavigatorOpen((prev: boolean) => !prev)}
                 />
               </div>
             </Panel>
@@ -611,18 +656,6 @@ export function CaseWorkspace({
           )}
         </Panel>
       </PanelGroup>
-
-      {/* Column Manager Dialog */}
-      <ColumnManager
-        open={columnManagerOpen}
-        onOpenChange={setColumnManagerOpen}
-        config={columnConfig}
-        onConfigChange={(newConfig) => {
-          setColumnConfig(newConfig)
-          saveColumnConfig(newConfig, case_.id).catch(console.error)
-        }}
-        caseId={case_.id}
-      />
     </div>
   )
 }

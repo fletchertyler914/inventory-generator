@@ -17,6 +17,7 @@ import { createAppError, logError, ErrorCode } from "@/lib/error-handler"
 import { toast } from "@/hooks/useToast"
 import { useInventoryStore } from "@/store/inventoryStore"
 import type { InventoryItem } from "@/types/inventory"
+import type { TableColumnConfig } from "@/types/tableColumns"
 import { cn } from "@/lib/utils"
 
 interface ExportDialogProps {
@@ -25,11 +26,12 @@ interface ExportDialogProps {
   disabled?: boolean | undefined
   onExportComplete?: ((filePath: string, items: InventoryItem[], caseNumber: string | null, folderPath: string | null) => void) | undefined
   selectedFolder?: string | null | undefined
+  columnConfig?: TableColumnConfig | undefined
   open?: boolean | undefined
   onOpenChange?: ((open: boolean) => void) | undefined
 }
 
-export function ExportDialog({ items, caseNumber, disabled, onExportComplete, selectedFolder, open: controlledOpen, onOpenChange }: ExportDialogProps) {
+export function ExportDialog({ items, caseNumber, disabled, onExportComplete, selectedFolder, columnConfig, open: controlledOpen, onOpenChange }: ExportDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen
   const setOpen = onOpenChange || setInternalOpen
@@ -67,12 +69,26 @@ export function ExportDialog({ items, caseNumber, disabled, onExportComplete, se
         return
       }
 
+      // Convert column config to export format (only visible columns)
+      const exportColumnConfig = columnConfig ? {
+        columns: columnConfig.columns
+          .filter(col => col.visible)
+          .map(col => ({
+            id: col.id,
+            label: col.label,
+            visible: col.visible,
+            order: col.order,
+            ...(col.fieldPath ? { fieldPath: col.fieldPath } : {}),
+          }))
+      } : null
+
       await exportInventory(
         items,
         format,
         filePath,
         caseNumber || null,
-        selectedFolder || null
+        selectedFolder || null,
+        exportColumnConfig
       )
 
       // Notify parent about export completion for recent inventories

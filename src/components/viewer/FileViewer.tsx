@@ -160,9 +160,7 @@ export function FileViewer({ filePath, fileName, onClose }: FileViewerProps) {
           if (fileType === 'docx' || fileType === 'doc') {
             const result = await mammoth.convertToHtml({ arrayBuffer });
             setWordContent(result.value);
-            if (result.messages.length > 0) {
-              console.warn('Word conversion messages:', result.messages);
-            }
+            // Word conversion messages are non-critical warnings
           } else if (fileType === 'xlsx' || fileType === 'xls') {
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             const sheetName = workbook.SheetNames[0];

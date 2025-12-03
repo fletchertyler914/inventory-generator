@@ -8,27 +8,27 @@ const statusOptions: { value: FileStatus; label: string; color: string }[] = [
   {
     value: "unreviewed",
     label: "Unreviewed",
-    color: "bg-muted text-muted-foreground border border-border",
+    color: "text-muted-foreground",
   },
   {
     value: "in_progress",
     label: "In Progress",
-    color: "bg-info/30 text-info font-medium border border-info/70 dark:bg-info/35 dark:text-info dark:border-info/80",
+    color: "text-blue-400",
   },
   {
     value: "reviewed",
     label: "Reviewed",
-    color: "bg-success/30 text-success font-medium border border-success/70 dark:bg-success/35 dark:text-success dark:border-success/80",
+    color: "text-green-400",
   },
   {
     value: "flagged",
     label: "Flagged",
-    color: "bg-warning/30 text-warning font-medium border border-warning/70 dark:bg-warning/35 dark:text-warning dark:border-warning/80",
+    color: "text-yellow-400",
   },
   {
     value: "finalized",
     label: "Finalized",
-    color: "bg-success/35 text-success font-semibold border border-success/80 dark:bg-success/40 dark:text-success dark:border-success/90",
+    color: "text-green-500",
   },
 ]
 
@@ -48,8 +48,8 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
           className={cn(
             "inline-flex items-center justify-center gap-2 h-7 px-3 text-xs font-normal rounded-md transition-all",
             "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            currentStatus?.color,
-            "hover:opacity-90"
+            "bg-muted/50 hover:bg-muted border border-border/50",
+            currentStatus?.color
           )}
         >
           {currentStatus?.label || "Unreviewed"}
@@ -59,7 +59,6 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
       <PopoverContent 
         className="w-48 p-1 dark:bg-popover dark:border-border dark:text-popover-foreground" 
         align="start"
-        style={{ backgroundColor: "hsl(var(--popover))", opacity: 1 }}
       >
         <div className="space-y-0.5">
           {statusOptions.map((option) => (
@@ -71,13 +70,11 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
               }}
               className={cn(
                 "w-full flex items-center justify-between rounded-sm px-2 py-1.5 text-xs cursor-pointer transition-colors",
-                "hover:bg-accent hover:text-accent-foreground",
-                "dark:hover:bg-accent/80 dark:hover:text-accent-foreground",
-                status === option.value &&
-                  "bg-accent text-accent-foreground dark:bg-accent/60 dark:text-accent-foreground"
+                "hover:bg-muted/50",
+                status === option.value && "bg-muted/30"
               )}
             >
-              <span className={cn("flex items-center gap-2 font-medium", option.color)}>
+              <span className={cn("flex items-center gap-2", option.color)}>
                 {option.label}
               </span>
               {status === option.value && (

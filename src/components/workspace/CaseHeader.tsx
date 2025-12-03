@@ -1,5 +1,5 @@
 import { Button } from '../ui/button';
-import { X, Plus, RefreshCw, LayoutGrid, Table, PanelLeft, PanelLeftClose, Columns, FileText, StickyNote, AlertTriangle, Calendar } from 'lucide-react';
+import { X, Plus, LayoutGrid, Table, FileText, StickyNote, AlertTriangle, Calendar } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { ThemeToggle } from '../ThemeToggle';
 import { SearchBar } from '../search/SearchBar';
@@ -12,12 +12,9 @@ interface CaseHeaderProps {
   items: InventoryItem[];
   onClose: () => void;
   onAddFiles: () => void;
-  onSync: () => void;
   viewMode: 'split' | 'table' | 'timeline';
   onViewModeChange: (mode: 'split' | 'table' | 'timeline') => void;
-  navigatorOpen?: boolean;
-  onToggleNavigator?: () => void;
-  onCustomizeColumns?: () => void;
+  viewingFile: InventoryItem | null;
   tableVisible?: boolean;
   onToggleTable?: () => void;
   notesVisible?: boolean;
@@ -38,12 +35,9 @@ export function CaseHeader({
   items,
   onClose,
   onAddFiles,
-  onSync,
   viewMode,
   onViewModeChange,
-  navigatorOpen = true,
-  onToggleNavigator,
-  onCustomizeColumns,
+  viewingFile,
   tableVisible = true,
   onToggleTable,
   notesVisible = false,
@@ -91,53 +85,52 @@ export function CaseHeader({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        {onToggleNavigator && (
+        {/* Contextual view mode toggle */}
+        {viewingFile ? (
+          <div className="flex items-center border border-border rounded-md overflow-hidden">
+            <Button
+              variant={viewMode === 'split' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-r-none transition-all duration-200"
+              onClick={() => onViewModeChange('split')}
+              title="Split view (File viewer + Table)"
+            >
+              <LayoutGrid className="h-4 w-4 mr-1" />
+              Split
+            </Button>
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-l-none transition-all duration-200"
+              onClick={() => onViewModeChange('table')}
+              title="Table view only"
+            >
+              <Table className="h-4 w-4 mr-1" />
+              Table
+            </Button>
+          </div>
+        ) : (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onClick={onToggleNavigator}
-            title={navigatorOpen ? 'Hide file navigator' : 'Show file navigator'}
-          >
-            {navigatorOpen ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeft className="h-4 w-4" />
-            )}
-          </Button>
-        )}
-        <div className="flex items-center border border-border rounded-md overflow-hidden">
-          <Button
-            variant={viewMode === 'split' ? 'default' : 'ghost'}
-            size="sm"
-            className="rounded-r-none transition-all duration-200"
-            onClick={() => onViewModeChange('split')}
-            title="Split view (File viewer + Table)"
-          >
-            <LayoutGrid className="h-4 w-4 mr-1" />
-            Split
-          </Button>
-          <Button
-            variant={viewMode === 'table' ? 'default' : 'ghost'}
-            size="sm"
-            className="rounded-l-none transition-all duration-200"
-            onClick={() => onViewModeChange('table')}
-            title="Table view only"
+            disabled
+            title="Table view (select a file to enable split view)"
           >
             <Table className="h-4 w-4 mr-1" />
-            Table
+            Table View
           </Button>
-        </div>
+        )}
 
-        {/* Pane toggles - only show in split view */}
+        {/* Pane toggles - only show in split view, compact icon-only buttons */}
         {viewMode === 'split' && (
-          <>
+          <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
             {onToggleTable && (
               <Button
                 variant={tableVisible ? 'default' : 'ghost'}
                 size="sm"
                 onClick={onToggleTable}
                 title="Toggle table panel (Cmd/Ctrl+B)"
-                className="transition-all duration-200"
+                className="h-8 w-8 p-0 transition-all duration-200"
               >
                 <FileText className="h-4 w-4" />
               </Button>
@@ -148,7 +141,7 @@ export function CaseHeader({
                 size="sm"
                 onClick={onToggleNotes}
                 title="Toggle notes panel (Cmd/Ctrl+N)"
-                className="transition-all duration-200"
+                className="h-8 w-8 p-0 transition-all duration-200"
               >
                 <StickyNote className="h-4 w-4" />
               </Button>
@@ -159,7 +152,7 @@ export function CaseHeader({
                 size="sm"
                 onClick={onToggleFindings}
                 title="Toggle findings panel"
-                className="transition-all duration-200"
+                className="h-8 w-8 p-0 transition-all duration-200"
               >
                 <AlertTriangle className="h-4 w-4" />
               </Button>
@@ -170,12 +163,12 @@ export function CaseHeader({
                 size="sm"
                 onClick={onToggleTimeline}
                 title="Toggle timeline panel"
-                className="transition-all duration-200"
+                className="h-8 w-8 p-0 transition-all duration-200"
               >
                 <Calendar className="h-4 w-4" />
               </Button>
             )}
-          </>
+          </div>
         )}
 
         <Button
@@ -187,28 +180,6 @@ export function CaseHeader({
           <Plus className="h-4 w-4 mr-1" />
           Add Files
         </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSync}
-          title="Sync files from folder"
-        >
-          <RefreshCw className="h-4 w-4 mr-1" />
-          Sync
-        </Button>
-
-        {onCustomizeColumns && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCustomizeColumns}
-            title="Customize table columns"
-          >
-            <Columns className="h-4 w-4 mr-1" />
-            Columns
-          </Button>
-        )}
 
         <ThemeToggle />
 

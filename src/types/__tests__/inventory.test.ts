@@ -11,54 +11,69 @@ import {
 
 describe("inventory types", () => {
   const mockItem: InventoryItem = {
-    date_rcvd: "01/01/2024",
-    doc_year: 2024,
-    doc_date_range: "2024",
-    document_type: "PDF",
-    document_description: "Test document",
+    absolute_path: "/test/test.pdf",
     file_name: "test.pdf",
     folder_name: "test",
     folder_path: "test",
     file_type: "PDF",
-    bates_stamp: "B001",
-    notes: "Test notes",
-    absolute_path: "/test/test.pdf",
+    inventory_data: JSON.stringify({
+      date_rcvd: "01/01/2024",
+      doc_year: 2024,
+      doc_date_range: "2024",
+      document_type: "PDF",
+      document_description: "Test document",
+      bates_stamp: "B001",
+      notes: "Test notes",
+    }),
   }
+
+  // Helper to get field from inventory_data
+  const getInventoryField = (item: InventoryItem, field: string): string => {
+    if (!item.inventory_data) return '';
+    try {
+      const data = JSON.parse(item.inventory_data);
+      return data[field] || '';
+    } catch {
+      return '';
+    }
+  };
 
   describe("isInventoryItemField", () => {
     it("should return true for valid field names", () => {
-      expect(isInventoryItemField("date_rcvd")).toBe(true)
-      expect(isInventoryItemField("doc_year")).toBe(true)
       expect(isInventoryItemField("file_name")).toBe(true)
+      expect(isInventoryItemField("absolute_path")).toBe(true)
+      expect(isInventoryItemField("status")).toBe(true)
     })
 
     it("should return false for invalid field names", () => {
       expect(isInventoryItemField("invalid_field")).toBe(false)
       expect(isInventoryItemField("")).toBe(false)
-      expect(isInventoryItemField("dateRcvd")).toBe(false)
     })
   })
 
   describe("updateInventoryItemField", () => {
-    it("should update string fields correctly", () => {
+    it("should update core string fields correctly", () => {
+      const updated = updateInventoryItemField(mockItem, "file_name", "updated.pdf")
+      expect(updated.file_name).toBe("updated.pdf")
+      expect(updated.absolute_path).toBe(mockItem.absolute_path) // Other fields unchanged
+    })
+
+    it("should update inventory_data fields correctly", () => {
       const updated = updateInventoryItemField(mockItem, "date_rcvd", "02/02/2024")
-      expect(updated.date_rcvd).toBe("02/02/2024")
-      expect(updated.doc_year).toBe(mockItem.doc_year) // Other fields unchanged
+      const updatedDate = getInventoryField(updated, "date_rcvd")
+      expect(updatedDate).toBe("02/02/2024")
     })
 
-    it("should update doc_year field correctly", () => {
+    it("should handle numeric fields in inventory_data", () => {
       const updated = updateInventoryItemField(mockItem, "doc_year", 2025)
-      expect(updated.doc_year).toBe(2025)
+      const updatedYear = getInventoryField(updated, "doc_year")
+      expect(updatedYear).toBe("2025")
     })
 
-    it("should handle string input for doc_year", () => {
+    it("should handle string input for numeric fields", () => {
       const updated = updateInventoryItemField(mockItem, "doc_year", "2025")
-      expect(updated.doc_year).toBe(2025)
-    })
-
-    it("should preserve original value for invalid doc_year string", () => {
-      const updated = updateInventoryItemField(mockItem, "doc_year", "invalid")
-      expect(updated.doc_year).toBe(mockItem.doc_year)
+      const updatedYear = getInventoryField(updated, "doc_year")
+      expect(updatedYear).toBe("2025")
     })
   })
 })

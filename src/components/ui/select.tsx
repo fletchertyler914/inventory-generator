@@ -1,6 +1,7 @@
 import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
+import { useMemo } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -68,7 +69,36 @@ SelectScrollDownButton.displayName =
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => (
+>(({ className, children, position = "popper", style, ...props }, ref) => {
+  // Get computed popover background color
+  const popoverBgColor = useMemo(() => {
+    if (typeof window === 'undefined') return '#1a1a1a';
+    try {
+      // Create a temporary element to get the computed color
+      const testEl = document.createElement('div');
+      testEl.className = 'bg-popover';
+      testEl.style.display = 'none';
+      document.body.appendChild(testEl);
+      const computedColor = getComputedStyle(testEl).backgroundColor;
+      document.body.removeChild(testEl);
+      // If we got a valid color (not transparent), use it
+      if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)' && computedColor !== 'transparent') {
+        return computedColor;
+      }
+    } catch (e) {
+      console.warn('Failed to compute popover color:', e);
+    }
+    // Fallback: use the oklch value directly
+    const root = document.documentElement;
+    const popoverValue = getComputedStyle(root).getPropertyValue('--popover').trim();
+    if (popoverValue) {
+      return popoverValue;
+    }
+    // Final fallback for dark mode
+    return '#1a1a1a';
+  }, []);
+
+  return (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
@@ -79,6 +109,12 @@ const SelectContent = React.forwardRef<
         className
       )}
       position={position}
+      style={{
+        backgroundColor: popoverBgColor,
+        opacity: 1,
+        backdropFilter: 'none',
+        ...style,
+      }}
       {...props}
     >
       <SelectScrollUpButton />
@@ -94,7 +130,8 @@ const SelectContent = React.forwardRef<
       <SelectScrollDownButton />
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
-))
+  );
+})
 SelectContent.displayName = SelectPrimitive.Content.displayName
 
 const SelectLabel = React.forwardRef<

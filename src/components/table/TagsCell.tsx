@@ -72,10 +72,6 @@ export function TagsCell({ tags, onTagsChange }: TagsCellProps) {
       <PopoverContent 
         className="w-64 p-2 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground border-border" 
         align="start"
-        style={{
-          backgroundColor: "hsl(var(--popover))",
-          opacity: 1,
-        }}
       >
         <div className="space-y-2">
           <div className="flex items-center gap-2">

@@ -56,7 +56,7 @@ export function ReportGenerator({ items, case_, open, onOpenChange }: ReportGene
         });
 
         if (filePath) {
-          await exportInventory(items, 'xlsx', filePath, case_.case_id || null, case_.folder_path);
+          await exportInventory(items, 'xlsx', filePath, case_.case_id || null, null);
           toast({
             title: 'Report generated',
             description: 'Your report has been exported successfully.',
@@ -82,13 +82,25 @@ export function ReportGenerator({ items, case_, open, onOpenChange }: ReportGene
     }
   };
 
+  // Helper to get field from inventory_data
+  const getInventoryField = (item: InventoryItem, field: string): string => {
+    if (!item.inventory_data) return '';
+    try {
+      const data = JSON.parse(item.inventory_data);
+      return data[field] || '';
+    } catch {
+      return '';
+    }
+  };
+
   // Calculate report statistics
   const stats = {
     total: items.length,
     reviewed: items.filter(item => item.status === 'reviewed' || item.status === 'finalized').length,
     flagged: items.filter(item => item.status === 'flagged').length,
     byType: items.reduce((acc, item) => {
-      acc[item.document_type] = (acc[item.document_type] || 0) + 1;
+      const docType = getInventoryField(item, 'document_type') || 'Unknown';
+      acc[docType] = (acc[docType] || 0) + 1;
       return acc;
     }, {} as Record<string, number>),
   };

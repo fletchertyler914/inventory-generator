@@ -7,9 +7,10 @@ import { TaskList } from '@tiptap/extension-task-list';
 import { TaskItem } from '@tiptap/extension-task-item';
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import { createLowlight } from 'lowlight';
-import { useEffect, useCallback } from 'react';
-import { Bold, Italic, Strikethrough, Code, List, ListOrdered, Link as LinkIcon, Undo, Redo } from 'lucide-react';
+import { useEffect, useCallback, useState, useMemo } from 'react';
+import { Bold, Italic, Strikethrough, Code, List, ListOrdered, Link as LinkIcon, Undo, Redo, MoreVertical, Type, Heading1, Heading2, Heading3 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { cn } from '@/lib/utils';
 
 interface TiptapEditorProps {
@@ -68,8 +69,9 @@ export function TiptapEditor({
     editorProps: {
       attributes: {
         class: cn(
-          'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[200px] p-4',
-          editable && 'border border-border rounded-lg'
+          'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[120px] p-2',
+          'overflow-x-hidden overflow-y-auto break-words',
+          editable && 'border border-border rounded-md'
         ),
       },
     },
@@ -125,120 +127,352 @@ export function TiptapEditor({
     return <div className={className}>Loading editor...</div>;
   }
 
+  const [formatMenuOpen, setFormatMenuOpen] = useState(false);
+  const [listMenuOpen, setListMenuOpen] = useState(false);
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+
+  // Get computed card background color from a test element
+  const cardBgColor = useMemo(() => {
+    if (typeof window === 'undefined') return '#1a1a1a';
+    try {
+      // Create a temporary element to get the computed color
+      const testEl = document.createElement('div');
+      testEl.className = 'bg-card';
+      testEl.style.display = 'none';
+      document.body.appendChild(testEl);
+      const computedColor = getComputedStyle(testEl).backgroundColor;
+      document.body.removeChild(testEl);
+      // If we got a valid color (not transparent), use it
+      if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)' && computedColor !== 'transparent') {
+        return computedColor;
+      }
+    } catch (e) {
+      console.warn('Failed to compute card color:', e);
+    }
+    // Fallback: use the oklch value directly
+    const root = document.documentElement;
+    const cardValue = getComputedStyle(root).getPropertyValue('--card').trim();
+    if (cardValue) {
+      return cardValue;
+    }
+    // Final fallback for dark mode
+    return '#1a1a1a';
+  }, []);
+
+  // Get current heading level or paragraph
+  const getCurrentHeading = () => {
+    if (editor.isActive('heading', { level: 1 })) return 'H1';
+    if (editor.isActive('heading', { level: 2 })) return 'H2';
+    if (editor.isActive('heading', { level: 3 })) return 'H3';
+    if (editor.isActive('heading', { level: 4 })) return 'H4';
+    if (editor.isActive('heading', { level: 5 })) return 'H5';
+    if (editor.isActive('heading', { level: 6 })) return 'H6';
+    return 'P';
+  };
+
   return (
     <div className={className}>
       {editable && (
-        <div className="flex items-center gap-1 p-2 border-b border-border bg-muted/50 rounded-t-lg flex-wrap">
+        <div className="flex items-center justify-end gap-0.5 p-1 border-b border-border bg-muted/30 rounded-t-md">
+          {/* Font/Heading Menu */}
+          <Popover open={fontMenuOpen} onOpenChange={setFontMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'h-7 px-2 text-xs flex items-center justify-center',
+                  editor.isActive('heading') && 'bg-background'
+                )}
+                title="Text Style"
+              >
+                <Type className="h-3.5 w-3.5 mr-1.5" />
+                <span className="font-medium">{getCurrentHeading()}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-40 p-1 bg-card border border-border shadow-lg" 
+              align="end"
+              style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
+            >
+              <div className="space-y-0.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().setParagraph().run();
+                    setFontMenuOpen(false);
+                  }}
+                >
+                  <span className="mr-2">P</span>
+                  Paragraph
+                  {!editor.isActive('heading') && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+                <div className="h-px bg-border my-1" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleHeading({ level: 1 }).run();
+                    setFontMenuOpen(false);
+                  }}
+                >
+                  <Heading1 className="h-3.5 w-3.5 mr-2" />
+                  Heading 1
+                  {editor.isActive('heading', { level: 1 }) && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleHeading({ level: 2 }).run();
+                    setFontMenuOpen(false);
+                  }}
+                >
+                  <Heading2 className="h-3.5 w-3.5 mr-2" />
+                  Heading 2
+                  {editor.isActive('heading', { level: 2 }) && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleHeading({ level: 3 }).run();
+                    setFontMenuOpen(false);
+                  }}
+                >
+                  <Heading3 className="h-3.5 w-3.5 mr-2" />
+                  Heading 3
+                  {editor.isActive('heading', { level: 3 }) && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Format Menu */}
+          <Popover open={formatMenuOpen} onOpenChange={setFormatMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'h-7 px-2 text-xs',
+                  (editor.isActive('bold') || editor.isActive('italic') || editor.isActive('strike') || editor.isActive('code')) && 'bg-background'
+                )}
+                title="Text Formatting"
+              >
+                <Type className="h-3.5 w-3.5 mr-1" />
+                Format
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-40 p-1 bg-card border border-border shadow-lg" 
+              align="end"
+              style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
+            >
+              <div className="space-y-0.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleBold().run();
+                    setFormatMenuOpen(false);
+                  }}
+                >
+                  <Bold className="h-3.5 w-3.5 mr-2" />
+                  Bold
+                  {editor.isActive('bold') && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleItalic().run();
+                    setFormatMenuOpen(false);
+                  }}
+                >
+                  <Italic className="h-3.5 w-3.5 mr-2" />
+                  Italic
+                  {editor.isActive('italic') && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleStrike().run();
+                    setFormatMenuOpen(false);
+                  }}
+                >
+                  <Strikethrough className="h-3.5 w-3.5 mr-2" />
+                  Strikethrough
+                  {editor.isActive('strike') && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleCode().run();
+                    setFormatMenuOpen(false);
+                  }}
+                >
+                  <Code className="h-3.5 w-3.5 mr-2" />
+                  Code
+                  {editor.isActive('code') && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* List Menu */}
+          <Popover open={listMenuOpen} onOpenChange={setListMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  'h-7 px-2 text-xs',
+                  (editor.isActive('bulletList') || editor.isActive('orderedList')) && 'bg-background'
+                )}
+                title="Lists"
+              >
+                <List className="h-3.5 w-3.5 mr-1" />
+                List
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-40 p-1 bg-card border border-border shadow-lg" 
+              align="end"
+              style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
+            >
+              <div className="space-y-0.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleBulletList().run();
+                    setListMenuOpen(false);
+                  }}
+                >
+                  <List className="h-3.5 w-3.5 mr-2" />
+                  Bullet List
+                  {editor.isActive('bulletList') && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    editor.chain().focus().toggleOrderedList().run();
+                    setListMenuOpen(false);
+                  }}
+                >
+                  <ListOrdered className="h-3.5 w-3.5 mr-2" />
+                  Numbered List
+                  {editor.isActive('orderedList') && <span className="ml-auto text-xs">✓</span>}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <div className="w-px h-4 bg-border mx-0.5" />
+
+          {/* Undo/Redo - Top Level */}
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className={cn(editor.isActive('bold') && 'bg-background')}
-            title="Bold (Ctrl+B)"
-          >
-            <Bold className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={cn(editor.isActive('italic') && 'bg-background')}
-            title="Italic (Ctrl+I)"
-          >
-            <Italic className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().toggleStrike().run()}
-            className={cn(editor.isActive('strike') && 'bg-background')}
-            title="Strikethrough"
-          >
-            <Strikethrough className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            className={cn(editor.isActive('code') && 'bg-background')}
-            title="Code"
-          >
-            <Code className="h-4 w-4" />
-          </Button>
-          <div className="w-px h-6 bg-border mx-1" />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            className={cn(editor.isActive('bulletList') && 'bg-background')}
-            title="Bullet List"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            className={cn(editor.isActive('orderedList') && 'bg-background')}
-            title="Numbered List"
-          >
-            <ListOrdered className="h-4 w-4" />
-          </Button>
-          <div className="w-px h-6 bg-border mx-1" />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const url = window.prompt('Enter URL:');
-              if (url) {
-                editor.chain().focus().setLink({ href: url }).run();
-              }
-            }}
-            className={cn(editor.isActive('link') && 'bg-background')}
-            title="Add Link"
-          >
-            <LinkIcon className="h-4 w-4" />
-          </Button>
-          <div className="w-px h-6 bg-border mx-1" />
-          <Button
-            variant="ghost"
-            size="sm"
+            className="h-7 w-7 p-0"
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}
             title="Undo (Ctrl+Z)"
           >
-            <Undo className="h-4 w-4" />
+            <Undo className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
+            className="h-7 w-7 p-0"
             onClick={() => editor.chain().focus().redo().run()}
             disabled={!editor.can().redo()}
             title="Redo (Ctrl+Y)"
           >
-            <Redo className="h-4 w-4" />
+            <Redo className="h-3.5 w-3.5" />
           </Button>
-          {onExport && (
-            <>
-              <div className="w-px h-6 bg-border mx-1" />
+
+          <div className="w-px h-4 bg-border mx-0.5" />
+
+          {/* More Menu */}
+          <Popover open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+            <PopoverTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleExport('html')}
-                title="Export as HTML"
+                className="h-7 px-2 text-xs"
+                title="More Options"
               >
-                Export HTML
+                <MoreVertical className="h-3.5 w-3.5" />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleExport('text')}
-                title="Export as Text"
-              >
-                Export Text
-              </Button>
-            </>
-          )}
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-48 p-1 bg-card border border-border shadow-lg" 
+              align="end"
+              style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
+            >
+              <div className="space-y-0.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    const url = window.prompt('Enter URL:');
+                    if (url) {
+                      editor.chain().focus().setLink({ href: url }).run();
+                    }
+                    setMoreMenuOpen(false);
+                  }}
+                >
+                  <LinkIcon className="h-3.5 w-3.5 mr-2" />
+                  Add Link
+                </Button>
+                {onExport && (
+                  <>
+                    <div className="h-px bg-border my-1" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start h-8 text-xs"
+                      onClick={() => {
+                        handleExport('html');
+                        setMoreMenuOpen(false);
+                      }}
+                    >
+                      Export HTML
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start h-8 text-xs"
+                      onClick={() => {
+                        handleExport('text');
+                        setMoreMenuOpen(false);
+                      }}
+                    >
+                      Export Text
+                    </Button>
+                  </>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
       <EditorContent editor={editor} />

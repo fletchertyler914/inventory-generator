@@ -104,18 +104,7 @@ export function getGlobalMappingConfig(): MappingConfig {
     return globalMappingCache
   }
 
-  const stored = localStorage.getItem('field_mappings_global')
-  
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as MappingConfig
-      globalMappingCache = { ...parsed, mappings: parsed.mappings || DEFAULT_MAPPINGS }
-      return globalMappingCache
-    } catch {
-      // Invalid stored data, use defaults
-    }
-  }
-
+  // No sync fallback - use async version instead
   globalMappingCache = { mappings: DEFAULT_MAPPINGS, version: 1 }
   return globalMappingCache
 }
@@ -137,22 +126,8 @@ export function getMappingConfig(caseId?: string): MappingConfig {
     return globalConfig
   }
 
-  // Get case-specific overrides
-  const caseKey = `field_mappings_${caseId}`
-  const stored = localStorage.getItem(caseKey)
-  
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as MappingConfig
-      // Merge case-specific with global defaults
-      const merged = mergeMappingConfigs(globalConfig, parsed)
-      return merged
-    } catch {
-      // Invalid stored data, use global defaults
-    }
-  }
-
-  // No case-specific config, return global defaults
+  // No sync access to case-specific config - return global defaults
+  // Use getMappingConfigAsync for case-specific config
   return globalConfig
 }
 
@@ -165,34 +140,65 @@ export async function saveGlobalMappingConfig(config: MappingConfig): Promise<vo
 
   globalMappingCache = config
   await setStoreValue('field_mappings_global', config, 'app')
-  // Also save to localStorage for backward compatibility
-  localStorage.setItem('field_mappings_global', JSON.stringify(config))
 }
 
 /**
  * Save mapping configuration
  * ELITE: Supports global and case-specific saves
+ * Automatically syncs column configuration and re-applies mappings to existing files when schema changes
  */
 export async function saveMappingConfig(config: MappingConfig, caseId?: string): Promise<void> {
   if (typeof window === 'undefined') return
 
-  if (caseId) {
-    // Case-specific override
-    const key = `field_mappings_${caseId}`
-    await setStoreValue(key, config, 'app')
-    // Also save to localStorage for backward compatibility
-    localStorage.setItem(key, JSON.stringify(config))
-  } else {
-    // Global default
-    await saveGlobalMappingConfig(config)
+  // Save to database first (with store fallback)
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const configJson = JSON.stringify(config);
+    await invoke('save_mapping_config_db', {
+      caseId: caseId || null,
+      configData: configJson,
+      version: config.version || 1,
+    });
+    
+    // Database save successful - also update store for backward compatibility
+    if (caseId) {
+      const key = `field_mappings_${caseId}`;
+      await setStoreValue(key, config, 'app');
+    } else {
+      await saveGlobalMappingConfig(config);
+    }
+  } catch (error) {
+    console.warn('Failed to save mapping config to database, falling back to store:', error);
+    
+    // Fallback to store only
+    if (caseId) {
+      const key = `field_mappings_${caseId}`;
+      await setStoreValue(key, config, 'app');
+    } else {
+      await saveGlobalMappingConfig(config);
+    }
   }
+  
+  // ELITE: Automatically sync columns with schema when schema changes
+  // This ensures columns are always driven by the schema
+  try {
+    const { syncColumnsWithSchema } = await import('@/types/tableColumns');
+    await syncColumnsWithSchema(config, caseId);
+  } catch (error) {
+    console.warn('Failed to sync columns with schema:', error);
+    // Don't fail the save if column sync fails
+  }
+  
+  // Note: Re-applying mappings to existing files happens automatically in save_mapping_config_db
+  // This ensures all files get updated with new schema values
 }
 
 /**
  * Merge mapping configurations
  * ELITE: Case-specific mappings override global, new globals are added
+ * @internal - Reserved for future use
  */
-function mergeMappingConfigs(global: MappingConfig, caseSpecific: MappingConfig): MappingConfig {
+export function _mergeMappingConfigs(global: MappingConfig, caseSpecific: MappingConfig): MappingConfig {
   const globalMap = new Map(global.mappings.map(m => [m.id, m]))
   const caseMap = new Map(caseSpecific.mappings.map(m => [m.id, m]))
   const merged: FieldMapping[] = []

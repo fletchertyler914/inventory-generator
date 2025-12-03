@@ -77,10 +77,6 @@ export function CaseSwitcher({ currentCaseId, onSelectCase, onCreateCase }: Case
       <PopoverContent 
         className="w-[300px] p-0 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground border-border" 
         align="start"
-        style={{
-          backgroundColor: "hsl(var(--popover))",
-          opacity: 1,
-        }}
       >
         <div className="flex flex-col">
           {onCreateCase && (

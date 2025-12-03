@@ -102,8 +102,6 @@ export async function clearCaseMappings(caseId: string): Promise<void> {
   const { removeStoreValue } = await import('@/lib/store-utils')
   const key = `field_mappings_${caseId}`
   await removeStoreValue(key, 'app')
-  // Also remove from localStorage for backward compatibility
-  localStorage.removeItem(key)
 }
 
 /**

@@ -165,7 +165,6 @@ const DateInputComponent = React.forwardRef<HTMLButtonElement, DateInputProps>(
               align="end"
               alignOffset={-8}
               sideOffset={10}
-              style={{ backgroundColor: "hsl(var(--popover))", opacity: 1 }}
             >
               <Calendar
               mode="single"

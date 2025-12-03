@@ -4,7 +4,6 @@ export interface Case {
   case_id?: string;
   department?: string;
   client?: string;
-  folder_path: string;
   deployment_mode: 'local' | 'cloud';
   cloud_sync_enabled: boolean;
   created_at: number;

@@ -12,9 +12,9 @@ mod field_extraction;
 mod path_validation;
 
 use mappings::process_file_metadata;
-use export::{InventoryRow, generate_xlsx, generate_csv, generate_json, read_xlsx, read_csv, read_json};
+use export::{read_xlsx, read_csv, read_json};
 use error::AppError;
-use database::{Case, Note, File, Finding, TimelineEvent, generate_workspace_id};
+use database::{Case, Note, File, Finding, TimelineEvent};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,22 +22,26 @@ use sqlx::Row;
 use uuid::Uuid;
 use futures::future;
 
+/// Schema-driven inventory item structure
+/// ELITE: Flexible structure based on global/case schema configuration
+/// Core fields are required, all other fields come from inventory_data JSON
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InventoryItem {
+    // Core required fields
     pub id: Option<String>, // File ID from database (UUID) - cloud-ready identifier
-    pub date_rcvd: String,
-    pub doc_year: i32,
-    pub doc_date_range: String,
-    pub document_type: String,
-    pub document_description: String,
+    pub absolute_path: String,
+    pub status: Option<String>, // "unreviewed", "in_progress", "reviewed", "flagged", "finalized"
+    pub tags: Option<Vec<String>>,
+    
+    // File system fields (always available, computed from file metadata)
     pub file_name: String,
     pub folder_name: String,
     pub folder_path: String,
     pub file_type: String,
-    pub bates_stamp: String,
-    pub notes: String,
-    // Internal fields for tracking
-    pub absolute_path: String,
+    
+    // Schema-driven fields stored in inventory_data JSON
+    // All other fields are accessed via inventory_data using column field paths
+    pub inventory_data: Option<String>, // JSON string containing all schema-defined fields
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,20 +123,27 @@ async fn scan_directory(path: String) -> Result<Vec<InventoryItem>, String> {
     for file_metadata in files {
         let doc_info = process_file_metadata(&file_metadata);
         
+        // Build inventory_data JSON with file system fields and document metadata
+        let inventory_data_obj = serde_json::json!({
+            "file_size": 0, // Will be computed during ingestion
+            "created_at": 0, // Will be computed during ingestion
+            "modified_at": 0, // Will be computed during ingestion
+            // Document metadata (from filename analysis)
+            "document_type": doc_info.document_type,
+            "document_description": doc_info.document_description,
+            "doc_date_range": doc_info.doc_date_range,
+        });
+        
         items.push(InventoryItem {
             id: None, // No ID yet - file not in database
-            date_rcvd: String::new(),
-            doc_year: file_metadata.created_year,
-            doc_date_range: doc_info.doc_date_range,
-            document_type: doc_info.document_type,
-            document_description: doc_info.document_description,
+            absolute_path: file_metadata.absolute_path,
+            status: None,
+            tags: None,
             file_name: file_metadata.file_name,
             folder_name: file_metadata.folder_name,
             folder_path: file_metadata.folder_path,
             file_type: file_metadata.file_type,
-            bates_stamp: String::new(),
-            notes: String::new(),
-            absolute_path: file_metadata.absolute_path,
+            inventory_data: Some(inventory_data_obj.to_string()),
         });
     }
     
@@ -146,38 +157,36 @@ fn export_inventory(
     output_path: String,
     case_number: Option<String>,
     folder_path: Option<String>,
+    column_config: Option<String>, // JSON string of ExportColumnConfig
 ) -> Result<(), String> {
-    let rows: Vec<InventoryRow> = items
-        .iter()
-        .map(|item| InventoryRow {
-            date_rcvd: item.date_rcvd.clone(),
-            doc_year: item.doc_year,
-            doc_date_range: item.doc_date_range.clone(),
-            document_type: item.document_type.clone(),
-            document_description: item.document_description.clone(),
-            file_name: item.file_name.clone(),
-            folder_name: item.folder_name.clone(),
-            folder_path: item.folder_path.clone(),
-            file_type: item.file_type.clone(),
-            bates_stamp: item.bates_stamp.clone(),
-            notes: item.notes.clone(),
-        })
-        .collect();
-    
-    // Extract absolute paths for hyperlinks
-    let absolute_paths: Vec<String> = items
-        .into_iter()
-        .map(|item| item.absolute_path)
-        .collect();
-    
-    match format.as_str() {
-        "xlsx" => generate_xlsx(&rows, &absolute_paths, case_number.as_deref(), folder_path.as_deref(), &output_path)
-            .map_err(|e| AppError::XlsxError(e.to_string()).to_string_message()),
-        "csv" => generate_csv(&rows, &absolute_paths, case_number.as_deref(), folder_path.as_deref(), &output_path)
-            .map_err(|e| AppError::CsvError(e.to_string()).to_string_message()),
-        "json" => generate_json(&rows, case_number.as_deref(), folder_path.as_deref(), &output_path)
-            .map_err(|e| AppError::JsonError(e.to_string()).to_string_message()),
-        _ => Err(AppError::UnsupportedFormat(format).to_string_message()),
+    // If column config provided, use dynamic export
+    if let Some(config_str) = column_config {
+        let config: export::ExportColumnConfig = serde_json::from_str(&config_str)
+            .map_err(|e| format!("Invalid column config: {}", e))?;
+        
+        // Filter to visible columns and sort by order
+        let mut visible_columns: Vec<_> = config.columns
+            .into_iter()
+            .filter(|col| col.visible)
+            .collect();
+        visible_columns.sort_by_key(|col| col.order);
+        
+        // Extract absolute paths for hyperlinks
+        let absolute_paths: Vec<String> = items.iter().map(|item| item.absolute_path.clone()).collect();
+        
+        match format.as_str() {
+            "xlsx" => export::generate_xlsx_dynamic(&items, &visible_columns, &absolute_paths, case_number.as_deref(), folder_path.as_deref(), &output_path)
+                .map_err(|e| AppError::XlsxError(e.to_string()).to_string_message()),
+            "csv" => export::generate_csv_dynamic(&items, &visible_columns, &absolute_paths, case_number.as_deref(), folder_path.as_deref(), &output_path)
+                .map_err(|e| AppError::CsvError(e.to_string()).to_string_message()),
+            "json" => export::generate_json_dynamic(&items, &visible_columns, case_number.as_deref(), folder_path.as_deref(), &output_path)
+                .map_err(|e| AppError::JsonError(e.to_string()).to_string_message()),
+            _ => Err(AppError::UnsupportedFormat(format).to_string_message()),
+        }
+    } else {
+        // No column config provided - use default visible columns from schema
+        // This should not happen in normal operation, but provide a fallback
+        Err("Column configuration is required for export".to_string())
     }
 }
 
@@ -213,22 +222,24 @@ fn import_inventory(
     };
     
     // Convert InventoryRow to InventoryItem (with empty absolute_path)
+    // ELITE: Schema-driven - store imported fields in inventory_data JSON
     let items: Vec<InventoryItem> = rows
         .into_iter()
-        .map(|row| InventoryItem {
-            id: None, // No ID - imported from external source
-            date_rcvd: row.date_rcvd,
-            doc_year: row.doc_year,
-            doc_date_range: row.doc_date_range,
-            document_type: row.document_type,
-            document_description: row.document_description,
-            file_name: row.file_name,
-            folder_name: row.folder_name,
-            folder_path: row.folder_path,
-            file_type: row.file_type,
-            bates_stamp: row.bates_stamp,
-            notes: row.notes,
-            absolute_path: String::new(), // Not exported, so empty
+        .map(|row| {
+            // Build inventory_data JSON with imported fields
+            let inventory_data_obj = serde_json::json!({});
+            
+            InventoryItem {
+                id: None, // No ID - imported from external source
+                absolute_path: String::new(), // Not exported, so empty
+                status: None,
+                tags: None,
+                file_name: row.file_name,
+                folder_name: row.folder_name,
+                folder_path: row.folder_path,
+                file_type: row.file_type,
+                inventory_data: Some(inventory_data_obj.to_string()),
+            }
         })
         .collect();
     
@@ -284,20 +295,27 @@ async fn sync_inventory(
             // New file - create new item
             let doc_info = process_file_metadata(&file_metadata);
             
+            // Build inventory_data JSON with file system fields and document metadata
+            let inventory_data_obj = serde_json::json!({
+                "file_size": 0, // Will be computed during ingestion
+                "created_at": 0, // Will be computed during ingestion
+                "modified_at": 0, // Will be computed during ingestion
+                // Document metadata (from filename analysis)
+                "document_type": doc_info.document_type,
+                "document_description": doc_info.document_description,
+                "doc_date_range": doc_info.doc_date_range,
+            });
+            
             updated_items.push(InventoryItem {
                 id: None, // No ID yet - file not in database
-                date_rcvd: String::new(),
-                doc_year: file_metadata.created_year,
-                doc_date_range: doc_info.doc_date_range,
-                document_type: doc_info.document_type,
-                document_description: doc_info.document_description,
+                absolute_path: file_metadata.absolute_path,
+                status: None,
+                tags: None,
                 file_name: file_metadata.file_name,
                 folder_name: file_metadata.folder_name,
                 folder_path: file_metadata.folder_path,
                 file_type: file_metadata.file_type,
-                bates_stamp: String::new(),
-                notes: String::new(),
-                absolute_path: file_metadata.absolute_path,
+                inventory_data: Some(inventory_data_obj.to_string()),
             });
         }
     }
@@ -316,38 +334,31 @@ async fn create_case(
     case_id: Option<String>,
     department: Option<String>,
     client: Option<String>,
-    folder_path: String,
+    sources: Vec<String>, // Changed from single folder_path to multiple sources
     app: tauri::AppHandle,
 ) -> Result<Case, String> {
-    log::info!("Creating case: {} (folder: {})", name, folder_path);
-    let pool = database::get_db_pool(&app).await?;
+    log::info!("Creating case: {} with {} source(s)", name, sources.len());
     
-    let id = generate_workspace_id(&folder_path);
-    let now = chrono::Utc::now().timestamp();
-    
-    // Check if case with same folder_path already exists
-    let existing = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM cases WHERE folder_path = ?"
-    )
-    .bind(&folder_path)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| format!("Database error: {}", e))?;
-    
-    if existing > 0 {
-        log::warn!("Case with folder path '{}' already exists", folder_path);
-        return Err(format!("A case with folder path '{}' already exists", folder_path));
+    // Validate that at least one source is provided
+    if sources.is_empty() {
+        return Err("At least one source (file or folder) must be provided".to_string());
     }
     
+    let pool = database::get_db_pool(&app).await?;
+    
+    // Generate UUID for case ID (cloud-ready, non-deterministic)
+    let id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+    
+    // Insert case (case_sources is the source of truth for sources)
     sqlx::query(
-        "INSERT INTO cases (id, name, case_id, department, client, folder_path, deployment_mode, cloud_sync_enabled, created_at, updated_at, last_opened_at) VALUES (?, ?, ?, ?, ?, ?, 'local', 0, ?, ?, ?)"
+        "INSERT INTO cases (id, name, case_id, department, client, deployment_mode, cloud_sync_enabled, created_at, updated_at, last_opened_at) VALUES (?, ?, ?, ?, ?, 'local', 0, ?, ?, ?)"
     )
     .bind(&id)
     .bind(&name)
     .bind(&case_id)
     .bind(&department)
     .bind(&client)
-    .bind(&folder_path)
     .bind(now)
     .bind(now)
     .bind(now)
@@ -360,20 +371,47 @@ async fn create_case(
     
     log::info!("Case created successfully: {} (id: {})", name, id);
     
-    // Add initial source folder to case_sources
-    let source_id = uuid::Uuid::new_v4().to_string();
-    let source_type = if PathBuf::from(&folder_path).is_dir() { "folder" } else { "file" };
-    sqlx::query(
-        "INSERT OR IGNORE INTO case_sources (id, case_id, source_path, source_type, added_at) VALUES (?, ?, ?, ?, ?)"
-    )
-    .bind(&source_id)
-    .bind(&id)
-    .bind(&folder_path)
-    .bind(source_type)
-    .bind(now)
-    .execute(&pool)
-    .await
-    .ok(); // Non-critical, don't fail if this fails
+    // Add all sources to case_sources table
+    for source_path in &sources {
+        // Determine if source is local or cloud based on URI scheme
+        let (source_location, canonical_source_path, source_type) = if is_cloud_uri(source_path) {
+            // Cloud source - no local filesystem validation
+            let source_type = if source_path.ends_with('/') || source_path.contains("://") && !source_path.contains(":///") {
+                "folder"
+            } else {
+                "file"
+            };
+            ("cloud".to_string(), source_path.clone(), source_type.to_string())
+        } else {
+            // Local source - validate filesystem path
+            let path = if PathBuf::from(source_path).is_dir() {
+                path_validation::validate_directory_path(&PathBuf::from(source_path)).await
+                    .map_err(|e| format!("Invalid directory path '{}': {}", source_path, e))?
+            } else {
+                path_validation::validate_file_path(&PathBuf::from(source_path)).await
+                    .map_err(|e| format!("Invalid file path '{}': {}", source_path, e))?
+            };
+            
+            let source_type = if path.is_dir() { "folder" } else { "file" };
+            let canonical_source_path = path.to_string_lossy().to_string();
+            ("local".to_string(), canonical_source_path, source_type.to_string())
+        };
+        
+        let source_id = Uuid::new_v4().to_string();
+        
+        sqlx::query(
+            "INSERT OR IGNORE INTO case_sources (id, case_id, source_path, source_type, source_location, added_at) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&source_id)
+        .bind(&id)
+        .bind(&canonical_source_path)
+        .bind(&source_type)
+        .bind(&source_location)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to add source '{}': {}", source_path, e))?;
+    }
     
     Ok(Case {
         id,
@@ -381,7 +419,6 @@ async fn create_case(
         case_id,
         department,
         client,
-        folder_path,
         deployment_mode: "local".to_string(),
         cloud_sync_enabled: false,
         created_at: now,
@@ -397,8 +434,14 @@ async fn get_or_create_case(
 ) -> Result<Case, String> {
     let pool = database::get_db_pool(&app).await?;
     
-    // Try to find existing case by folder_path
-    let row = sqlx::query("SELECT id, name, case_id, department, client, folder_path, deployment_mode, cloud_sync_enabled, created_at, updated_at, last_opened_at FROM cases WHERE folder_path = ?")
+    // Try to find existing case by checking case_sources table
+    let row = sqlx::query(
+        "SELECT c.id, c.name, c.case_id, c.department, c.client, c.deployment_mode, c.cloud_sync_enabled, c.created_at, c.updated_at, c.last_opened_at 
+         FROM cases c 
+         INNER JOIN case_sources cs ON c.id = cs.case_id 
+         WHERE cs.source_path = ? 
+         LIMIT 1"
+    )
         .bind(&folder_path)
         .fetch_optional(&pool)
         .await
@@ -432,7 +475,6 @@ async fn get_or_create_case(
             case_id,
             department,
             client,
-            folder_path,
             deployment_mode,
             cloud_sync_enabled: cloud_sync_enabled != 0,
             created_at,
@@ -441,21 +483,22 @@ async fn get_or_create_case(
         });
     }
     
-    // Case doesn't exist, create it
+    // Case doesn't exist, create it with the folder_path as a source
+    // Generate a default name from the folder path
     let name = PathBuf::from(&folder_path)
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("Untitled Case")
         .to_string();
     
-    create_case(name, None, None, None, folder_path, app).await
+    create_case(name, None, None, None, vec![folder_path], app).await
 }
 
 #[tauri::command]
 async fn list_cases(app: tauri::AppHandle) -> Result<Vec<Case>, String> {
     let pool = database::get_db_pool(&app).await?;
     
-    let rows = sqlx::query("SELECT id, name, case_id, department, client, folder_path, deployment_mode, cloud_sync_enabled, created_at, updated_at, last_opened_at FROM cases ORDER BY last_opened_at DESC")
+    let rows = sqlx::query("SELECT id, name, case_id, department, client, deployment_mode, cloud_sync_enabled, created_at, updated_at, last_opened_at FROM cases ORDER BY last_opened_at DESC")
         .fetch_all(&pool)
         .await
         .map_err(|e| format!("Database query error: {}", e))?;
@@ -467,7 +510,6 @@ async fn list_cases(app: tauri::AppHandle) -> Result<Vec<Case>, String> {
         let case_id: Option<String> = row.get("case_id");
         let department: Option<String> = row.get("department");
         let client: Option<String> = row.get("client");
-        let folder_path: String = row.get("folder_path");
         let deployment_mode: String = row.get::<Option<String>, _>("deployment_mode").unwrap_or_else(|| "local".to_string());
         let cloud_sync_enabled: i64 = row.get::<Option<i64>, _>("cloud_sync_enabled").unwrap_or(0);
         let created_at: i64 = row.get("created_at");
@@ -480,7 +522,6 @@ async fn list_cases(app: tauri::AppHandle) -> Result<Vec<Case>, String> {
             case_id,
             department,
             client,
-            folder_path,
             deployment_mode,
             cloud_sync_enabled: cloud_sync_enabled != 0,
             created_at,
@@ -496,7 +537,7 @@ async fn list_cases(app: tauri::AppHandle) -> Result<Vec<Case>, String> {
 async fn get_case(case_id: String, app: tauri::AppHandle) -> Result<Case, String> {
     let pool = database::get_db_pool(&app).await?;
     
-    let row = sqlx::query("SELECT id, name, case_id, department, client, folder_path, deployment_mode, cloud_sync_enabled, created_at, updated_at, last_opened_at FROM cases WHERE id = ?")
+    let row = sqlx::query("SELECT id, name, case_id, department, client, deployment_mode, cloud_sync_enabled, created_at, updated_at, last_opened_at FROM cases WHERE id = ?")
         .bind(&case_id)
         .fetch_optional(&pool)
         .await
@@ -508,7 +549,6 @@ async fn get_case(case_id: String, app: tauri::AppHandle) -> Result<Case, String
     let case_id_opt: Option<String> = row.get("case_id");
     let department: Option<String> = row.get("department");
     let client: Option<String> = row.get("client");
-    let folder_path: String = row.get("folder_path");
     let deployment_mode: String = row.get::<Option<String>, _>("deployment_mode").unwrap_or_else(|| "local".to_string());
     let cloud_sync_enabled: i64 = row.get::<Option<i64>, _>("cloud_sync_enabled").unwrap_or(0);
     let created_at: i64 = row.get("created_at");
@@ -521,7 +561,6 @@ async fn get_case(case_id: String, app: tauri::AppHandle) -> Result<Case, String
         case_id: case_id_opt,
         department,
         client,
-        folder_path,
         deployment_mode,
         cloud_sync_enabled: cloud_sync_enabled != 0,
         created_at,
@@ -670,6 +709,24 @@ async fn delete_case(case_id: String, app: tauri::AppHandle) -> Result<(), Strin
     Ok(())
 }
 
+/// Validate case_id format (UUID only - cloud-ready)
+fn validate_case_id(case_id: &str) -> Result<(), String> {
+    Uuid::parse_str(case_id)
+        .map_err(|_| format!("Invalid case_id format: expected UUID, got '{}'", case_id))?;
+    Ok(())
+}
+
+/// Check if a source path is a cloud URI (s3://, gs://, https://, etc.)
+fn is_cloud_uri(path: &str) -> bool {
+    path.starts_with("s3://") ||
+    path.starts_with("gs://") ||
+    path.starts_with("az://") ||
+    path.starts_with("https://") ||
+    path.starts_with("http://") ||
+    path.starts_with("cloud://") ||
+    path.starts_with("cloudstorage://")
+}
+
 // Notes management commands
 
 #[tauri::command]
@@ -691,10 +748,8 @@ async fn create_note(
         return Err("Note content cannot be empty".to_string());
     }
     
-    // ELITE: UUID format validation
-    if Uuid::parse_str(&case_id).is_err() {
-        return Err(format!("Invalid case_id format: expected UUID, got '{}'", case_id));
-    }
+    // ELITE: Case ID format validation (SHA-256 hash)
+    validate_case_id(&case_id)?;
     
     if let Some(ref fid) = file_id {
         if Uuid::parse_str(fid).is_err() {
@@ -976,10 +1031,8 @@ async fn create_finding(
         return Err(format!("Invalid severity: must be one of {:?}", VALID_SEVERITIES));
     }
     
-    // ELITE: UUID format validation
-    if Uuid::parse_str(&case_id).is_err() {
-        return Err(format!("Invalid case_id format: expected UUID, got '{}'", case_id));
-    }
+    // ELITE: Case ID format validation (SHA-256 hash)
+    validate_case_id(&case_id)?;
     
     // ELITE: Validate linked_files are UUIDs if provided
     if let Some(ref files) = linked_files {
@@ -1304,10 +1357,8 @@ async fn create_timeline_event(
         return Err(format!("Event date is out of valid range (must be within {} years past and {} years future)", MAX_YEARS_PAST, MAX_YEARS_FUTURE));
     }
     
-    // ELITE: UUID format validation
-    if Uuid::parse_str(&case_id).is_err() {
-        return Err(format!("Invalid case_id format: expected UUID, got '{}'", case_id));
-    }
+    // ELITE: Case ID format validation (SHA-256 hash)
+    validate_case_id(&case_id)?;
     
     if let Some(ref fid) = source_file_id {
         if Uuid::parse_str(fid).is_err() {
@@ -2264,6 +2315,23 @@ async fn read_file_text(path: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to read file: {}", e))
 }
 
+#[tauri::command]
+async fn write_file_text(path: String, content: String) -> Result<(), String> {
+    use tokio::fs;
+    
+    // SECURITY: Validate path is not empty
+    if path.trim().is_empty() {
+        return Err("File path cannot be empty".to_string());
+    }
+    
+    // SECURITY: Validate and canonicalize path (prevents path traversal)
+    let file_path = path_validation::validate_file_path(&PathBuf::from(&path)).await?;
+    
+    // ELITE: Write file in single async operation
+    fs::write(&file_path, content).await
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
 // Metadata extraction command
 
 #[tauri::command]
@@ -2307,27 +2375,41 @@ async fn add_case_source(
         .map_err(|e| format!("Database error: {}", e))?
         .ok_or_else(|| "Case not found".to_string())?;
     
-    // SECURITY: Validate and canonicalize path (prevents path traversal)
-    let path = if PathBuf::from(&source_path).is_dir() {
-        path_validation::validate_directory_path(&PathBuf::from(&source_path)).await
-            .map_err(|e| format!("Invalid directory path: {}", e))?
+    // Determine if source is local or cloud based on URI scheme
+    let (source_location, canonical_source_path, source_type) = if is_cloud_uri(&source_path) {
+        // Cloud source - no local filesystem validation
+        let source_type = if source_path.ends_with('/') || (source_path.contains("://") && !source_path.contains(":///")) {
+            "folder"
+        } else {
+            "file"
+        };
+        ("cloud".to_string(), source_path.clone(), source_type.to_string())
     } else {
-        path_validation::validate_file_path(&PathBuf::from(&source_path)).await
-            .map_err(|e| format!("Invalid file path: {}", e))?
+        // Local source - validate filesystem path
+        let path = if PathBuf::from(&source_path).is_dir() {
+            path_validation::validate_directory_path(&PathBuf::from(&source_path)).await
+                .map_err(|e| format!("Invalid directory path: {}", e))?
+        } else {
+            path_validation::validate_file_path(&PathBuf::from(&source_path)).await
+                .map_err(|e| format!("Invalid file path: {}", e))?
+        };
+        
+        let source_type = if path.is_dir() { "folder" } else { "file" };
+        let canonical_source_path = path.to_string_lossy().to_string();
+        ("local".to_string(), canonical_source_path, source_type.to_string())
     };
     
     let source_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp();
-    let source_type = if path.is_dir() { "folder" } else { "file" };
-    let canonical_source_path = path.to_string_lossy().to_string();
     
     sqlx::query(
-        "INSERT OR IGNORE INTO case_sources (id, case_id, source_path, source_type, added_at) VALUES (?, ?, ?, ?, ?)"
+        "INSERT OR IGNORE INTO case_sources (id, case_id, source_path, source_type, source_location, added_at) VALUES (?, ?, ?, ?, ?, ?)"
     )
     .bind(&source_id)
     .bind(&case_id)
     .bind(&canonical_source_path)
-    .bind(source_type)
+    .bind(&source_type)
+    .bind(&source_location)
     .bind(now)
     .execute(&pool)
     .await
@@ -2661,6 +2743,229 @@ async fn find_duplicate_files(
     Ok(duplicates)
 }
 
+/// Get column configuration from database
+#[tauri::command]
+async fn get_column_config_db(
+    case_id: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    let pool = database::get_db_pool(&app).await?;
+    database::get_column_config(&pool, case_id.as_deref()).await
+}
+
+/// Save column configuration to database
+#[tauri::command]
+async fn save_column_config_db(
+    case_id: Option<String>,
+    config_data: String,
+    version: i32,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let pool = database::get_db_pool(&app).await?;
+    database::save_column_config(&pool, case_id.as_deref(), &config_data, version).await
+}
+
+/// Get mapping configuration from database
+#[tauri::command]
+async fn get_mapping_config_db(
+    case_id: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    let pool = database::get_db_pool(&app).await?;
+    database::get_mapping_config(&pool, case_id.as_deref()).await
+}
+
+/// Save mapping configuration to database
+/// ELITE: Automatically re-applies mappings to existing files when schema changes
+#[tauri::command]
+async fn save_mapping_config_db(
+    case_id: Option<String>,
+    config_data: String,
+    version: i32,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let pool = database::get_db_pool(&app).await?;
+    database::save_mapping_config(&pool, case_id.as_deref(), &config_data, version).await?;
+    
+    // ELITE: Re-apply mappings to all existing files when schema changes
+    // This ensures all files have values extracted using the new schema
+    if let Some(cid) = &case_id {
+        reapply_mappings_to_case(&pool, cid).await?;
+    }
+    
+    Ok(())
+}
+
+/// Re-apply mappings to all existing files in a case
+/// ELITE: Updates inventory_data for all files using current schema mappings
+async fn reapply_mappings_to_case(pool: &sqlx::SqlitePool, case_id: &str) -> Result<(), String> {
+    log::info!("Re-applying mappings to all files in case {}", case_id);
+    
+    // Load mapping config for this case
+    let mapping_config_json = database::get_mapping_config(pool, Some(case_id))
+        .await?
+        .ok_or_else(|| "No mapping config found for case".to_string())?;
+    
+    let mapping_config: serde_json::Value = serde_json::from_str(&mapping_config_json)
+        .map_err(|e| format!("Failed to parse mapping config: {}", e))?;
+    
+    let mappings = mapping_config.get("mappings")
+        .and_then(|m| m.as_array())
+        .ok_or_else(|| "Invalid mapping config format".to_string())?;
+    
+    // Load all files for this case
+    let files = sqlx::query(
+        "SELECT f.id, f.file_name, f.folder_path, f.absolute_path, f.file_type, fm.inventory_data 
+         FROM files f 
+         LEFT JOIN file_metadata fm ON f.id = fm.file_id 
+         WHERE f.case_id = ?"
+    )
+    .bind(case_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("Failed to load files: {}", e))?;
+    
+    if files.is_empty() {
+        log::info!("No files to update in case {}", case_id);
+        return Ok(());
+    }
+    
+    log::info!("Updating {} files with new mappings", files.len());
+    
+    // Create regex cache for performance
+    let mut regex_cache = crate::field_extraction::RegexCache::new();
+    let mut updated_count = 0;
+    
+    // Process each file
+    for row in files {
+        let file_id: String = row.get("id");
+        let file_name: String = row.get("file_name");
+        let folder_path: String = row.get("folder_path");
+        let absolute_path: String = row.get("absolute_path");
+        let file_type: String = row.get("file_type");
+        let existing_inventory_data: Option<String> = row.get("inventory_data");
+        
+        // Parse existing inventory_data or start fresh
+        let mut inventory_data: serde_json::Value = if let Some(data_str) = existing_inventory_data {
+            serde_json::from_str(&data_str).unwrap_or_else(|_| serde_json::json!({}))
+        } else {
+            serde_json::json!({})
+        };
+        
+        // Re-compute document metadata from filename (ensures it's always up to date)
+        let doc_info = crate::mappings::process_file_metadata(&crate::scanner::FileMetadata {
+            file_name: file_name.clone(),
+            folder_name: folder_path.split('/').last().unwrap_or("").to_string(),
+            folder_path: folder_path.clone(),
+            absolute_path: absolute_path.clone(),
+            file_type: file_type.clone(),
+            size_bytes: 0,
+            size_human: String::new(),
+            created: String::new(),
+            modified: String::new(),
+            created_year: 0,
+        });
+        
+        // Update document metadata in inventory_data (preserve existing if present, but update if recomputed)
+        inventory_data["document_type"] = serde_json::Value::String(doc_info.document_type);
+        inventory_data["document_description"] = serde_json::Value::String(doc_info.document_description);
+        inventory_data["doc_date_range"] = serde_json::Value::String(doc_info.doc_date_range);
+        
+        // Build metadata map for extraction
+        let mut metadata_map = std::collections::HashMap::new();
+        metadata_map.insert("file_name".to_string(), file_name.clone());
+        metadata_map.insert("folder_name".to_string(), folder_path.split('/').last().unwrap_or("").to_string());
+        metadata_map.insert("folder_path".to_string(), folder_path.clone());
+        
+        // Apply each enabled mapping
+        for mapping in mappings {
+            if let Some(enabled) = mapping.get("enabled").and_then(|e| e.as_bool()) {
+                if !enabled {
+                    continue;
+                }
+                
+                // Extract mapping details
+                if let (Some(column_id), Some(source_type), Some(extraction_method)) = (
+                    mapping.get("columnId").and_then(|c| c.as_str()),
+                    mapping.get("sourceType").and_then(|s| s.as_str()),
+                    mapping.get("extractionMethod").and_then(|e| e.as_str()),
+                ) {
+                    // Convert to FieldMappingRule format
+                    let rule = crate::field_extraction::FieldMappingRule {
+                        source_type: source_type.to_string(),
+                        extraction_method: match extraction_method {
+                            "direct" => crate::field_extraction::ExtractionMethod::Direct,
+                            "pattern" => crate::field_extraction::ExtractionMethod::Pattern,
+                            "date" => crate::field_extraction::ExtractionMethod::Date,
+                            "number" => crate::field_extraction::ExtractionMethod::Number,
+                            "text_before" => crate::field_extraction::ExtractionMethod::TextBefore,
+                            "text_after" => crate::field_extraction::ExtractionMethod::TextAfter,
+                            "text_between" => crate::field_extraction::ExtractionMethod::TextBetween,
+                            _ => crate::field_extraction::ExtractionMethod::Direct,
+                        },
+                        pattern: mapping.get("patternConfig").and_then(|p| {
+                            if let (Some(pattern), Some(flags), Some(group)) = (
+                                p.get("pattern").and_then(|pat| pat.as_str()),
+                                p.get("flags").and_then(|f| f.as_str()),
+                                p.get("group").and_then(|g| g.as_u64()),
+                            ) {
+                                Some(crate::field_extraction::ExtractionPattern {
+                                    pattern: pattern.to_string(),
+                                    flags: if flags.is_empty() { None } else { Some(flags.to_string()) },
+                                    group: Some(group as usize),
+                                    format: p.get("format").and_then(|f| f.as_str()).map(|s| s.to_string()),
+                                })
+                            } else {
+                                None
+                            }
+                        }),
+                        target_field: column_id.to_string(),
+                    };
+                    
+                    // Apply mapping rule to extract value
+                    if let Ok(Some(extracted_value)) = crate::field_extraction::apply_mapping_rule(
+                        &rule,
+                        &file_name,
+                        &metadata_map.get("folder_name").unwrap_or(&String::new()),
+                        &folder_path,
+                        &metadata_map,
+                        &mut regex_cache,
+                    ) {
+                        // Store extracted value in inventory_data
+                        inventory_data[column_id] = serde_json::Value::String(extracted_value);
+                    }
+                }
+            }
+        }
+        
+        // Update file_metadata with new inventory_data
+        let inventory_data_str = serde_json::to_string(&inventory_data)
+            .map_err(|e| format!("Failed to serialize inventory_data: {}", e))?;
+        
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        
+        // Use INSERT OR REPLACE to handle both new and existing metadata
+        sqlx::query(
+            "INSERT OR REPLACE INTO file_metadata (file_id, inventory_data, last_scanned_at) 
+             VALUES (?, ?, ?)"
+        )
+        .bind(&file_id)
+        .bind(&inventory_data_str)
+        .bind(now)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to update file metadata: {}", e))?;
+        
+        updated_count += 1;
+    }
+    
+    log::info!("Successfully updated {} files with new mappings", updated_count);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use log::LevelFilter;
@@ -2690,7 +2995,7 @@ pub fn run() {
         .level(log_level)
         .targets(log_targets)
         .max_file_size(50_000_000) // 50 MB
-        .rotation_strategy(RotationStrategy::KeepLast(5))
+        .rotation_strategy(RotationStrategy::KeepSome(5))
         .build();
     
     log::info!("CaseSpace application starting");
@@ -2738,13 +3043,18 @@ pub fn run() {
             open_file,
             read_file_base64,
             read_file_text,
+            write_file_text,
             add_case_source,
             list_case_sources,
             sync_case_all_sources,
             check_file_changed,
             refresh_single_file,
             refresh_files_bulk,
-            find_duplicate_files
+            find_duplicate_files,
+            get_column_config_db,
+            save_column_config_db,
+            get_mapping_config_db,
+            save_mapping_config_db
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

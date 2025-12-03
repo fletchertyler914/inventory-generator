@@ -29,7 +29,7 @@ export interface ImportResult {
  * @example
  * ```ts
  * const count = await countDirectoryFiles("/path/to/documents")
- * console.log(`Found ${count} files`)
+ * // Use count for display or validation
  * ```
  */
 export async function countDirectoryFiles(path: string): Promise<number> {
@@ -46,7 +46,7 @@ export async function countDirectoryFiles(path: string): Promise<number> {
  * @example
  * ```ts
  * const items = await scanDirectory("/path/to/documents")
- * console.log(`Found ${items.length} files`)
+ * // Process items array
  * ```
  */
 export async function scanDirectory(path: string): Promise<InventoryItem[]> {
@@ -74,7 +74,8 @@ export async function exportInventory(
   format: "xlsx" | "csv" | "json",
   outputPath: string,
   caseNumber: string | null,
-  folderPath: string | null
+  folderPath: string | null,
+  columnConfig?: { columns: Array<{ id: string; label: string; visible: boolean; order: number; fieldPath?: string }> } | null
 ): Promise<void> {
   return invoke("export_inventory", {
     items,
@@ -82,6 +83,7 @@ export async function exportInventory(
     outputPath,
     caseNumber: caseNumber || null,
     folderPath: folderPath || null,
+    columnConfig: columnConfig ? JSON.stringify(columnConfig) : null,
   })
 }
 

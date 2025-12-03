@@ -23,6 +23,7 @@ interface CaseListViewProps {
 
 interface CaseWithFileCount extends Case {
   fileCount?: number;
+  sources?: string[];
 }
 
 export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: CaseListViewProps) {
@@ -46,15 +47,18 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
       loadedCases.forEach(c => counts.add(c.id));
       setLoadingFileCounts(counts);
       
-      // Load file counts asynchronously
+      // Load file counts and sources asynchronously
       loadedCases.forEach(async (case_) => {
         try {
-          const count = await fileService.getCaseFileCount(case_.id);
+          const [count, sources] = await Promise.all([
+            fileService.getCaseFileCount(case_.id),
+            fileService.listCaseSources(case_.id).catch(() => [] as string[])
+          ]);
           setCases(prev => prev.map(c => 
-            c.id === case_.id ? { ...c, fileCount: count } : c
+            c.id === case_.id ? { ...c, fileCount: count, sources } : c
           ));
         } catch (error) {
-          console.error(`Failed to load file count for case ${case_.id}:`, error);
+          console.error(`Failed to load data for case ${case_.id}:`, error);
         } finally {
           setLoadingFileCounts(prev => {
             const next = new Set(prev);
@@ -238,7 +242,11 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
                         </div>
                         <CardDescription className="text-xs mt-1 line-clamp-2 flex items-start gap-1.5">
                           <FolderOpen className="h-3 w-3 mt-0.5 flex-shrink-0 text-muted-foreground/60" />
-                          <span className="truncate">{case_.folder_path}</span>
+                          <span className="truncate text-muted-foreground/70">
+                            {case_.sources && case_.sources.length > 0
+                              ? `${case_.sources.length} source${case_.sources.length !== 1 ? 's' : ''}`
+                              : 'No sources'}
+                          </span>
                         </CardDescription>
                       </div>
                       <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">

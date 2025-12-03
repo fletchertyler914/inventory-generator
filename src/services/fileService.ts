@@ -42,7 +42,6 @@ export const fileService = {
       return openPath(path);
     } else {
       // Browser mode: Can't open files, but show helpful message
-      console.warn(`Browser mode: Cannot open file ${path}. Use Tauri app for file operations.`);
       throw new Error('File opening requires Tauri app. Use "pnpm tauri dev" for full functionality.');
     }
   },
@@ -103,8 +102,8 @@ export const fileService = {
   /**
    * List all source folders/files for a case
    */
-  async listCaseSources(caseId: string): Promise<Array<{ id: string; case_id: string; path: string; created_at: number }>> {
-    return safeInvoke<Array<{ id: string; case_id: string; path: string; created_at: number }>>('list_case_sources', { caseId });
+  async listCaseSources(caseId: string): Promise<string[]> {
+    return safeInvoke<string[]>('list_case_sources', { caseId });
   },
 
   /**

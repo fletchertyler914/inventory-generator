@@ -29,11 +29,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to console (and potentially to backend in the future)
+    // Log error to console
+    // In production, errors should be sent to a logging service
     console.error("ErrorBoundary caught an error:", error, errorInfo)
-    
-    // TODO: In production, send error to backend logging service
-    // invoke("log_error", { error: error.message, stack: error.stack, componentStack: errorInfo.componentStack })
   }
 
   handleReset = () => {

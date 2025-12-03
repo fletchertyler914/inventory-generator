@@ -35,12 +35,12 @@ pub struct FieldMappingRule {
 
 /// ELITE: Cached regex compilation for performance
 /// Reuses compiled regex patterns to avoid recompilation overhead
-struct RegexCache {
+pub struct RegexCache {
     patterns: HashMap<String, Regex>,
 }
 
 impl RegexCache {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             patterns: HashMap::new(),
         }

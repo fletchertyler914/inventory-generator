@@ -65,8 +65,8 @@ type CellValue = string | number | FileStatus | string[] | undefined;
 type NestedValue = string | number | boolean | null | NestedValue[] | { [key: string]: NestedValue };
 
 const getCellValue = (column: TableColumn, item: InventoryItem): CellValue => {
-  // Handle custom columns with fieldPath
-  if (column.custom && column.fieldPath) {
+  // ELITE: Handle schema-driven fields with fieldPath (custom columns, common columns)
+  if (column.fieldPath) {
     const parts = getFieldPathParts(column.fieldPath);
     let value: NestedValue | InventoryItem | undefined = item;
     
@@ -104,31 +104,28 @@ const getCellValue = (column: TableColumn, item: InventoryItem): CellValue => {
     return String(value);
   }
   
-  // Handle standard columns - direct property access (fastest path)
-  const field = column.id as InventoryItemField;
-  if (field in item) {
-    return item[field] as CellValue;
+  // Handle core fields - direct property access (fastest path)
+  // ELITE: Use Set for O(1) lookup instead of array includes O(n)
+  const coreFieldsSet = new Set(['id', 'absolute_path', 'status', 'tags', 'file_name', 'folder_name', 'folder_path', 'file_type']);
+  if (coreFieldsSet.has(column.id)) {
+    const field = column.id as keyof InventoryItem;
+    if (field in item) {
+      return item[field] as CellValue;
+    }
   }
   
-  // ELITE: Check inventory_data for computed fields (file_extension, parent_folder, etc.)
-  // These are stored in inventory_data JSON but not in the InventoryItem type
-  const computedFields = [
-    'file_extension', 'parent_folder', 'folder_depth', 'file_path_segments',
-    'file_size', 'created_at', 'modified_at', 'file_hash', 'mime_type', 'content_type'
-  ];
-  
-  if (computedFields.includes(column.id)) {
-    const parsedData = getParsedInventoryData(item);
-    const computedValue = parsedData[column.id];
-    if (computedValue !== undefined) {
-      if (typeof computedValue === 'string' || typeof computedValue === 'number' || typeof computedValue === 'boolean') {
-        return typeof computedValue === 'boolean' ? String(computedValue) : computedValue;
-      }
-      if (Array.isArray(computedValue)) {
-        return computedValue.map(v => String(v));
-      }
-      return String(computedValue);
+  // ELITE: Check inventory_data for schema-driven fields (file_extension, parent_folder, etc.)
+  // All non-core fields are stored in inventory_data JSON
+  const parsedData = getParsedInventoryData(item);
+  const schemaValue = parsedData[column.id];
+  if (schemaValue !== undefined) {
+    if (typeof schemaValue === 'string' || typeof schemaValue === 'number' || typeof schemaValue === 'boolean') {
+      return typeof schemaValue === 'boolean' ? String(schemaValue) : schemaValue;
     }
+    if (Array.isArray(schemaValue)) {
+      return schemaValue.map(v => String(v));
+    }
+    return String(schemaValue);
   }
   
   return undefined;

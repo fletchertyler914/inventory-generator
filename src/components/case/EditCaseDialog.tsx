@@ -3,8 +3,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Columns } from 'lucide-react';
 import { toast } from '@/hooks/useToast';
 import { caseService } from '@/services/caseService';
+import { ColumnManager } from '../table/ColumnManager';
+import { getColumnConfig, saveColumnConfig, type TableColumnConfig } from '@/types/tableColumns';
 import type { Case } from '@/types/case';
 
 interface EditCaseDialogProps {
@@ -20,6 +23,10 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
   const [department, setDepartment] = useState('');
   const [client, setClient] = useState('');
   const [loading, setLoading] = useState(false);
+  const [columnManagerOpen, setColumnManagerOpen] = useState(false);
+  const [columnConfig, setColumnConfig] = useState<TableColumnConfig>(() =>
+    case_ ? getColumnConfig(case_.id) : { columns: [], version: 1 }
+  );
 
   // Populate form with case data when dialog opens or case changes
   useEffect(() => {
@@ -28,6 +35,7 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
       setCaseId(case_.case_id || '');
       setDepartment(case_.department || '');
       setClient(case_.client || '');
+      setColumnConfig(getColumnConfig(case_.id));
     }
   }, [open, case_]);
 
@@ -87,7 +95,7 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
         <DialogHeader>
           <DialogTitle>Edit Case</DialogTitle>
           <DialogDescription>
-            Update case metadata. The folder path cannot be changed.
+            Update case metadata. Sources can be managed separately.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -128,15 +136,16 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
               placeholder="e.g., Acme Corp"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-folder">Source Folder</Label>
-            <Input
-              id="edit-folder"
-              value={case_.folder_path}
-              readOnly
-              disabled
-              className="bg-muted cursor-not-allowed"
-            />
+          <div className="space-y-2 pt-2 border-t border-border">
+            <Label>Table Settings</Label>
+            <Button
+              variant="outline"
+              onClick={() => setColumnManagerOpen(true)}
+              className="w-full justify-start"
+            >
+              <Columns className="h-4 w-4 mr-2" />
+              Customize Table Columns
+            </Button>
           </div>
         </div>
         <DialogFooter>
@@ -151,6 +160,20 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
           </Button>
         </DialogFooter>
       </DialogContent>
+      
+      {/* Column Manager Dialog */}
+      {case_ && (
+        <ColumnManager
+          open={columnManagerOpen}
+          onOpenChange={setColumnManagerOpen}
+          config={columnConfig}
+          onConfigChange={(newConfig) => {
+            setColumnConfig(newConfig);
+            saveColumnConfig(newConfig, case_.id).catch(console.error);
+          }}
+          caseId={case_.id}
+        />
+      )}
     </Dialog>
   );
 }

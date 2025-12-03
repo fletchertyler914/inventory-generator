@@ -1,6 +1,7 @@
 /**
- * Settings store with localStorage persistence
+ * Settings store
  * Manages application settings
+ * Uses Tauri store for persistence (via store-utils)
  */
 
 import { create } from "zustand"

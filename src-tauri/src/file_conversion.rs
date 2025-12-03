@@ -6,29 +6,9 @@ use crate::InventoryItem;
 use serde_json;
 
 /// Convert File (from database) to InventoryItem (for UI compatibility)
+/// ELITE: Schema-driven conversion - all fields stored in inventory_data JSON
 /// Loads inventory metadata from file_metadata table if available
 pub fn file_to_inventory_item(file: &File, inventory_data: Option<&str>) -> InventoryItem {
-    // Parse inventory metadata if available
-    let (date_rcvd, doc_year, doc_date_range, document_type, document_description, bates_stamp, notes) = 
-        if let Some(data_str) = inventory_data {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data_str) {
-                (
-                    json.get("date_rcvd").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    json.get("doc_year").and_then(|v| v.as_i64()).unwrap_or(file.created_at as i64 / 31536000 + 1970) as i32, // Approximate year from timestamp
-                    json.get("doc_date_range").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    json.get("document_type").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    json.get("document_description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    json.get("bates_stamp").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    json.get("notes").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                )
-            } else {
-                ("".to_string(), 0, "".to_string(), "".to_string(), "".to_string(), "".to_string(), "".to_string())
-            }
-        } else {
-            // No inventory metadata, use defaults
-            ("".to_string(), 0, "".to_string(), "".to_string(), "".to_string(), "".to_string(), "".to_string())
-        };
-    
     // Extract folder name from folder_path
     let folder_name = file.folder_path
         .split('/')
@@ -36,41 +16,53 @@ pub fn file_to_inventory_item(file: &File, inventory_data: Option<&str>) -> Inve
         .unwrap_or("")
         .to_string();
     
+    // Parse existing inventory_data or create new JSON object
+    let inventory_data_json = if let Some(data_str) = inventory_data {
+        // Use existing inventory_data as-is (preserves all schema-defined fields)
+        data_str.to_string()
+    } else {
+        // Create empty inventory_data JSON for new files
+        "{}".to_string()
+    };
+    
+    // Parse tags from JSON if available
+    let tags: Option<Vec<String>> = if let Some(tags_str) = &file.tags {
+        serde_json::from_str(tags_str).ok()
+    } else {
+        None
+    };
+    
     InventoryItem {
         id: Some(file.id.clone()), // Include file ID for cloud-ready references
-        date_rcvd,
-        doc_year,
-        doc_date_range,
-        document_type,
-        document_description,
+        absolute_path: file.absolute_path.clone(),
+        status: Some(file.status.clone()),
+        tags,
         file_name: file.file_name.clone(),
         folder_name,
         folder_path: file.folder_path.clone(),
         file_type: file.file_type.clone(),
-        bates_stamp,
-        notes,
-        absolute_path: file.absolute_path.clone(),
+        inventory_data: Some(inventory_data_json),
     }
 }
 
 /// Convert InventoryItem to File (for database storage)
+/// ELITE: Schema-driven conversion - preserves all inventory_data fields
 /// Note: This creates a partial File - full File requires case_id and file metadata
 #[allow(dead_code)] // May be useful for future import/export features
 pub fn inventory_item_to_file_partial(item: &InventoryItem) -> PartialFile {
+    // Parse inventory_data JSON or create empty object
+    let inventory_data_value = if let Some(data_str) = &item.inventory_data {
+        serde_json::from_str(data_str).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    
     PartialFile {
         file_name: item.file_name.clone(),
         folder_path: item.folder_path.clone(),
         absolute_path: item.absolute_path.clone(),
         file_type: item.file_type.clone(),
-        inventory_data: serde_json::json!({
-            "date_rcvd": item.date_rcvd,
-            "doc_year": item.doc_year,
-            "doc_date_range": item.doc_date_range,
-            "document_type": item.document_type,
-            "document_description": item.document_description,
-            "bates_stamp": item.bates_stamp,
-            "notes": item.notes,
-        }),
+        inventory_data: inventory_data_value,
     }
 }
 

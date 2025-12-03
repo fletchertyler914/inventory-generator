@@ -4,7 +4,148 @@ use std::fs::File;
 use std::io::{Write, BufReader};
 use std::path::Path;
 use serde_json;
+use serde::{Deserialize, Serialize};
 use calamine::{open_workbook, Reader, Xlsx, Data};
+
+/// Convert a file path to a file:// URL for hyperlinks
+fn path_to_file_url(path: &str) -> String {
+    if path.is_empty() {
+        return String::new();
+    }
+    
+    let path_obj = Path::new(path);
+    let normalized_path = path_obj.to_string_lossy().replace('\\', "/");
+    
+    // Ensure we have three slashes after file: (file:///)
+    if normalized_path.starts_with('/') {
+        format!("file://{}", normalized_path)
+    } else {
+        // Windows path - add leading slash for proper URL format
+        format!("file:///{}", normalized_path)
+    }
+}
+
+/// Column configuration for dynamic exports
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportColumn {
+    pub id: String,
+    pub label: String,
+    pub visible: bool,
+    pub order: i32,
+    #[serde(rename = "fieldPath")]
+    pub field_path: Option<String>,
+}
+
+/// Column configuration for exports
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportColumnConfig {
+    pub columns: Vec<ExportColumn>,
+}
+
+/// Extract value from InventoryItem based on column field path
+/// ELITE: Optimized with caching and minimal allocations
+pub fn extract_field_value(item: &crate::InventoryItem, column: &ExportColumn, parsed_json: Option<&serde_json::Value>) -> String {
+    // Handle core fields directly (fastest path - no JSON parsing)
+    match column.id.as_str() {
+        "id" => item.id.as_deref().unwrap_or_default().to_string(),
+        "absolute_path" => item.absolute_path.to_string(),
+        "status" => item.status.as_deref().unwrap_or_default().to_string(),
+        "tags" => {
+            item.tags.as_ref()
+                .map(|tags| tags.join(", "))
+                .unwrap_or_default()
+        },
+        "file_name" => item.file_name.to_string(),
+        "folder_name" => item.folder_name.to_string(),
+        "folder_path" => item.folder_path.to_string(),
+        "file_type" => item.file_type.to_string(),
+        _ => {
+            // Handle schema-driven fields via field_path or inventory_data
+            // Parse JSON if not already provided - store in local variable for lifetime
+            let parsed_json_local: Option<serde_json::Value> = if parsed_json.is_none() {
+                item.inventory_data.as_ref()
+                    .and_then(|data_str| serde_json::from_str::<serde_json::Value>(data_str).ok())
+            } else {
+                None
+            };
+            
+            let json_value = parsed_json.or_else(|| parsed_json_local.as_ref());
+            
+            if let Some(json_value) = json_value {
+                if let Some(field_path) = &column.field_path {
+                    extract_from_field_path_cached(json_value, field_path)
+                } else {
+                    // Try to extract from inventory_data using column id
+                    extract_from_json(json_value, &column.id)
+                }
+            } else {
+                String::new()
+            }
+        }
+    }
+}
+
+/// Extract value from JSON using field path
+/// ELITE: Optimized with minimal allocations
+fn extract_from_field_path_cached(json: &serde_json::Value, field_path: &str) -> String {
+    // ELITE: Parse field path once, filter inventory_data prefix
+    let parts: Vec<&str> = field_path.split('.')
+        .filter(|p| *p != "inventory_data")
+        .collect();
+    
+    let mut value = json;
+    for part in parts {
+        if let Some(obj) = value.as_object() {
+            if let Some(next) = obj.get(part) {
+                value = next;
+            } else {
+                return String::new();
+            }
+        } else {
+            return String::new();
+        }
+    }
+    
+    value_to_string(value)
+}
+
+/// Extract value from JSON using column id
+fn extract_from_json(json: &serde_json::Value, column_id: &str) -> String {
+    if let Some(value) = json.get(column_id) {
+        value_to_string(value)
+    } else {
+        String::new()
+    }
+}
+
+/// Convert JSON value to string
+/// ELITE: Optimized with minimal allocations
+fn value_to_string(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.as_str().to_string(),
+        serde_json::Value::Number(n) => {
+            // ELITE: Use number's built-in formatting
+            n.to_string()
+        },
+        serde_json::Value::Bool(b) => {
+            // ELITE: Avoid allocation for boolean
+            if *b { "true" } else { "false" }.to_string()
+        },
+        serde_json::Value::Array(arr) => {
+            // ELITE: Pre-allocate capacity for array join
+            let mut result = String::with_capacity(arr.len() * 10); // Estimate capacity
+            for (i, v) in arr.iter().enumerate() {
+                if i > 0 {
+                    result.push_str(", ");
+                }
+                result.push_str(&value_to_string(v));
+            }
+            result
+        },
+        serde_json::Value::Null => String::new(),
+        _ => String::new(),
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InventoryRow {
@@ -568,5 +709,198 @@ pub fn read_json(
         let rows: Vec<InventoryRow> = serde_json::from_value(json_value)?;
         Ok((rows, None, None))
     }
+}
+
+/// Dynamic XLSX export based on column configuration
+/// ELITE: Schema-driven export - only exports visible columns
+/// Optimized: Parse JSON once per item, reuse for all columns
+pub fn generate_xlsx_dynamic(
+    items: &[crate::InventoryItem],
+    columns: &[ExportColumn],
+    absolute_paths: &[String],
+    case_number: Option<&str>,
+    folder_path: Option<&str>,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+    
+    // Create header format (bold)
+    let header_format = Format::new()
+        .set_bold()
+        .set_border(FormatBorder::Thin);
+    
+    // Write metadata rows if case number or folder path provided
+    let mut current_row = 0;
+    if case_number.is_some() {
+        let title_format = Format::new()
+            .set_bold()
+            .set_font_size(14)
+            .set_align(FormatAlign::Center);
+        
+        let title_text = if let Some(case_no) = case_number {
+            format!("Document Inventory - Case No. {}", case_no)
+        } else {
+            "Document Inventory".to_string()
+        };
+        
+        worksheet.merge_range(current_row, 0, current_row, (columns.len() as u16).saturating_sub(1), &title_text, &title_format)?;
+        current_row += 1;
+        
+        if let Some(folder) = folder_path {
+            let folder_text = format!("Source Folder: {}", folder);
+            worksheet.write_string(current_row, 0, &folder_text)?;
+        }
+        current_row += 1;
+        current_row += 1; // Empty row
+    } else if folder_path.is_some() {
+        if let Some(folder) = folder_path {
+            let folder_text = format!("Source Folder: {}", folder);
+            worksheet.write_string(current_row, 0, &folder_text)?;
+        }
+        current_row += 1;
+        current_row += 1; // Empty row
+    }
+    
+    // Write headers
+    for (col_idx, column) in columns.iter().enumerate() {
+        worksheet.set_column_width(col_idx as u16, 15.0)?;
+        worksheet.write_string_with_format(current_row, col_idx as u16, &column.label, &header_format)?;
+    }
+    current_row += 1;
+    
+    // ELITE: Pre-parse JSON once per item, reuse for all columns
+    // Write data rows
+    for (item_idx, item) in items.iter().enumerate() {
+        // Parse inventory_data JSON once per item (if needed)
+        let parsed_json = item.inventory_data.as_ref()
+            .and_then(|data_str| serde_json::from_str::<serde_json::Value>(data_str).ok());
+        
+        // Get absolute path for this item (for hyperlink support)
+        let absolute_path = absolute_paths.get(item_idx);
+        
+        for (col_idx, column) in columns.iter().enumerate() {
+            let value = extract_field_value(item, column, parsed_json.as_ref());
+            
+            // Create hyperlinks for path-related columns
+            let should_use_hyperlink = match column.id.as_str() {
+                "absolute_path" => {
+                    // Use the item's absolute_path directly
+                    if !item.absolute_path.is_empty() {
+                        let file_url = path_to_file_url(&item.absolute_path);
+                        worksheet.write_url(current_row, col_idx as u16, Url::new(&file_url))?;
+                        true
+                    } else {
+                        false
+                    }
+                },
+                "folder_path" => {
+                    // Use absolute_path if available, otherwise use folder_path as display text
+                    if let Some(abs_path) = absolute_path {
+                        if !abs_path.is_empty() {
+                            let file_url = path_to_file_url(abs_path);
+                            // Use folder_path as display text, but link to absolute_path
+                            worksheet.write_url_with_text(current_row, col_idx as u16, Url::new(&file_url), &value)?;
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                },
+                _ => false,
+            };
+            
+            if !should_use_hyperlink {
+                worksheet.write_string(current_row, col_idx as u16, &value)?;
+            }
+        }
+        current_row += 1;
+    }
+    
+    workbook.save(output_path)?;
+    Ok(())
+}
+
+/// Dynamic CSV export based on column configuration
+/// ELITE: Optimized with JSON parsing cache
+pub fn generate_csv_dynamic(
+    items: &[crate::InventoryItem],
+    columns: &[ExportColumn],
+    _absolute_paths: &[String], // Reserved for future use
+    _case_number: Option<&str>, // CSV doesn't support metadata rows like XLSX
+    folder_path: Option<&str>,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut file = File::create(output_path)?;
+    let mut wtr = csv::Writer::from_writer(&mut file);
+    
+    // Write headers
+    let headers: Vec<&str> = columns.iter().map(|col| col.label.as_str()).collect();
+    wtr.write_record(&headers)?;
+    
+    // ELITE: Pre-parse JSON once per item, reuse for all columns
+    // Write data rows
+    for item in items {
+        // Parse inventory_data JSON once per item (if needed)
+        let parsed_json = item.inventory_data.as_ref()
+            .and_then(|data_str| serde_json::from_str::<serde_json::Value>(data_str).ok());
+        
+        let row: Vec<String> = columns.iter()
+            .map(|col| extract_field_value(item, col, parsed_json.as_ref()))
+            .collect();
+        wtr.write_record(&row)?;
+    }
+    
+    wtr.flush()?;
+    Ok(())
+}
+
+/// Dynamic JSON export based on column configuration
+/// ELITE: Optimized with JSON parsing cache and minimal allocations
+pub fn generate_json_dynamic(
+    items: &[crate::InventoryItem],
+    columns: &[ExportColumn],
+    case_number: Option<&str>,
+    folder_path: Option<&str>,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut export_data = serde_json::Map::new();
+    
+    // Add metadata if provided
+    if case_number.is_some() || folder_path.is_some() {
+        let mut metadata = serde_json::Map::new();
+        if let Some(cn) = case_number {
+            metadata.insert("case_number".to_string(), serde_json::Value::String(cn.to_string()));
+        }
+        if let Some(fp) = folder_path {
+            metadata.insert("folder_path".to_string(), serde_json::Value::String(fp.to_string()));
+        }
+        export_data.insert("metadata".to_string(), serde_json::Value::Object(metadata));
+    }
+    
+    // ELITE: Pre-parse JSON once per item, reuse for all columns
+    // Build items array with only visible columns
+    let items_array: Vec<serde_json::Value> = items.iter().map(|item| {
+        // Parse inventory_data JSON once per item (if needed)
+        let parsed_json = item.inventory_data.as_ref()
+            .and_then(|data_str| serde_json::from_str::<serde_json::Value>(data_str).ok());
+        
+        let mut item_obj = serde_json::Map::new();
+        for column in columns {
+            let value = extract_field_value(item, column, parsed_json.as_ref());
+            item_obj.insert(column.id.clone(), serde_json::Value::String(value));
+        }
+        serde_json::Value::Object(item_obj)
+    }).collect();
+    
+    export_data.insert("items".to_string(), serde_json::Value::Array(items_array));
+    
+    let json_value = serde_json::Value::Object(export_data);
+    let json_string = serde_json::to_string_pretty(&json_value)?;
+    std::fs::write(output_path, json_string)?;
+    
+    Ok(())
 }
 

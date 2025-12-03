@@ -1,7 +1,8 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { ScrollArea } from '../ui/scroll-area';
 import { Input } from '../ui/input';
-import { Search, FileText, Image, File, Folder, ChevronRight, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Search, FileText, Image, File, Folder, ChevronRight, ChevronDown, ChevronsUpDown, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InventoryItem } from '@/types/inventory';
 
@@ -11,6 +12,8 @@ interface FileNavigatorProps {
   onFileSelect: (file: InventoryItem) => void;
   selectedFolderPath?: string | null;
   onFolderSelect?: (folderPath: string | null) => void;
+  navigatorOpen?: boolean;
+  onToggleNavigator?: () => void;
 }
 
 interface FolderNode {
@@ -36,6 +39,8 @@ export function FileNavigator({
   onFileSelect,
   selectedFolderPath,
   onFolderSelect,
+  navigatorOpen = true,
+  onToggleNavigator,
 }: FileNavigatorProps) {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -94,10 +99,20 @@ export function FileNavigator({
       const filtered: FolderNode = {
         name: node.name,
         path: node.path,
-        files: node.files.filter(item =>
-          item.file_name.toLowerCase().includes(query) ||
-          item.document_type?.toLowerCase().includes(query)
-        ),
+        files: node.files.filter(item => {
+          // Helper to get field from inventory_data
+          const getInventoryField = (item: InventoryItem, field: string): string => {
+            if (!item.inventory_data) return '';
+            try {
+              const data = JSON.parse(item.inventory_data);
+              return data[field] || '';
+            } catch {
+              return '';
+            }
+          };
+          return item.file_name.toLowerCase().includes(query) ||
+            getInventoryField(item, 'document_type').toLowerCase().includes(query);
+        }),
         subfolders: new Map(),
       };
 
@@ -260,14 +275,31 @@ export function FileNavigator({
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-border flex-shrink-0 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search folders..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 text-sm"
-          />
+        <div className="relative flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search folders..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-sm"
+            />
+          </div>
+          {onToggleNavigator && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleNavigator}
+              className="h-9 w-9 flex-shrink-0"
+              title={navigatorOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              {navigatorOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
+              )}
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

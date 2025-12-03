@@ -102,15 +102,29 @@ export function SearchBar({ caseId, items, onFileSelect, onNoteSelect, onSearchC
       
       let score = 0;
       
+      // Helper to get field from inventory_data
+      const getInventoryField = (item: InventoryItem, field: string): string => {
+        if (!item.inventory_data) return '';
+        try {
+          const data = JSON.parse(item.inventory_data);
+          return data[field] || '';
+        } catch {
+          return '';
+        }
+      };
+
       // Fast path: check file_name first (most common search target)
       const fileNameLower = item.file_name.toLowerCase();
       if (fileNameLower.includes(lowerQuery)) {
         score += 10;
       } else {
         // Only check other fields if name doesn't match
-        if (item.document_description.toLowerCase().includes(lowerQuery)) score += 5;
-        if (item.document_type.toLowerCase().includes(lowerQuery)) score += 3;
-        if (item.notes.toLowerCase().includes(lowerQuery)) score += 2;
+        const docDesc = getInventoryField(item, 'document_description').toLowerCase();
+        const docType = getInventoryField(item, 'document_type').toLowerCase();
+        const notes = getInventoryField(item, 'notes').toLowerCase();
+        if (docDesc.includes(lowerQuery)) score += 5;
+        if (docType.includes(lowerQuery)) score += 3;
+        if (notes.includes(lowerQuery)) score += 2;
       }
 
       if (score > 0) {
@@ -230,8 +244,6 @@ export function SearchBar({ caseId, items, onFileSelect, onNoteSelect, onSearchC
         align="center"
         sideOffset={8}
         style={{
-          backgroundColor: "hsl(var(--popover))",
-          opacity: 1,
           width: "700px",
           minWidth: "700px",
           maxWidth: "700px",

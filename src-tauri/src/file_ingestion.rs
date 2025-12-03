@@ -4,6 +4,7 @@
 use crate::file_utils::{calculate_file_hash_secure, get_file_metadata_async, metadata_matches};
 use crate::mappings::process_file_metadata;
 use crate::scanner::{FileMetadata as ScannerFileMetadata, compute_additional_fields};
+use crate::database;
 use serde_json;
 use sqlx::{sqlite::SqlitePool, Row};
 use std::path::PathBuf;
@@ -153,16 +154,8 @@ pub async fn process_file_async(
     // ELITE: Compute additional file system fields for generic column support
     let additional_fields = compute_additional_fields(file_metadata);
     
-    // Build comprehensive inventory_data with all computed fields
-    let inventory_data = serde_json::json!({
-        "date_rcvd": "",
-        "doc_year": file_metadata.created_year,
-        "doc_date_range": doc_info.doc_date_range,
-        "document_type": doc_info.document_type,
-        "document_description": doc_info.document_description,
-        "bates_stamp": "",
-        "notes": "",
-        "extracted_date": primary_date,
+    // Build base inventory_data with file system fields and document metadata
+    let mut inventory_data = serde_json::json!({
         // File system basics
         "file_size": file_meta.size,
         "file_extension": additional_fields["file_extension"],
@@ -172,7 +165,91 @@ pub async fn process_file_async(
         "parent_folder": additional_fields["parent_folder"],
         "folder_depth": additional_fields["folder_depth"],
         "file_path_segments": additional_fields["file_path_segments"],
+        // Extracted metadata
+        "extracted_date": primary_date,
+        // Document metadata (from filename analysis)
+        "document_type": doc_info.document_type,
+        "document_description": doc_info.document_description,
+        "doc_date_range": doc_info.doc_date_range,
     });
+    
+    // ELITE: Apply schema mappings to extract custom field values
+    // Load mapping config for this case (or global if no case-specific)
+    if let Ok(Some(mapping_config_json)) = database::get_mapping_config(pool, Some(&case_id)).await {
+        if let Ok(mapping_config) = serde_json::from_str::<serde_json::Value>(&mapping_config_json) {
+            if let Some(mappings) = mapping_config.get("mappings").and_then(|m| m.as_array()) {
+                // Create regex cache for performance
+                let mut regex_cache = crate::field_extraction::RegexCache::new();
+                
+                // Build metadata map for extraction
+                let mut metadata_map = std::collections::HashMap::new();
+                metadata_map.insert("file_name".to_string(), file_metadata.file_name.clone());
+                metadata_map.insert("folder_name".to_string(), file_metadata.folder_path.split('/').last().unwrap_or("").to_string());
+                metadata_map.insert("folder_path".to_string(), file_metadata.folder_path.clone());
+                
+                // Apply each enabled mapping
+                for mapping in mappings {
+                    if let Some(enabled) = mapping.get("enabled").and_then(|e| e.as_bool()) {
+                        if !enabled {
+                            continue;
+                        }
+                        
+                        // Extract mapping details
+                        if let (Some(column_id), Some(source_type), Some(extraction_method)) = (
+                            mapping.get("columnId").and_then(|c| c.as_str()),
+                            mapping.get("sourceType").and_then(|s| s.as_str()),
+                            mapping.get("extractionMethod").and_then(|e| e.as_str()),
+                        ) {
+                            // Convert to FieldMappingRule format
+                            let rule = crate::field_extraction::FieldMappingRule {
+                                source_type: source_type.to_string(),
+                                extraction_method: match extraction_method {
+                                    "direct" => crate::field_extraction::ExtractionMethod::Direct,
+                                    "pattern" => crate::field_extraction::ExtractionMethod::Pattern,
+                                    "date" => crate::field_extraction::ExtractionMethod::Date,
+                                    "number" => crate::field_extraction::ExtractionMethod::Number,
+                                    "text_before" => crate::field_extraction::ExtractionMethod::TextBefore,
+                                    "text_after" => crate::field_extraction::ExtractionMethod::TextAfter,
+                                    "text_between" => crate::field_extraction::ExtractionMethod::TextBetween,
+                                    _ => crate::field_extraction::ExtractionMethod::Direct,
+                                },
+                                pattern: mapping.get("patternConfig").and_then(|p| {
+                                    if let (Some(pattern), Some(flags), Some(group)) = (
+                                        p.get("pattern").and_then(|pat| pat.as_str()),
+                                        p.get("flags").and_then(|f| f.as_str()),
+                                        p.get("group").and_then(|g| g.as_u64()),
+                                    ) {
+                                        Some(crate::field_extraction::ExtractionPattern {
+                                            pattern: pattern.to_string(),
+                                            flags: if flags.is_empty() { None } else { Some(flags.to_string()) },
+                                            group: Some(group as usize),
+                                            format: p.get("format").and_then(|f| f.as_str()).map(|s| s.to_string()),
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                }),
+                                target_field: column_id.to_string(),
+                            };
+                            
+                            // Apply mapping rule to extract value
+                            if let Ok(Some(extracted_value)) = crate::field_extraction::apply_mapping_rule(
+                                &rule,
+                                &file_metadata.file_name,
+                                &metadata_map.get("folder_name").unwrap_or(&String::new()),
+                                &file_metadata.folder_path,
+                                &metadata_map,
+                                &mut regex_cache,
+                            ) {
+                                // Store extracted value in inventory_data
+                                inventory_data[column_id] = serde_json::Value::String(extracted_value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     
     // Add file hash if available (will be computed later if needed)
     // Note: file_hash is stored in files table, not inventory_data

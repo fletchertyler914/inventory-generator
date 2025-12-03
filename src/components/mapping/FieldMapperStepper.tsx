@@ -128,9 +128,9 @@ export function FieldMapperStepper({
       extractionMethod: extractionMethod as ExtractionMethod,
       ...(extractionMethod !== 'direct' && pattern ? {
         patternConfig: {
-          pattern,
-          ...(patternFlags && { flags: patternFlags }),
-          group: 0,
+        pattern,
+        ...(patternFlags && { flags: patternFlags }),
+        group: 0,
         }
       } : {}),
       enabled: true,
