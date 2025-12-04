@@ -14,7 +14,7 @@ interface CaseWithFileCount extends Case {
 
 interface CaseListCardProps {
   case_: CaseWithFileCount;
-  currentCaseId?: string;
+  currentCaseId?: string | undefined;
   loadingFileCount?: boolean;
   onSelect: (case_: Case) => void;
   onEdit: (case_: Case, e: React.MouseEvent) => void;
@@ -41,15 +41,16 @@ export const CaseListCard = memo(function CaseListCard({
     return (
       <div
         className={cn(
-          "group flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all duration-200",
+          "group flex items-center gap-4 p-4 rounded-lg border cursor-pointer transition-all duration-200",
+          "border-border/40 dark:border-border/50",
           "hover:shadow-md hover:shadow-primary/5 hover:-translate-y-0.5",
-          "hover:border-primary/20",
-          isSelected && "ring-2 ring-primary border-primary/30 shadow-md shadow-primary/10 bg-primary/5",
-          isRecent && "bg-primary/5 border-primary/10"
+          "hover:border-primary/60 dark:hover:border-primary/50",
+          isSelected && "ring-2 ring-primary border-primary dark:border-primary shadow-md shadow-primary/10 bg-primary/5",
+          isRecent && "bg-primary/5 border-primary/20 dark:border-primary/30"
         )}
         onClick={() => onSelect(case_)}
       >
-        <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors flex-shrink-0">
+        <div className="p-2 rounded-lg bg-primary/10 border border-primary/30 dark:border-primary/40 group-hover:bg-primary/20 transition-colors flex-shrink-0">
           <Briefcase className="h-5 w-5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
@@ -80,18 +81,6 @@ export const CaseListCard = memo(function CaseListCard({
           </div>
         </div>
         <div className="flex items-center gap-4 flex-shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-medium">
-            {loadingFileCount ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-foreground">
-                  {case_.fileCount !== undefined ? case_.fileCount.toLocaleString() : '—'}
-                </span>
-              </>
-            )}
-          </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
               variant="ghost"
@@ -104,11 +93,23 @@ export const CaseListCard = memo(function CaseListCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
               onClick={(e) => onDelete(case_, e)}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-medium">
+            {loadingFileCount ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-foreground">
+                  {case_.fileCount !== undefined ? case_.fileCount.toLocaleString() : '—'}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -120,9 +121,9 @@ export const CaseListCard = memo(function CaseListCard({
       className={cn(
         "group cursor-pointer transition-all duration-200",
         "hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1",
-        "border-2 hover:border-primary/20",
-        isSelected && "ring-2 ring-primary border-primary/30 shadow-lg shadow-primary/10",
-        isRecent && "bg-primary/5 border-primary/10"
+        "border-border/40 dark:border-border/50 hover:border-primary/60 dark:hover:border-primary/50",
+        isSelected && "ring-2 ring-primary border-primary dark:border-primary shadow-lg shadow-primary/10",
+        isRecent && "bg-primary/5 border-primary/20 dark:border-primary/30"
       )}
       onClick={() => onSelect(case_)}
     >
@@ -130,7 +131,7 @@ export const CaseListCard = memo(function CaseListCard({
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
-              <div className="p-1.5 rounded-md bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors">
+              <div className="p-1.5 rounded-md bg-primary/10 border border-primary/30 dark:border-primary/40 group-hover:bg-primary/20 transition-colors">
                 <Briefcase className="h-4 w-4 text-primary" />
               </div>
               <CardTitle className="text-lg font-bold truncate group-hover:text-primary transition-colors">
@@ -150,24 +151,6 @@ export const CaseListCard = memo(function CaseListCard({
                   : 'No sources'}
               </span>
             </CardDescription>
-          </div>
-          <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={(e) => onEdit(case_, e)}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={(e) => onDelete(case_, e)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
           </div>
         </div>
       </CardHeader>
@@ -202,18 +185,38 @@ export const CaseListCard = memo(function CaseListCard({
               <span>{relativeTime || format(new Date(case_.last_opened_at * 1000), 'MMM d, yyyy')}</span>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-medium">
-            {loadingFileCount ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-foreground">
-                  {case_.fileCount !== undefined ? case_.fileCount.toLocaleString() : '—'}
-                </span>
-                <span className="text-muted-foreground">files</span>
-              </>
-            )}
+          <div className="flex items-center gap-4">
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => onEdit(case_, e)}
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                onClick={(e) => onDelete(case_, e)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-medium">
+              {loadingFileCount ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : (
+                <>
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-foreground">
+                    {case_.fileCount !== undefined ? case_.fileCount.toLocaleString() : '—'}
+                  </span>
+                  <span className="text-muted-foreground">files</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>

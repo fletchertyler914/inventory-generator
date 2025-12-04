@@ -5,7 +5,6 @@ import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
 import { SettingsDialog } from '../SettingsDialog';
 import { Skeleton } from '../ui/skeleton';
-import { cn } from '@/lib/utils';
 import { caseService } from '@/services/caseService';
 import { fileService } from '@/services/fileService';
 import type { Case } from '@/types/case';
@@ -39,7 +38,6 @@ interface CaseWithFileCount extends Case {
 
 type SortOption = 'recent' | 'name' | 'created' | 'files';
 
-const VIRTUALIZATION_THRESHOLD = 50;
 const ADAPTIVE_LIST_THRESHOLD = 20;
 const RECENT_CASES_DAYS = 7;
 const MAX_RECENT_CASES = 5;
@@ -65,11 +63,18 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
   const [sortOption, setSortOption] = useState<SortOption>('recent');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const hasAutoSwitchedRef = useRef(false);
 
-  // Auto-switch to list view for 20+ cases
+  // Auto-switch to list view for 20+ cases (only once on initial load)
   useEffect(() => {
-    if (cases.length >= ADAPTIVE_LIST_THRESHOLD && viewMode === 'grid') {
-      setViewMode('list');
+    if (cases.length >= ADAPTIVE_LIST_THRESHOLD) {
+      if (!hasAutoSwitchedRef.current && viewMode === 'grid') {
+        setViewMode('list');
+        hasAutoSwitchedRef.current = true;
+      }
+    } else {
+      // Reset the ref when cases drop below threshold
+      hasAutoSwitchedRef.current = false;
     }
   }, [cases.length, viewMode]);
 

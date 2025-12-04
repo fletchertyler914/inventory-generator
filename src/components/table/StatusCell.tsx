@@ -46,14 +46,15 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "inline-flex items-center justify-center gap-2 h-7 px-3 text-xs font-normal rounded-md transition-all",
+            "inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-normal rounded-md transition-all",
             "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            "bg-muted/50 hover:bg-muted border border-border/50",
+            "bg-muted/50 hover:bg-muted border border-border/50 flex-shrink-0",
+            "min-w-[100px] max-w-[140px]",
             currentStatus?.color
           )}
         >
-          {currentStatus?.label || "Unreviewed"}
-          <ChevronDown className="ml-1 h-3 w-3 opacity-50 dark:opacity-70" />
+          <span className="truncate">{currentStatus?.label || "Unreviewed"}</span>
+          <ChevronDown className="h-3 w-3 opacity-50 dark:opacity-70 flex-shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent 

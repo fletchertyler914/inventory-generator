@@ -308,8 +308,6 @@ export function ColumnManager({
       <FieldMapperStepper
         open={showMapper}
         onOpenChange={setShowMapper}
-        columns={localConfig.columns}
-        onColumnCreated={handleColumnCreated}
         {...(caseId !== undefined && { caseId })}
         sampleData={{
           file_name: 'example_file_2024.pdf',

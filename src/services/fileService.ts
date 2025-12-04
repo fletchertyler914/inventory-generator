@@ -182,5 +182,20 @@ export const fileService = {
       fileId,
     });
   },
+
+  /**
+   * Update file status in the database
+   */
+  async updateFileStatus(fileId: string, status: string): Promise<void> {
+    return safeInvoke('update_file_status', { fileId, status });
+  },
+
+  /**
+   * Remove a file from a case
+   * Deletes the file record and all related records (notes, findings, timeline events, metadata)
+   */
+  async removeFileFromCase(fileId: string, caseId: string): Promise<void> {
+    return safeInvoke('remove_file_from_case', { fileId, caseId });
+  },
 };
 

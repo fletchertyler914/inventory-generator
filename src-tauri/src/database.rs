@@ -451,6 +451,88 @@ pub async fn save_app_setting(
     Ok(())
 }
 
+/// Workspace preferences structure
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WorkspacePreferences {
+    pub view_mode: String, // "split" or "table"
+    pub report_mode: bool,
+    pub notes_visible: bool,
+    pub findings_visible: bool,
+    pub timeline_visible: bool,
+    pub navigator_open: bool,
+}
+
+/// Get workspace preferences for a case
+pub async fn get_workspace_preferences(
+    pool: &SqlitePool,
+    case_id: &str,
+) -> Result<Option<WorkspacePreferences>, String> {
+    let row = sqlx::query(
+        r#"
+        SELECT view_mode, report_mode, notes_visible, findings_visible, timeline_visible, navigator_open
+        FROM workspace_preferences
+        WHERE case_id = ?
+        "#
+    )
+    .bind(case_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("Failed to get workspace preferences: {}", e))?;
+
+    if let Some(row) = row {
+        Ok(Some(WorkspacePreferences {
+            view_mode: row.get("view_mode"),
+            report_mode: row.get::<i64, _>("report_mode") != 0,
+            notes_visible: row.get::<i64, _>("notes_visible") != 0,
+            findings_visible: row.get::<i64, _>("findings_visible") != 0,
+            timeline_visible: row.get::<i64, _>("timeline_visible") != 0,
+            navigator_open: row.get::<i64, _>("navigator_open") != 0,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Save workspace preferences for a case
+pub async fn save_workspace_preferences(
+    pool: &SqlitePool,
+    case_id: &str,
+    prefs: &WorkspacePreferences,
+) -> Result<(), String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let prefs_id = format!("workspace_prefs_{}", case_id);
+
+    sqlx::query(
+        r#"
+        INSERT OR REPLACE INTO workspace_preferences
+        (id, case_id, view_mode, report_mode, notes_visible, findings_visible, timeline_visible, navigator_open, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 
+            COALESCE((SELECT created_at FROM workspace_preferences WHERE case_id = ?), ?),
+            ?)
+        "#
+    )
+    .bind(&prefs_id)
+    .bind(case_id)
+    .bind(&prefs.view_mode)
+    .bind(if prefs.report_mode { 1 } else { 0 })
+    .bind(if prefs.notes_visible { 1 } else { 0 })
+    .bind(if prefs.findings_visible { 1 } else { 0 })
+    .bind(if prefs.timeline_visible { 1 } else { 0 })
+    .bind(if prefs.navigator_open { 1 } else { 0 })
+    .bind(case_id)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to save workspace preferences: {}", e))?;
+
+    Ok(())
+}
+
 /// Initialize database with migrations
 /// 
 /// ELITE PERFORMANCE OPTIMIZATIONS:
@@ -506,6 +588,7 @@ pub fn get_migrations() -> Vec<Migration> {
                     status TEXT DEFAULT 'unreviewed',
                     tags TEXT,
                     source_directory TEXT,
+                    deleted_at INTEGER,
                     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
                 );
 
@@ -597,6 +680,21 @@ pub fn get_migrations() -> Vec<Migration> {
                     updated_at INTEGER NOT NULL
                 );
 
+                -- Table for workspace preferences (per-case UI state)
+                CREATE TABLE IF NOT EXISTS workspace_preferences (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL UNIQUE,
+                    view_mode TEXT DEFAULT 'table', -- 'split' or 'table'
+                    report_mode INTEGER DEFAULT 0, -- 0 = false, 1 = true
+                    notes_visible INTEGER DEFAULT 0,
+                    findings_visible INTEGER DEFAULT 0,
+                    timeline_visible INTEGER DEFAULT 0,
+                    navigator_open INTEGER DEFAULT 1,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+                );
+
                 -- ELITE: Performance indexes optimized for 100k+ files and enterprise-scale workloads
                 
                 -- Single column indexes (foreign keys and frequently filtered columns)
@@ -605,6 +703,7 @@ pub fn get_migrations() -> Vec<Migration> {
                 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(file_hash);
                 CREATE INDEX IF NOT EXISTS idx_files_absolute_path ON files(absolute_path);
                 CREATE INDEX IF NOT EXISTS idx_files_file_name ON files(file_name); -- For ORDER BY file_name
+                CREATE INDEX IF NOT EXISTS idx_files_deleted_at ON files(deleted_at);
                 CREATE INDEX IF NOT EXISTS idx_notes_case_id ON notes(case_id);
                 CREATE INDEX IF NOT EXISTS idx_notes_file_id ON notes(file_id);
                 CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at); -- For ORDER BY created_at
@@ -620,11 +719,13 @@ pub fn get_migrations() -> Vec<Migration> {
                 CREATE INDEX IF NOT EXISTS idx_cases_last_opened_at ON cases(last_opened_at); -- For ORDER BY last_opened_at DESC
                 CREATE INDEX IF NOT EXISTS idx_column_configs_case_id ON column_configs(case_id);
                 CREATE INDEX IF NOT EXISTS idx_mapping_configs_case_id ON mapping_configs(case_id);
+                CREATE INDEX IF NOT EXISTS idx_workspace_preferences_case_id ON workspace_preferences(case_id);
                 
                 -- ELITE: Composite indexes for common query patterns (optimized column order)
                 -- Column order matters: most selective first, then ordering columns
                 CREATE INDEX IF NOT EXISTS idx_files_case_id_status ON files(case_id, status);
                 CREATE INDEX IF NOT EXISTS idx_files_case_id_name ON files(case_id, file_name); -- Covering index for ORDER BY file_name
+                CREATE INDEX IF NOT EXISTS idx_files_case_id_active ON files(case_id, deleted_at) WHERE deleted_at IS NULL;
                 CREATE INDEX IF NOT EXISTS idx_notes_case_file ON notes(case_id, file_id);
                 CREATE INDEX IF NOT EXISTS idx_notes_case_pinned_created ON notes(case_id, pinned DESC, created_at DESC); -- Covering index for ORDER BY pinned DESC, created_at DESC
                 CREATE INDEX IF NOT EXISTS idx_timeline_case_date_created ON timeline_events(case_id, event_date ASC, created_at ASC); -- Covering index for ORDER BY event_date ASC, created_at ASC

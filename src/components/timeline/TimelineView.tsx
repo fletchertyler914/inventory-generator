@@ -12,9 +12,10 @@ import { CreateTimelineEventDialog } from './CreateTimelineEventDialog';
 
 interface TimelineViewProps {
   caseId: string;
+  currentFileId?: string;
 }
 
-export function TimelineView({ caseId }: TimelineViewProps) {
+export function TimelineView({ caseId, currentFileId }: TimelineViewProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -159,9 +160,17 @@ export function TimelineView({ caseId }: TimelineViewProps) {
                   <CardContent className="pt-0 space-y-3">
                     {group.events.map((event) => {
                       const isEditing = editingEventId === event.id;
+                      const isActive = currentFileId && event.source_file_id === currentFileId;
                       
                       return (
-                        <div key={event.id} className="p-3 rounded-lg border border-border bg-background">
+                        <div 
+                          key={event.id} 
+                          className={`p-3 rounded-lg border bg-background border-border/40 dark:border-border/50 ${
+                            isActive 
+                              ? 'bg-primary/5 border-l-2 border-l-primary/30 dark:bg-primary/10' 
+                              : ''
+                          }`}
+                        >
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               {event.event_type === 'auto' && (

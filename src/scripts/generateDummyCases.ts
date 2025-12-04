@@ -79,7 +79,7 @@ export async function generateDummyCases(count?: number): Promise<void> {
         `cloud://test-bucket/cases/${config.caseId || config.name.replace(/\s+/g, '-').toLowerCase()}/documents/`
       ];
 
-      const case_ = await caseService.createCase(
+      await caseService.createCase(
         config.name,
         sources,
         config.caseId,
@@ -119,14 +119,19 @@ export async function generateRandomCases(count: number): Promise<void> {
   const clients = ['Acme Corp', 'TechCo Inc', 'Smith & Associates', 'Manufacturing Corp', 'Financial Services Group', 'Health Systems Inc'];
   const deploymentModes: ('local' | 'cloud')[] = ['local', 'cloud'];
 
-  const cases: DummyCaseConfig[] = Array.from({ length: count }, (_, i) => ({
-    name: `Test Case ${i + 1}`,
-    caseId: `TEST-${String(i + 1).padStart(4, '0')}`,
-    department: departments[i % departments.length],
-    client: clients[i % clients.length],
-    deploymentMode: deploymentModes[i % deploymentModes.length],
-    daysAgo: Math.floor(Math.random() * 90), // Random days ago (0-90)
-  }));
+  const cases: DummyCaseConfig[] = Array.from({ length: count }, (_, i) => {
+    const department = departments[i % departments.length];
+    const client = clients[i % clients.length];
+    const deploymentMode = deploymentModes[i % deploymentModes.length];
+    return {
+      name: `Test Case ${i + 1}`,
+      caseId: `TEST-${String(i + 1).padStart(4, '0')}`,
+      ...(department && { department }),
+      ...(client && { client }),
+      ...(deploymentMode && { deploymentMode }),
+      daysAgo: Math.floor(Math.random() * 90), // Random days ago (0-90)
+    };
+  });
 
   // Temporarily replace DUMMY_CASES
   const originalCases = DUMMY_CASES;

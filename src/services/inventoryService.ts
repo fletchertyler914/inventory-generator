@@ -7,17 +7,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core"
-import { openPath } from "@tauri-apps/plugin-opener"
 import type { InventoryItem } from "@/types/inventory"
-
-/**
- * Result type for import operations
- */
-export interface ImportResult {
-  items: InventoryItem[]
-  case_number: string | null
-  folder_path: string | null
-}
 
 /**
  * Counts files in a directory without loading metadata (fast)
@@ -88,31 +78,6 @@ export async function exportInventory(
 }
 
 /**
- * Imports inventory from a file
- * 
- * @param filePath - Full path to the inventory file to import
- * @param format - Optional format hint ("xlsx", "csv", "json"). Auto-detected if not provided
- * @returns Promise resolving to ImportResult with items and metadata
- * @throws Error if import fails or format is unsupported
- * 
- * @example
- * ```ts
- * const result = await importInventory("/path/to/inventory.xlsx")
- * setItems(result.items)
- * if (result.case_number) setCaseNumber(result.case_number)
- * ```
- */
-export async function importInventory(
-  filePath: string,
-  format?: string
-): Promise<ImportResult> {
-  return invoke<ImportResult>("import_inventory", {
-    filePath,
-    format,
-  })
-}
-
-/**
  * Syncs inventory with folder contents
  * 
  * Preserves user edits to existing items and adds new files.
@@ -139,18 +104,3 @@ export async function syncInventory(
   })
 }
 
-/**
- * Opens a folder in the system file explorer
- * 
- * @param folderPath - Absolute path to the folder to open
- * @returns Promise that resolves when the folder is opened
- * @throws Error if the folder cannot be opened
- * 
- * @example
- * ```ts
- * await openFolder("/path/to/documents")
- * ```
- */
-export async function openFolder(folderPath: string): Promise<void> {
-  return openPath(folderPath)
-}

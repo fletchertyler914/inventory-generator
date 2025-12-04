@@ -1,18 +1,25 @@
 import { useState, useCallback, useEffect, useMemo } from "react"
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels"
-import { FileText } from "lucide-react"
+import { FileText, ChevronRight } from "lucide-react"
+import { Button } from "../ui/button"
 import { CaseHeader } from "./CaseHeader"
 import { FileNavigator } from "./FileNavigator"
 import { IntegratedFileViewer } from "./IntegratedFileViewer"
 import { NotePanel } from "../notes/NotePanel"
 import { FindingsPanel } from "../findings/FindingsPanel"
 import { TimelineView } from "../timeline/TimelineView"
-import { InventoryTable } from "../InventoryTable"
+import { WorkflowBoard } from "../board/WorkflowBoard"
 import { ProgressDashboard } from "../dashboard/ProgressDashboard"
-import { getColumnConfig, type TableColumnConfig } from "@/types/tableColumns"
+import { ReportGenerator } from "../reports/ReportGenerator"
+import { ReportView } from "../reports/ReportView"
+import { workspacePreferencesService } from "@/services/workspacePreferencesService"
+import { useDebounce } from "@/hooks/useDebounce"
 import { getStoreValue, setStoreValue } from "@/lib/store-utils"
+import { cn } from "@/lib/utils"
 import type { Case } from "@/types/case"
 import type { InventoryItem } from "@/types/inventory"
+import { fileService } from "@/services/fileService"
+import { toast } from "@/hooks/useToast"
 
 interface CaseWorkspaceProps {
   case: Case
@@ -54,42 +61,52 @@ export function CaseWorkspace({
 }: CaseWorkspaceProps) {
   const [viewingFile, setViewingFile] = useState<InventoryItem | null>(null)
   // Track last selected file before switching to timeline (for restoration)
-  const [lastSelectedFile, setLastSelectedFile] = useState<InventoryItem | null>(null)
-  // Default to table view for better initial experience - switch to split when file is selected
-  const [viewMode, setViewMode] = useState<"split" | "table" | "timeline">("table")
+  const [_lastSelectedFile, setLastSelectedFile] = useState<InventoryItem | null>(null)
+  
+  // Workspace preferences state (loaded from database)
+  const [viewMode, setViewMode] = useState<"split" | "table">("table")
+  const [reportMode, setReportMode] = useState<boolean>(false)
   const [navigatorOpen, setNavigatorOpen] = useState(true)
-  const [lastFileLoaded, setLastFileLoaded] = useState<boolean>(false)
-  const [columnConfig, setColumnConfig] = useState<TableColumnConfig>(() =>
-    getColumnConfig(case_.id)
-  )
-
-  // Pane visibility state (stored in Tauri store per case)
-  const [tableVisible, setTableVisible] = useState<boolean>(true)
   const [notesVisible, setNotesVisible] = useState<boolean>(false)
   const [findingsVisible, setFindingsVisible] = useState<boolean>(false)
   const [timelineVisible, setTimelineVisible] = useState<boolean>(false)
-  const [panesLoaded, setPanesLoaded] = useState<boolean>(false)
+  const [preferencesLoaded, setPreferencesLoaded] = useState<boolean>(false)
+  
+  // Report generation dialog state
+  const [reportDialogOpen, setReportDialogOpen] = useState<boolean>(false)
 
-  // Load pane visibility and last selected file from Tauri store on mount
+  const [lastFileLoaded, setLastFileLoaded] = useState<boolean>(false)
+
+  // Load workspace preferences from database on mount
   useEffect(() => {
     let mounted = true
 
-    const loadPanesAndLastFile = async () => {
+    const loadPreferences = async () => {
       try {
-        const [table, notes, findings, timeline, lastFilePath] = await Promise.all([
-          getStoreValue<boolean>(`casespace-pane-table-${case_.id}`, true, "settings"),
-          getStoreValue<boolean>(`casespace-pane-notes-${case_.id}`, false, "settings"),
-          getStoreValue<boolean>(`casespace-pane-findings-${case_.id}`, false, "settings"),
-          getStoreValue<boolean>(`casespace-pane-timeline-${case_.id}`, false, "settings"),
+        const [prefs, lastFilePath] = await Promise.all([
+          workspacePreferencesService.getPreferences(case_.id),
           getStoreValue<string | null>(`casespace-last-file-${case_.id}`, null, "settings"),
         ])
-
+        const defaults = workspacePreferencesService.getDefaultPreferences()
+        
         if (mounted) {
-          setTableVisible(table)
-          setNotesVisible(notes)
-          setFindingsVisible(findings)
-          setTimelineVisible(timeline)
-          setPanesLoaded(true)
+          if (prefs) {
+            setViewMode(prefs.view_mode)
+            setReportMode(prefs.report_mode)
+            setNavigatorOpen(prefs.navigator_open)
+            setNotesVisible(prefs.notes_visible)
+            setFindingsVisible(prefs.findings_visible)
+            setTimelineVisible(prefs.timeline_visible)
+          } else {
+            // Use defaults if no preferences found
+            setViewMode(defaults.view_mode)
+            setReportMode(defaults.report_mode)
+            setNavigatorOpen(defaults.navigator_open)
+            setNotesVisible(defaults.notes_visible)
+            setFindingsVisible(defaults.findings_visible)
+            setTimelineVisible(defaults.timeline_visible)
+          }
+          setPreferencesLoaded(true)
 
           // Load last selected file if it exists
           if (lastFilePath) {
@@ -101,54 +118,71 @@ export function CaseWorkspace({
           setLastFileLoaded(true)
         }
       } catch (error) {
-        console.error("Failed to load pane visibility from store:", error)
+        console.error("Failed to load workspace preferences:", error)
         if (mounted) {
-          setPanesLoaded(true)
+          const defaults = workspacePreferencesService.getDefaultPreferences()
+          setViewMode(defaults.view_mode)
+          setReportMode(defaults.report_mode)
+          setNavigatorOpen(defaults.navigator_open)
+          setNotesVisible(defaults.notes_visible)
+          setFindingsVisible(defaults.findings_visible)
+          setTimelineVisible(defaults.timeline_visible)
+          setPreferencesLoaded(true)
           setLastFileLoaded(true)
         }
       }
     }
 
-    loadPanesAndLastFile()
+    loadPreferences()
 
     return () => {
       mounted = false
     }
   }, [case_.id, items])
 
-  // ELITE UX: Contextual filtering - default to unreviewed (what needs work)
-  const [statusFilter, setStatusFilter] = useState<TableFilter>("unreviewed")
+  // No status filter - swimlanes organize by status automatically
+  const [statusFilter] = useState<TableFilter>("all")
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState<string>("")
 
-  // Save pane visibility to Tauri store
-  useEffect(() => {
-    if (!panesLoaded) return // Don't save during initial load
-    setStoreValue(`casespace-pane-table-${case_.id}`, tableVisible, "settings").catch(
-      console.error
-    )
-  }, [tableVisible, case_.id, panesLoaded])
+  // Debounce preferences for saving
+  const debouncedViewMode = useDebounce(viewMode, 500)
+  const debouncedReportMode = useDebounce(reportMode, 500)
+  const debouncedNavigatorOpen = useDebounce(navigatorOpen, 500)
+  const debouncedNotesVisible = useDebounce(notesVisible, 500)
+  const debouncedFindingsVisible = useDebounce(findingsVisible, 500)
+  const debouncedTimelineVisible = useDebounce(timelineVisible, 500)
 
+  // Save preferences to database (debounced)
   useEffect(() => {
-    if (!panesLoaded) return // Don't save during initial load
-    setStoreValue(`casespace-pane-notes-${case_.id}`, notesVisible, "settings").catch(
-      console.error
-    )
-  }, [notesVisible, case_.id, panesLoaded])
+    if (!preferencesLoaded) return // Don't save during initial load
 
-  useEffect(() => {
-    if (!panesLoaded) return // Don't save during initial load
-    setStoreValue(`casespace-pane-findings-${case_.id}`, findingsVisible, "settings").catch(
-      console.error
-    )
-  }, [findingsVisible, case_.id, panesLoaded])
+    const savePreferences = async () => {
+      try {
+        await workspacePreferencesService.savePreferences(case_.id, {
+          view_mode: debouncedViewMode,
+          report_mode: debouncedReportMode,
+          navigator_open: debouncedNavigatorOpen,
+          notes_visible: debouncedNotesVisible,
+          findings_visible: debouncedFindingsVisible,
+          timeline_visible: debouncedTimelineVisible,
+        })
+      } catch (error) {
+        console.error("Failed to save workspace preferences:", error)
+      }
+    }
 
-  useEffect(() => {
-    if (!panesLoaded) return // Don't save during initial load
-    setStoreValue(`casespace-pane-timeline-${case_.id}`, timelineVisible, "settings").catch(
-      console.error
-    )
-  }, [timelineVisible, case_.id, panesLoaded])
+    savePreferences()
+  }, [
+    case_.id,
+    debouncedViewMode,
+    debouncedReportMode,
+    debouncedNavigatorOpen,
+    debouncedNotesVisible,
+    debouncedFindingsVisible,
+    debouncedTimelineVisible,
+    preferencesLoaded,
+  ])
 
   // Keyboard shortcuts for pane toggles
   useEffect(() => {
@@ -160,13 +194,6 @@ export function CaseWorkspace({
       if (isInput) return
 
       const modifier = navigator.platform.toUpperCase().indexOf("MAC") >= 0 ? e.metaKey : e.ctrlKey
-
-      // Cmd/Ctrl + B: Toggle table
-      if (modifier && e.key.toLowerCase() === "b") {
-        e.preventDefault()
-        setTableVisible((prev: boolean) => !prev)
-        return
-      }
 
       // Cmd/Ctrl + N: Toggle notes
       if (modifier && e.key.toLowerCase() === "n") {
@@ -180,26 +207,12 @@ export function CaseWorkspace({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  // Reload column config when case changes
-  useEffect(() => {
-    setColumnConfig(getColumnConfig(case_.id))
-  }, [case_.id])
 
-  // ELITE UX: Filter items based on context (status, folder, search)
+  // Filter items based on folder and search (status filtering handled by swimlanes)
   const filteredItems = useMemo(() => {
     let filtered = [...items]
 
-    // Apply status filter (default: unreviewed)
-    // "unreviewed" includes files with null/undefined status (catch-all for unprocessed files)
-    if (statusFilter !== "all") {
-      if (statusFilter === "unreviewed") {
-        // Include files with null/undefined status OR explicitly marked as unreviewed
-        filtered = filtered.filter((item) => !item.status || item.status === "unreviewed")
-      } else {
-        // For other statuses, only show files explicitly marked with that status
-        filtered = filtered.filter((item) => item.status === statusFilter)
-      }
-    }
+    // No status filter - swimlanes organize by status automatically
 
     // Apply folder filter (when folder selected in navigator)
     if (selectedFolderPath) {
@@ -208,14 +221,14 @@ export function CaseWorkspace({
 
     // Helper to get field from inventory_data
     const getInventoryField = (item: InventoryItem, field: string): string => {
-      if (!item.inventory_data) return '';
+      if (!item.inventory_data) return ""
       try {
-        const data = JSON.parse(item.inventory_data);
-        return data[field] || '';
+        const data = JSON.parse(item.inventory_data)
+        return data[field] || ""
       } catch {
-        return '';
+        return ""
       }
-    };
+    }
 
     // Apply search filter (when search active)
     if (searchQuery.trim()) {
@@ -223,8 +236,8 @@ export function CaseWorkspace({
       filtered = filtered.filter(
         (item) =>
           item.file_name.toLowerCase().includes(query) ||
-          getInventoryField(item, 'document_description').toLowerCase().includes(query) ||
-          getInventoryField(item, 'document_type').toLowerCase().includes(query) ||
+          getInventoryField(item, "document_description").toLowerCase().includes(query) ||
+          getInventoryField(item, "document_type").toLowerCase().includes(query) ||
           item.folder_path.toLowerCase().includes(query)
       )
     }
@@ -241,24 +254,12 @@ export function CaseWorkspace({
       parts.push(`Folder: ${folderName}`)
     }
 
-    if (statusFilter !== "all") {
-      const statusLabels: Record<TableFilter, string> = {
-        unreviewed: "Unreviewed",
-        in_progress: "In Progress",
-        reviewed: "Reviewed",
-        flagged: "Flagged",
-        finalized: "Finalized",
-        all: "All",
-      }
-      parts.push(statusLabels[statusFilter])
-    }
-
     if (searchQuery.trim()) {
       parts.push(`Search: "${searchQuery}"`)
     }
 
-    return parts.length > 0 ? parts.join(" • ") : "All Files"
-  }, [selectedFolderPath, statusFilter, searchQuery])
+    return parts.length > 0 ? parts.join(" • ") : "All workflow states"
+  }, [selectedFolderPath, searchQuery])
 
   const handleFileSelect = useCallback(
     async (file: InventoryItem) => {
@@ -272,23 +273,18 @@ export function CaseWorkspace({
           console.error("Failed to save last selected file:", error)
         }
       }
-      // Automatically switch to split view when a file is selected
+      // Automatically switch to review mode when a file is selected
       setViewMode("split")
-      // Hide table panel by default when file is selected
-      setTableVisible(false)
       // Show notes panel when file is selected (if not already visible)
       if (!notesVisible && file) {
         setNotesVisible(true)
       }
-      // Close timeline if open (file view takes priority)
-      if (timelineVisible) {
-        setTimelineVisible(false)
-      }
+      // Timeline can stay open alongside file view
     },
     [notesVisible, timelineVisible, case_.id, lastFileLoaded]
   )
 
-  // Reset to table view when file is closed
+  // Reset to board view when file is closed
   const handleFileClose = useCallback(() => {
     setViewingFile(null)
     setViewMode("table")
@@ -321,6 +317,45 @@ export function CaseWorkspace({
     }
   }, [onAddFiles])
 
+  const handleFileRemove = useCallback(
+    async (file: InventoryItem) => {
+      if (!file.id || !case_.id) {
+        toast({
+          title: "Cannot remove file",
+          description: "File ID or case ID is missing",
+          variant: "destructive",
+        })
+        return
+      }
+
+      try {
+        await fileService.removeFileFromCase(file.id, case_.id)
+
+        // Remove file from items array
+        const updatedItems = items.filter((item) => item.id !== file.id)
+        onItemsChange(updatedItems)
+
+        // If deleted file is currently viewed, close viewer
+        if (viewingFile?.id === file.id) {
+          handleFileClose()
+        }
+
+        toast({
+          title: "File removed",
+          description: `${file.file_name} has been removed from the case`,
+          variant: "success",
+        })
+      } catch (error) {
+        toast({
+          title: "Failed to remove file",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        })
+      }
+    },
+    [case_.id, items, onItemsChange, viewingFile, handleFileClose]
+  )
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
       {/* Header */}
@@ -331,75 +366,16 @@ export function CaseWorkspace({
         onClose={onCloseCase}
         onAddFiles={handleAddFilesClick}
         viewMode={viewMode}
-        onViewModeChange={async (mode) => {
-          if (mode === "split" && lastSelectedFile && !viewingFile) {
-            // Restore last selected file when switching back to split view from timeline
-            // Verify the file still exists in the items list
-            const fileStillExists = items.some(
-              (item) => item.absolute_path === lastSelectedFile.absolute_path
-            )
-            if (fileStillExists) {
-              setViewingFile(lastSelectedFile)
-              setTableVisible(false)
-              if (!notesVisible) {
-                setNotesVisible(true)
-              }
-            } else {
-              // File no longer exists, clear it and just switch to table view
-              setLastSelectedFile(null)
-              if (lastFileLoaded) {
-                try {
-                  await setStoreValue(`casespace-last-file-${case_.id}`, null, "settings")
-                } catch (error) {
-                  console.error("Failed to clear last selected file:", error)
-                }
-              }
-              setViewMode("table")
-              return
-            }
-          } else if (mode === "table") {
-            // Clear viewing file when switching to table view
-            setViewingFile(null)
-          }
-          setViewMode(mode)
-          // Close timeline when switching away from timeline view
-          if (mode !== "timeline" && timelineVisible) {
-            setTimelineVisible(false)
-          }
-        }}
         viewingFile={viewingFile}
-        lastSelectedFile={lastSelectedFile}
-        tableVisible={tableVisible}
-        onToggleTable={() => setTableVisible((prev: boolean) => !prev)}
+        reportMode={reportMode}
+        onToggleReportMode={() => setReportMode((prev) => !prev)}
         notesVisible={notesVisible}
         onToggleNotes={() => setNotesVisible((prev: boolean) => !prev)}
         findingsVisible={findingsVisible}
         onToggleFindings={() => setFindingsVisible((prev: boolean) => !prev)}
         timelineVisible={timelineVisible}
-        onToggleTimeline={async () => {
-          if (timelineVisible) {
-            // Closing timeline - return to table view
-            setTimelineVisible(false)
-            setViewMode("table")
-          } else {
-            // Opening timeline - switch to timeline view mode
-            // Save current file before switching to timeline (for restoration)
-            if (viewingFile) {
-              setLastSelectedFile(viewingFile)
-              // Persist last selected file to store
-              if (lastFileLoaded) {
-                try {
-                  await setStoreValue(`casespace-last-file-${case_.id}`, viewingFile.absolute_path, "settings")
-                } catch (error) {
-                  console.error("Failed to save last selected file:", error)
-                }
-              }
-            }
-            setTimelineVisible(true)
-            setViewMode("timeline")
-            setViewingFile(null)
-            setNotesVisible(false)
-          }
+        onToggleTimeline={() => {
+          setTimelineVisible((prev) => !prev)
         }}
         onFileOpen={handleFileOpen}
         onSearchChange={setSearchQuery}
@@ -407,32 +383,86 @@ export function CaseWorkspace({
           setFindingsVisible(true)
           setViewMode("split")
         }}
-        onTimelineSelect={async () => {
-          // Timeline should be a full-screen experience
-          // Save current file before switching to timeline (for restoration)
-          if (viewingFile) {
-            setLastSelectedFile(viewingFile)
-            // Persist last selected file to store
-            if (lastFileLoaded) {
-              try {
-                await setStoreValue(`casespace-last-file-${case_.id}`, viewingFile.absolute_path, "settings")
-              } catch (error) {
-                console.error("Failed to save last selected file:", error)
-              }
-            }
+        onTimelineSelect={() => {
+          // Open timeline panel and switch to review mode if not already
+          if (!timelineVisible) {
+            setTimelineVisible(true)
           }
-          setTimelineVisible(true)
-          setViewMode("timeline")
-          // Close file viewer and notes when opening timeline
-          setViewingFile(null)
-          setNotesVisible(false)
+          if (viewMode !== "split" && viewingFile) {
+            setViewMode("split")
+          } else if (viewMode !== "split" && !viewingFile) {
+            // If no file is selected, just show the timeline panel
+            setTimelineVisible(true)
+          }
         }}
+        onGenerateReport={() => setReportDialogOpen(true)}
       />
 
       {/* Main Content Area */}
-      <PanelGroup direction="horizontal" className="flex-1 overflow-hidden min-h-0">
-        {/* Left Sidebar - File Navigator (resizable) */}
-        {navigatorOpen && (
+      {reportMode ? (
+        /* Report Mode - Show ReportView */
+        <PanelGroup direction="horizontal" className="flex-1 overflow-hidden min-h-0">
+          {/* Left Sidebar - File Navigator (resizable, stays visible) */}
+          {navigatorOpen && (
+            <>
+              <Panel
+                defaultSize={20}
+                minSize={15}
+                maxSize={40}
+                className="flex flex-col overflow-hidden"
+              >
+                <div className="h-full bg-card flex flex-col">
+                  <FileNavigator
+                    items={items}
+                    currentFile={viewingFile}
+                    onFileSelect={handleFileSelect}
+                    selectedFolderPath={selectedFolderPath}
+                    onFolderSelect={setSelectedFolderPath}
+                    navigatorOpen={navigatorOpen}
+                    onToggleNavigator={() => setNavigatorOpen((prev: boolean) => !prev)}
+                    onFileRemove={handleFileRemove}
+                    caseId={case_.id}
+                  />
+                </div>
+              </Panel>
+              <PanelResizeHandle className="group w-1.5 bg-transparent hover:bg-border/30 transition-colors duration-200 cursor-col-resize relative flex items-center justify-center">
+                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border group-hover:bg-primary/60 transition-colors" />
+                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
+                  <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
+                  <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
+                </div>
+              </PanelResizeHandle>
+            </>
+          )}
+
+          {/* Toggle Button - When Sidebar is Collapsed */}
+          {!navigatorOpen && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setNavigatorOpen(true)}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-r border-l-0 border border-border bg-background hover:bg-muted transition-colors duration-150"
+              title="Expand sidebar"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* Report View */}
+          <Panel className="flex flex-col overflow-hidden min-h-0 relative">
+            <ReportView
+              case_={case_}
+              items={items}
+              onToggleReportMode={() => setReportMode(false)}
+            />
+          </Panel>
+        </PanelGroup>
+      ) : (
+        /* Review Mode - Show existing split/table views */
+        <PanelGroup direction="horizontal" className="flex-1 overflow-hidden min-h-0">
+          {/* Left Sidebar - File Navigator (resizable) */}
+          {navigatorOpen && (
           <>
             <Panel
               defaultSize={20}
@@ -449,6 +479,8 @@ export function CaseWorkspace({
                   onFolderSelect={setSelectedFolderPath}
                   navigatorOpen={navigatorOpen}
                   onToggleNavigator={() => setNavigatorOpen((prev: boolean) => !prev)}
+                  onFileRemove={handleFileRemove}
+                  caseId={case_.id}
                 />
               </div>
             </Panel>
@@ -463,28 +495,35 @@ export function CaseWorkspace({
           </>
         )}
 
-        {/* Center/Right - Split View or Table View */}
-        <Panel className="flex flex-col overflow-hidden min-h-0">
+        {/* Toggle Button - When Sidebar is Collapsed */}
+        {!navigatorOpen && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setNavigatorOpen(true)}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-r border-l-0 border border-border bg-background hover:bg-muted transition-colors duration-150"
+            title="Expand sidebar"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Center/Right - Review Mode or Board View */}
+        <Panel className="flex flex-col overflow-hidden min-h-0 relative">
           {viewMode === "split" ? (
             <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
               {/* File Viewer - Takes remaining space */}
               <Panel
                 defaultSize={
-                  tableVisible && notesVisible && findingsVisible && timelineVisible
-                    ? 35
-                    : tableVisible &&
-                        (notesVisible || findingsVisible || timelineVisible) &&
-                        ((notesVisible && findingsVisible) ||
-                          (notesVisible && timelineVisible) ||
-                          (findingsVisible && timelineVisible))
-                      ? 40
-                      : tableVisible && (notesVisible || findingsVisible || timelineVisible)
-                        ? 50
-                        : tableVisible
-                          ? 60
-                          : notesVisible || findingsVisible || timelineVisible
-                            ? 60
-                            : 100
+                  notesVisible && findingsVisible && timelineVisible
+                    ? 40
+                    : (notesVisible && findingsVisible) ||
+                        (notesVisible && timelineVisible) ||
+                        (findingsVisible && timelineVisible)
+                      ? 50
+                      : notesVisible || findingsVisible || timelineVisible
+                        ? 60
+                        : 100
                 }
                 minSize={30}
               >
@@ -525,13 +564,16 @@ export function CaseWorkspace({
                       onFileRefresh={async () => {
                         // Reload case files after refresh
                         try {
-                          const { fileService } = await import('@/services/fileService');
-                          const refreshedItems = await fileService.loadCaseFilesWithInventory(case_.id);
-                          onItemsChange(refreshedItems);
+                          const { fileService } = await import("@/services/fileService")
+                          const refreshedItems = await fileService.loadCaseFilesWithInventory(
+                            case_.id
+                          )
+                          onItemsChange(refreshedItems)
                         } catch (error) {
-                          console.error('Failed to reload files after refresh:', error);
+                          console.error("Failed to reload files after refresh:", error)
                         }
                       }}
+                      onFileRemove={handleFileRemove}
                     />
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -551,52 +593,6 @@ export function CaseWorkspace({
                 </div>
               </Panel>
 
-              {/* Table Panel - Resizable */}
-              {tableVisible && (
-                <>
-                  <PanelResizeHandle className="group w-1.5 bg-transparent hover:bg-border/30 transition-colors duration-200 cursor-col-resize relative flex items-center justify-center">
-                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border group-hover:bg-primary/60 transition-colors" />
-                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                      <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
-                      <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
-                      <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
-                    </div>
-                  </PanelResizeHandle>
-                  <Panel
-                    defaultSize={
-                      notesVisible && findingsVisible
-                        ? 25
-                        : notesVisible
-                          ? 30
-                          : findingsVisible
-                            ? 30
-                            : 40
-                    }
-                    minSize={20}
-                    maxSize={60}
-                  >
-                    <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
-                      <div className="p-3 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-                        <h3 className="text-sm font-semibold">Inventory Table</h3>
-                      </div>
-                      <div className="flex-1 overflow-hidden min-h-0">
-                        <InventoryTable
-                          items={filteredItems}
-                          onItemsChange={onItemsChange}
-                          selectedIndices={selectedIndices}
-                          onSelectionChange={onSelectionChange}
-                          onFileOpen={handleFileOpen}
-                          statusFilter={statusFilter}
-                          onStatusFilterChange={setStatusFilter}
-                          totalFiles={items.length}
-                          caseId={case_.id}
-                        />
-                      </div>
-                    </div>
-                  </Panel>
-                </>
-              )}
-
               {/* Notes Panel - Resizable right side */}
               {notesVisible && (
                 <>
@@ -610,19 +606,17 @@ export function CaseWorkspace({
                   </PanelResizeHandle>
                   <Panel
                     defaultSize={
-                      tableVisible && notesVisible && findingsVisible
-                        ? 12
-                        : tableVisible && findingsVisible
-                          ? 15
-                          : notesVisible && findingsVisible
-                            ? 15
-                            : tableVisible
-                              ? 20
-                              : notesVisible
-                                ? 20
-                                : 30
+                      notesVisible && findingsVisible && timelineVisible
+                        ? 15
+                        : (notesVisible && findingsVisible) ||
+                            (notesVisible && timelineVisible) ||
+                            (findingsVisible && timelineVisible)
+                          ? 20
+                          : notesVisible || findingsVisible || timelineVisible
+                            ? 25
+                            : 35
                     }
-                    minSize={15}
+                    minSize={20}
                     maxSize={40}
                   >
                     <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
@@ -649,17 +643,17 @@ export function CaseWorkspace({
                   </PanelResizeHandle>
                   <Panel
                     defaultSize={
-                      tableVisible && notesVisible && timelineVisible
-                        ? 10
-                        : (tableVisible && notesVisible) ||
-                            (tableVisible && timelineVisible) ||
-                            (notesVisible && timelineVisible)
-                          ? 12
-                          : tableVisible || notesVisible || timelineVisible
-                            ? 15
-                            : 20
+                      notesVisible && findingsVisible && timelineVisible
+                        ? 18
+                        : (notesVisible && findingsVisible) ||
+                            (notesVisible && timelineVisible) ||
+                            (findingsVisible && timelineVisible)
+                          ? 22
+                          : notesVisible || findingsVisible || timelineVisible
+                            ? 25
+                            : 35
                     }
-                    minSize={15}
+                    minSize={20}
                     maxSize={40}
                   >
                     <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
@@ -682,55 +676,50 @@ export function CaseWorkspace({
                   </PanelResizeHandle>
                   <Panel
                     defaultSize={
-                      tableVisible && notesVisible && findingsVisible
-                        ? 10
-                        : (tableVisible && notesVisible) ||
-                            (tableVisible && findingsVisible) ||
-                            (notesVisible && findingsVisible)
-                          ? 12
-                          : tableVisible || notesVisible || findingsVisible
-                            ? 15
-                            : 20
+                      notesVisible && findingsVisible
+                        ? 30
+                        : notesVisible || findingsVisible
+                          ? 35
+                          : 40
                     }
-                    minSize={15}
-                    maxSize={40}
+                    minSize={20}
+                    maxSize={50}
                   >
                     <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
-                      <TimelineView caseId={case_.id} />
+                      <div className="p-3 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+                        <h3 className="text-sm font-semibold">Timeline</h3>
+                      </div>
+                      <div className="flex-1 overflow-hidden min-h-0">
+                        <TimelineView caseId={case_.id} currentFileId={viewingFile?.id} />
+                      </div>
                     </div>
                   </Panel>
                 </>
               )}
             </PanelGroup>
-          ) : viewMode === "timeline" ? (
-            /* Timeline-only view - Full screen timeline experience */
-            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-              <TimelineView caseId={case_.id} />
-            </div>
           ) : (
-            /* Table-only view - Full width for optimal table experience */
+            /* Board-only view - Full width for optimal board experience */
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-lg font-semibold mb-1">Inventory Table</h2>
-                    <p className="text-xs text-muted-foreground truncate">
-                      Showing: {contextDescription} ({filteredItems.length} of {items.length} files)
+                    <h2 className="text-lg font-semibold mb-1">Workflow Board</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Organize and track files through review stages
                     </p>
                   </div>
                 </div>
                 {items.length > 0 && <ProgressDashboard items={items} />}
               </div>
-              <div className="flex-1 overflow-hidden min-h-0 min-w-0">
-                <InventoryTable
+              <div className={cn("flex-1 overflow-hidden min-h-0 min-w-0", !navigatorOpen && "pl-8")}>
+                <WorkflowBoard
                   items={filteredItems}
                   onItemsChange={onItemsChange}
                   selectedIndices={selectedIndices}
                   onSelectionChange={onSelectionChange}
                   onFileOpen={handleFileOpen}
-                  columnConfig={columnConfig}
-                  statusFilter={statusFilter}
-                  onStatusFilterChange={setStatusFilter}
+                  onFileRemove={handleFileRemove}
+                  statusFilter="all"
                   totalFiles={items.length}
                   caseId={case_.id}
                 />
@@ -738,7 +727,16 @@ export function CaseWorkspace({
             </div>
           )}
         </Panel>
-      </PanelGroup>
+        </PanelGroup>
+      )}
+      
+      {/* Report Generator Dialog */}
+      <ReportGenerator
+        items={items}
+        case_={case_}
+        open={reportDialogOpen}
+        onOpenChange={setReportDialogOpen}
+      />
     </div>
   )
 }

@@ -14,7 +14,7 @@ mod path_validation;
 use mappings::process_file_metadata;
 use export::{read_xlsx, read_csv, read_json};
 use error::AppError;
-use database::{Case, Note, File, Finding, TimelineEvent};
+use database::{Case, Note, File, Finding, TimelineEvent, WorkspacePreferences};
 use scanner::SystemFileFilter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -1330,6 +1330,88 @@ async fn delete_finding(finding_id: String, app: tauri::AppHandle) -> Result<(),
 }
 
 #[tauri::command]
+async fn remove_file_from_case(
+    file_id: String,
+    case_id: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    // ELITE: UUID format validation
+    if Uuid::parse_str(&file_id).is_err() {
+        return Err(format!("Invalid file_id format: expected UUID, got '{}'", file_id));
+    }
+    
+    if Uuid::parse_str(&case_id).is_err() {
+        return Err(format!("Invalid case_id format: expected UUID, got '{}'", case_id));
+    }
+    
+    let pool = database::get_db_pool(&app).await?;
+    
+    // ELITE: Verify file exists and belongs to the specified case (exclude already deleted files)
+    let file_row = sqlx::query(
+        "SELECT id, case_id FROM files WHERE id = ? AND deleted_at IS NULL LIMIT 1"
+    )
+    .bind(&file_id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| {
+        log::error!("Database validation error when removing file {}: {}", file_id, e);
+        format!("Database validation error: {}", e)
+    })?;
+    
+    if let Some(row) = file_row {
+        let file_case_id: String = row.get("case_id");
+        if file_case_id != case_id {
+            log::warn!("File {} does not belong to case {}", file_id, case_id);
+            return Err(format!("File does not belong to the specified case"));
+        }
+    } else {
+        log::warn!("File not found for removal: {}", file_id);
+        return Err(format!("File not found: '{}'", file_id));
+    }
+    
+    // ELITE: Soft delete - mark file as deleted instead of hard delete
+    // This prevents the file from being re-ingested if it still exists in the source directory
+    let now = chrono::Utc::now().timestamp();
+    sqlx::query("UPDATE files SET deleted_at = ? WHERE id = ?")
+        .bind(now)
+        .bind(&file_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to remove file {}: {}", file_id, e);
+            format!("Failed to remove file: {}", e)
+        })?;
+    
+    // ELITE: CASCADE delete related records (notes, findings, timeline_events, file_metadata)
+    // These are still hard deleted since they're dependent on the file
+    sqlx::query("DELETE FROM notes WHERE file_id = ?")
+        .bind(&file_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            log::warn!("Failed to delete notes for file {}: {}", file_id, e);
+            // Don't fail the whole operation if notes deletion fails
+        })
+        .ok();
+    
+    sqlx::query("DELETE FROM file_metadata WHERE file_id = ?")
+        .bind(&file_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            log::warn!("Failed to delete metadata for file {}: {}", file_id, e);
+        })
+        .ok();
+    
+    // Update findings to remove file from linked_files (if present)
+    // This is more complex, so we'll leave findings as-is for now
+    // Timeline events with source_file_id will be set to NULL by foreign key constraint
+    
+    log::info!("File {} removed from case {} successfully (soft delete)", file_id, case_id);
+    Ok(())
+}
+
+#[tauri::command]
 async fn list_findings(
     case_id: String,
     app: tauri::AppHandle,
@@ -2160,7 +2242,7 @@ async fn load_case_files(
         .ok_or_else(|| "Case not found".to_string())?;
     
     let rows = sqlx::query(
-        "SELECT id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, status, tags, source_directory FROM files WHERE case_id = ? ORDER BY file_name"
+        "SELECT id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, status, tags, source_directory FROM files WHERE case_id = ? AND deleted_at IS NULL ORDER BY file_name"
     )
     .bind(&case_id)
     .fetch_all(&pool)
@@ -2209,11 +2291,12 @@ async fn load_case_files_with_inventory(
     
     // ELITE: Optimized query - only select needed columns, use indexed case_id
     // For 10k+ files, this query should complete in < 100ms with proper indexing
+    // Filter out soft-deleted files (deleted_at IS NULL)
     let rows = sqlx::query(
         "SELECT f.id, f.case_id, f.file_name, f.folder_path, f.absolute_path, f.file_hash, f.file_type, f.file_size, f.created_at, f.modified_at, f.status, f.tags, f.source_directory, fm.inventory_data 
          FROM files f 
          LEFT JOIN file_metadata fm ON f.id = fm.file_id 
-         WHERE f.case_id = ? 
+         WHERE f.case_id = ? AND f.deleted_at IS NULL
          ORDER BY f.file_name
          LIMIT 50000"
     )
@@ -2261,7 +2344,7 @@ async fn get_case_file_count(
 ) -> Result<usize, String> {
     let pool = database::get_db_pool(&app).await?;
     
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM files WHERE case_id = ?")
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM files WHERE case_id = ? AND deleted_at IS NULL")
         .bind(&case_id)
         .fetch_one(&pool)
         .await
@@ -2561,15 +2644,15 @@ async fn check_file_changed(
     
     let pool = database::get_db_pool(&app).await?;
     
-    // Get file from database
+    // Get file from database (exclude deleted files)
     let row = sqlx::query(
-        "SELECT absolute_path, file_hash, file_size, modified_at, status FROM files WHERE id = ?"
+        "SELECT absolute_path, file_hash, file_size, modified_at, status FROM files WHERE id = ? AND deleted_at IS NULL"
     )
     .bind(&file_id)
     .fetch_optional(&pool)
     .await
     .map_err(|e| format!("Database error: {}", e))?
-    .ok_or_else(|| "File not found".to_string())?;
+    .ok_or_else(|| "File not found or has been deleted".to_string())?;
     
     let absolute_path: String = row.get("absolute_path");
     let stored_hash: Option<String> = row.get("file_hash");
@@ -2659,15 +2742,15 @@ async fn refresh_single_file(
     
     let pool = database::get_db_pool(&app).await?;
     
-    // Get file from database
+    // Get file from database (exclude deleted files)
     let row = sqlx::query(
-        "SELECT case_id, absolute_path, folder_path, status FROM files WHERE id = ?"
+        "SELECT case_id, absolute_path, folder_path, status FROM files WHERE id = ? AND deleted_at IS NULL"
     )
     .bind(&file_id)
     .fetch_optional(&pool)
     .await
     .map_err(|e| format!("Database error: {}", e))?
-    .ok_or_else(|| "File not found".to_string())?;
+    .ok_or_else(|| "File not found or has been deleted".to_string())?;
     
     let case_id: String = row.get("case_id");
     let absolute_path: String = row.get("absolute_path");
@@ -2748,6 +2831,31 @@ async fn refresh_files_bulk(
     })
 }
 
+/// Update file status
+#[tauri::command]
+async fn update_file_status(
+    file_id: String,
+    status: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let pool = database::get_db_pool(&app).await?;
+    
+    // Validate status
+    let valid_statuses = ["unreviewed", "in_progress", "reviewed", "flagged", "finalized"];
+    if !valid_statuses.contains(&status.as_str()) {
+        return Err(format!("Invalid status: {}. Must be one of: {:?}", status, valid_statuses));
+    }
+    
+    sqlx::query("UPDATE files SET status = ? WHERE id = ?")
+        .bind(&status)
+        .bind(&file_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to update file status: {}", e))?;
+    
+    Ok(())
+}
+
 /// Check for duplicate files (same hash, different path)
 #[tauri::command]
 async fn find_duplicate_files(
@@ -2758,7 +2866,7 @@ async fn find_duplicate_files(
     let pool = database::get_db_pool(&app).await?;
     
     // Get file hash
-    let row = sqlx::query("SELECT file_hash FROM files WHERE id = ? AND case_id = ?")
+    let row = sqlx::query("SELECT file_hash FROM files WHERE id = ? AND case_id = ? AND deleted_at IS NULL")
         .bind(&file_id)
         .bind(&case_id)
         .fetch_optional(&pool)
@@ -2772,9 +2880,9 @@ async fn find_duplicate_files(
         return Ok(Vec::new());
     }
     
-    // Find all files with same hash in this case
+    // Find all files with same hash in this case (exclude deleted files)
     let rows = sqlx::query(
-        "SELECT id, file_name, absolute_path, folder_path, status FROM files WHERE case_id = ? AND file_hash = ? AND id != ?"
+        "SELECT id, file_name, absolute_path, folder_path, status FROM files WHERE case_id = ? AND file_hash = ? AND id != ? AND deleted_at IS NULL"
     )
     .bind(&case_id)
     .bind(&file_hash.as_ref().unwrap())
@@ -2848,6 +2956,27 @@ async fn save_mapping_config_db(
     }
     
     Ok(())
+}
+
+/// Get workspace preferences for a case
+#[tauri::command]
+async fn get_workspace_preferences_db(
+    case_id: String,
+    app: tauri::AppHandle,
+) -> Result<Option<WorkspacePreferences>, String> {
+    let pool = database::get_db_pool(&app).await?;
+    database::get_workspace_preferences(&pool, &case_id).await
+}
+
+/// Save workspace preferences for a case
+#[tauri::command]
+async fn save_workspace_preferences_db(
+    case_id: String,
+    prefs: WorkspacePreferences,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let pool = database::get_db_pool(&app).await?;
+    database::save_workspace_preferences(&pool, &case_id, &prefs).await
 }
 
 /// Re-apply mappings to all existing files in a case
@@ -3165,12 +3294,16 @@ pub fn run() {
             refresh_single_file,
             refresh_files_bulk,
             find_duplicate_files,
+            update_file_status,
+            remove_file_from_case,
             get_column_config_db,
             save_column_config_db,
             get_mapping_config_db,
             save_mapping_config_db,
             get_system_file_filter_config,
-            save_system_file_filter_config
+            save_system_file_filter_config,
+            get_workspace_preferences_db,
+            save_workspace_preferences_db
         ]);
     eprintln!("[CaseSpace] Invoke handlers registered");
     

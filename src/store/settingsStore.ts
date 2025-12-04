@@ -15,7 +15,7 @@ interface SettingsState {
   saveSystemFileFilter: (config: SystemFileFilterConfig) => Promise<void>
 }
 
-export const useSettingsStore = create<SettingsState>((set, get) => ({
+export const useSettingsStore = create<SettingsState>((set) => ({
   systemFileFilter: null,
   isLoading: false,
   

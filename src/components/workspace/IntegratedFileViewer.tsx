@@ -1,13 +1,18 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { X, FileText, Image as ImageIcon, File, ChevronLeft, ChevronRight, Maximize2, Hash } from 'lucide-react';
+import { X, FileText, Image as ImageIcon, File, ChevronLeft, ChevronRight, Maximize2, Hash, Trash2, ExternalLink } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { InventoryItem } from '@/types/inventory';
+import type { FileStatus } from '@/types/inventory';
 import { fileService, type FileChangeStatus } from '@/services/fileService';
 import { MetadataPanel } from '../viewer/MetadataPanel';
 import { FileChangeWarning } from '../viewer/FileChangeWarning';
 import { DuplicateFileDialog } from '../viewer/DuplicateFileDialog';
+import { DeleteFileDialog } from '../ui/delete-file-dialog';
+import { StatusCell } from '../table/StatusCell';
 import { toast } from '@/hooks/useToast';
+import { ErrorBoundary } from '../ErrorBoundary';
 
 // ELITE: Lazy load heavy viewer components for optimal bundle size
 const LazyViewer = lazy(() => import('react-viewer').then(m => ({ default: m.default })));
@@ -24,6 +29,7 @@ interface IntegratedFileViewerProps {
   hasPrevious: boolean;
   caseId?: string;
   onFileRefresh?: () => void;
+  onFileRemove?: (file: InventoryItem) => void;
 }
 
 // File type categories
@@ -141,6 +147,7 @@ export function IntegratedFileViewer({
   hasPrevious,
   caseId,
   onFileRefresh,
+  onFileRemove,
 }: IntegratedFileViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +165,9 @@ export function IntegratedFileViewer({
   const [fileChanged, setFileChanged] = useState<FileChangeStatus | null>(null);
   const [duplicates, setDuplicates] = useState<Array<{ file_id: string; file_name: string; absolute_path: string; folder_path: string; status: string }>>([]);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // Local state for optimistic status updates
+  const [localStatus, setLocalStatus] = useState<FileStatus | undefined>(file.status);
 
   // Use file_type from inventory item if available, otherwise extract from file_name
   // ELITE: Robust file type detection with multiple fallbacks
@@ -331,6 +341,51 @@ export function IntegratedFileViewer({
     }
   }, [file?.id, file?.status, onFileRefresh]);
 
+  // Handle file removal
+  const handleConfirmDelete = useCallback(() => {
+    if (onFileRemove) {
+      onFileRemove(file);
+      onClose(); // Close viewer after removal
+    }
+    setDeleteDialogOpen(false);
+  }, [file, onFileRemove, onClose]);
+
+  // Sync local status with file prop when it changes
+  useEffect(() => {
+    setLocalStatus(file.status);
+  }, [file.status]);
+
+  // Handle status change
+  const handleStatusChange = useCallback(async (newStatus: FileStatus) => {
+    if (!file?.id) return;
+
+    // Optimistically update local state
+    setLocalStatus(newStatus);
+
+    try {
+      await fileService.updateFileStatus(file.id, newStatus);
+      
+      toast({
+        title: 'Status updated',
+        description: `File status changed to ${newStatus.replace('_', ' ')}`,
+        variant: 'success',
+      });
+
+      // Notify parent to reload file data
+      if (onFileRefresh) {
+        await onFileRefresh();
+      }
+    } catch (error) {
+      // Revert optimistic update on error
+      setLocalStatus(file.status);
+      toast({
+        title: 'Failed to update status',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    }
+  }, [file?.id, file?.status, onFileRefresh]);
+
   // ELITE: Separate effect for loading content (only when shouldLoadContent is true)
   useEffect(() => {
     if (!file || !shouldLoadContent) {
@@ -398,13 +453,30 @@ export function IntegratedFileViewer({
         try {
           // ELITE: Load PDF via Rust, convert base64 to blob
           const base64 = await fileService.readFileBase64(file.absolute_path);
+          
+          if (!base64 || typeof base64 !== 'string') {
+            throw new Error('Invalid base64 data received');
+          }
+          
           // Convert base64 to blob
-          const binaryString = atob(base64);
+          let binaryString: string;
+          try {
+            binaryString = atob(base64);
+          } catch (decodeError) {
+            throw new Error(`Failed to decode base64: ${decodeError instanceof Error ? decodeError.message : String(decodeError)}`);
+          }
+          
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
           }
+          
           const blob = new Blob([bytes], { type: 'application/pdf' });
+          
+          if (blob.size === 0) {
+            throw new Error('PDF blob is empty');
+          }
+          
           const blobUrl = URL.createObjectURL(blob);
           setPdfBlobUrl(blobUrl);
           setLoading(false);
@@ -525,8 +597,25 @@ export function IntegratedFileViewer({
         }
         return (
           <div className="w-full h-full">
-            <Suspense fallback={<div className="w-full h-full flex items-center justify-center"><div className="text-sm text-muted-foreground">Loading PDF viewer...</div></div>}>
-              <LazyPdfViewer fileUrl={pdfBlobUrl} />
+            <Suspense 
+              fallback={
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-sm text-muted-foreground">Loading PDF viewer...</div>
+                </div>
+              }
+            >
+              <ErrorBoundary
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-sm text-destructive mb-4">Failed to load PDF viewer</p>
+                      <Button onClick={handleOpenInSystem}>Open in System</Button>
+                    </div>
+                  </div>
+                }
+              >
+                <LazyPdfViewer fileUrl={pdfBlobUrl} />
+              </ErrorBoundary>
             </Suspense>
           </div>
         );
@@ -701,17 +790,28 @@ export function IntegratedFileViewer({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background animate-in fade-in-0 duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border bg-card flex-shrink-0 shadow-sm">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-2 p-3 border-b border-border bg-card flex-shrink-0 shadow-sm">
+        {/* Left Section - File Info */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {fileCategory === 'pdf' && <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
           {fileCategory === 'image' && <ImageIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
           {!['pdf', 'image'].includes(fileCategory) && <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
-          <h2 className="text-sm font-semibold truncate">{file.file_name}</h2>
-          <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
+          <h2 className="text-sm font-semibold truncate min-w-0">{file.file_name}</h2>
+          <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded flex-shrink-0">
             {fileType.toUpperCase()}
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        
+        {/* Center Section - Status Selector */}
+        <div className="flex items-center justify-center flex-shrink-0">
+          <StatusCell 
+            status={localStatus} 
+            onStatusChange={handleStatusChange} 
+          />
+        </div>
+        
+        {/* Right Section - Actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
           {/* Navigation */}
           <Button
             variant="ghost"
@@ -745,18 +845,52 @@ export function IntegratedFileViewer({
             </Button>
           )}
           
-          <Button
-            variant={metadataPanelOpen ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setMetadataPanelOpen(prev => !prev)}
-            title="Toggle metadata panel"
-          >
-            <Hash className="h-4 w-4" />
-          </Button>
+          <Popover open={metadataPanelOpen} onOpenChange={setMetadataPanelOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant={metadataPanelOpen ? 'default' : 'outline'}
+                size="sm"
+                title="Show metadata"
+              >
+                <Hash className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-[28rem] max-h-[80vh] p-0" 
+              align="end"
+              side="bottom"
+              sideOffset={8}
+            >
+              <div className="flex flex-col h-full max-h-[80vh]">
+                <div className="p-3 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+                  <h3 className="text-sm font-semibold">Metadata</h3>
+                </div>
+                <div className="flex-1 overflow-hidden min-h-0">
+                  <MetadataPanel filePath={file.absolute_path} fileType={fileType} item={file} caseId={caseId} />
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
           
-          <Button variant="outline" size="sm" onClick={handleOpenInSystem}>
-            Open in System
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleOpenInSystem} 
+            title="Open file in system application"
+          >
+            <ExternalLink className="h-4 w-4" />
           </Button>
+          {onFileRemove && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+              title="Remove file from case"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={onClose} title="Close (Esc)">
             <X className="h-4 w-4" />
           </Button>
@@ -800,20 +934,16 @@ export function IntegratedFileViewer({
             )}
           </>
         )}
-        <div className={metadataPanelOpen ? 'flex-1 overflow-hidden' : 'flex-1 overflow-hidden'}>
+        <div className="flex-1 overflow-hidden">
           {renderContent()}
         </div>
-        {metadataPanelOpen && (
-          <div className="w-80 border-l border-border bg-card flex-shrink-0 flex flex-col animate-in slide-in-from-right-2 duration-300">
-            <div className="p-3 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-              <h3 className="text-sm font-semibold">Metadata</h3>
-            </div>
-            <div className="flex-1 overflow-hidden min-h-0">
-              <MetadataPanel filePath={file.absolute_path} fileType={fileType} />
-            </div>
-          </div>
-        )}
       </div>
+      <DeleteFileDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        fileName={file.file_name}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

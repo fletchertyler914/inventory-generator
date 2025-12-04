@@ -3,7 +3,7 @@
  * ELITE: Dead-simple UI for non-technical users
  */
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Label } from '../ui/label'
 import { Input } from '../ui/input'
@@ -21,6 +21,7 @@ interface PatternBuilderProps {
   patternFlags: string
   onPatternFlagsChange: (flags: string) => void
   sampleData: string
+  attemptedProceed?: boolean
 }
 
 export function PatternBuilder({
@@ -30,13 +31,38 @@ export function PatternBuilder({
   patternFlags,
   onPatternFlagsChange,
   sampleData,
+  attemptedProceed = false,
 }: PatternBuilderProps) {
   const [testInput, setTestInput] = useState(sampleData)
+  const [patternTouched, setPatternTouched] = useState(false)
+  const hasInteractedRef = useRef(false)
 
   // Sync testInput when sampleData changes
   useEffect(() => {
     setTestInput(sampleData)
   }, [sampleData])
+
+  // Reset touched state when extraction method changes
+  useEffect(() => {
+    setPatternTouched(false)
+    hasInteractedRef.current = false
+  }, [extractionMethod])
+
+  // Track if user has interacted with the pattern field
+  const handlePatternChange = (value: string) => {
+    if (!hasInteractedRef.current) {
+      hasInteractedRef.current = true
+    }
+    onPatternChange(value)
+  }
+
+  // Mark field as touched on blur
+  const handlePatternBlur = () => {
+    setPatternTouched(true)
+  }
+
+  // Show validation if field is touched OR user attempted to proceed
+  const showValidation = patternTouched || attemptedProceed || hasInteractedRef.current
 
   // Validation
   const validation = useMemo(() => {
@@ -117,7 +143,11 @@ export function PatternBuilder({
                   key={cp.label}
                   variant="outline"
                   className="cursor-pointer hover:bg-muted"
-                  onClick={() => onPatternChange(cp.pattern)}
+                  onClick={() => {
+                    setPatternTouched(true)
+                    hasInteractedRef.current = true
+                    onPatternChange(cp.pattern)
+                  }}
                 >
                   {cp.label}
                 </Badge>
@@ -135,9 +165,10 @@ export function PatternBuilder({
             id="pattern-input"
             placeholder={extractionMethod === 'date' ? 'e.g., \\d{4}-\\d{2}-\\d{2}' : extractionMethod === 'number' ? 'e.g., \\d+' : 'Enter pattern...'}
             value={pattern}
-            onChange={(e) => onPatternChange(e.target.value)}
+            onChange={(e) => handlePatternChange(e.target.value)}
+            onBlur={handlePatternBlur}
           />
-          {!validation.valid && validation.error && (
+          {showValidation && !validation.valid && validation.error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{validation.error}</AlertDescription>
@@ -170,19 +201,21 @@ export function PatternBuilder({
             rows={2}
           />
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm">
-              {validation.valid ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span className="text-muted-foreground">Pattern is valid</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="h-4 w-4 text-red-500" />
-                  <span className="text-muted-foreground">Pattern has errors</span>
-                </>
-              )}
-            </div>
+            {showValidation && (
+              <div className="flex items-center gap-2 text-sm">
+                {validation.valid ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span className="text-muted-foreground">Pattern is valid</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-4 w-4 text-red-500" />
+                    <span className="text-muted-foreground">Pattern has errors</span>
+                  </>
+                )}
+              </div>
+            )}
             {testInput && (
               <div className="p-3 bg-muted rounded-md">
                 <div className="text-xs text-muted-foreground mb-1">Preview:</div>

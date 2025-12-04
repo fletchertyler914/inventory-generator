@@ -90,8 +90,8 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
         title="Findings"
         count={findings.length}
         onCreate={handleCreate}
-        createButtonLabel="New"
-        onClose={onClose}
+        createButtonLabel=""
+        {...(onClose && { onClose })}
       />
 
       <PanelContent>

@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { Input } from '../ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { ChevronRight, ChevronLeft, FileText, Folder, FolderTree, Database, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -17,13 +16,10 @@ import { validatePattern } from '@/types/mapping'
 import { addMapping } from '@/services/mappingService'
 import { PatternBuilder } from './PatternBuilder'
 import { MappingPreview } from './MappingPreview'
-import type { TableColumn } from '@/types/tableColumns'
 
 interface FieldMapperStepperProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  columns: TableColumn[]
-  onColumnCreated?: (column: TableColumn) => void
   caseId?: string
   sampleData?: {
     file_name: string
@@ -37,8 +33,6 @@ type Step = 1 | 2 | 3 | 4 | 5
 export function FieldMapperStepper({
   open,
   onOpenChange,
-  columns,
-  onColumnCreated,
   caseId,
   sampleData,
 }: FieldMapperStepperProps) {
@@ -47,9 +41,8 @@ export function FieldMapperStepper({
   const [extractionMethod, setExtractionMethod] = useState<ExtractionMethod | ''>('')
   const [pattern, setPattern] = useState('')
   const [patternFlags, setPatternFlags] = useState('')
-  const [selectedColumnId, setSelectedColumnId] = useState<string>('')
-  const [newColumnName, setNewColumnName] = useState('')
-  const [newColumnRenderer, setNewColumnRenderer] = useState<'text' | 'date' | 'number' | 'badge'>('text')
+  const [fieldName, setFieldName] = useState('')
+  const [attemptedProceedStep3, setAttemptedProceedStep3] = useState(false)
 
   // Reset state when dialog opens/closes
   const handleOpenChange = useCallback((newOpen: boolean) => {
@@ -60,9 +53,8 @@ export function FieldMapperStepper({
       setExtractionMethod('')
       setPattern('')
       setPatternFlags('')
-      setSelectedColumnId('')
-      setNewColumnName('')
-      setNewColumnRenderer('text')
+      setFieldName('')
+      setAttemptedProceedStep3(false)
     }
     onOpenChange(newOpen)
   }, [onOpenChange])
@@ -79,51 +71,53 @@ export function FieldMapperStepper({
         if (extractionMethod === 'date' || extractionMethod === 'number') return true
         return pattern.trim().length > 0 && validatePattern(pattern, extractionMethod as ExtractionMethod).valid
       case 4:
-        return selectedColumnId !== '' || newColumnName.trim().length > 0
+        return fieldName.trim().length > 0
       case 5:
         return true
       default:
         return false
     }
-  }, [currentStep, sourceType, extractionMethod, pattern, selectedColumnId, newColumnName])
+  }, [currentStep, sourceType, extractionMethod, pattern, fieldName])
 
   const handleNext = useCallback(() => {
+    // Track if user attempted to proceed on step 3
+    if (currentStep === 3) {
+      setAttemptedProceedStep3(true)
+    }
+    
     if (canProceed && currentStep < 5) {
+      const wasOnStep3 = currentStep === 3
       setCurrentStep((prev) => (prev + 1) as Step)
+      // Reset attempted proceed when moving away from step 3
+      if (wasOnStep3) {
+        setAttemptedProceedStep3(false)
+      }
     }
   }, [canProceed, currentStep])
 
   const handleBack = useCallback(() => {
     if (currentStep > 1) {
       setCurrentStep((prev) => (prev - 1) as Step)
+      // Reset attempted proceed when going back
+      if (currentStep === 4) {
+        setAttemptedProceedStep3(false)
+      }
     }
   }, [currentStep])
 
   const handleFinish = useCallback(() => {
     if (!canProceed) return
 
-    // Create column if needed
-    let targetColumnId = selectedColumnId
-    if (!targetColumnId && newColumnName.trim()) {
-      // Create new column (this would need to be handled by parent)
-      targetColumnId = `custom_${Date.now()}`
-      if (onColumnCreated) {
-        onColumnCreated({
-          id: targetColumnId,
-          label: newColumnName.trim(),
-          visible: true,
-          order: columns.length,
-          custom: true,
-          fieldPath: `inventory_data.${targetColumnId}`,
-          renderer: newColumnRenderer,
-        })
-      }
-    }
+    // Generate columnId from field name (slugify)
+    const columnId = fieldName.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `field_${Date.now()}`
 
     // Create mapping
     const mapping: FieldMapping = {
       id: `mapping_${Date.now()}`,
-      columnId: targetColumnId,
+      columnId,
       sourceType: sourceType as DataSourceType,
       extractionMethod: extractionMethod as ExtractionMethod,
       ...(extractionMethod !== 'direct' && pattern ? {
@@ -135,12 +129,12 @@ export function FieldMapperStepper({
       } : {}),
       enabled: true,
       priority: 1,
-      description: `Extract from ${sourceType} using ${extractionMethod}`,
+      description: fieldName.trim() || `Extract from ${sourceType} using ${extractionMethod}`,
     }
 
     addMapping(mapping, caseId).catch(console.error)
     handleOpenChange(false)
-  }, [canProceed, selectedColumnId, newColumnName, sourceType, extractionMethod, pattern, patternFlags, columns.length, newColumnRenderer, caseId, onColumnCreated, handleOpenChange])
+  }, [canProceed, fieldName, sourceType, extractionMethod, pattern, patternFlags, caseId, handleOpenChange])
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -282,62 +276,30 @@ export function FieldMapperStepper({
               patternFlags={patternFlags}
               onPatternFlagsChange={setPatternFlags}
               sampleData={sampleData?.[sourceType as keyof typeof sampleData] || ''}
+              attemptedProceed={attemptedProceedStep3}
             />
           )}
 
-          {/* Step 4: Choose Column */}
+          {/* Step 4: Name the Field */}
           {currentStep === 4 && (
             <Card>
               <CardHeader>
-                <CardTitle>Step 4: Which column?</CardTitle>
-                <CardDescription>Select an existing column or create a new one</CardDescription>
+                <CardTitle>Step 4: Name the Field</CardTitle>
+                <CardDescription>Give this extracted field a name (e.g., Client Name, Case Number, Date Received)</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Use existing column</Label>
-                  <Select value={selectedColumnId} onValueChange={setSelectedColumnId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a column" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {columns.map((col) => (
-                        <SelectItem key={col.id} value={col.id}>
-                          {col.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or create new</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-column-name">Column Name</Label>
+                  <Label htmlFor="field-name">Field Name</Label>
                   <Input
-                    id="new-column-name"
-                    placeholder="e.g., Client Name, Case Number"
-                    value={newColumnName}
-                    onChange={(e) => setNewColumnName(e.target.value)}
+                    id="field-name"
+                    placeholder="e.g., Client Name, Case Number, Date Received"
+                    value={fieldName}
+                    onChange={(e) => setFieldName(e.target.value)}
+                    autoFocus
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-column-renderer">Display Type</Label>
-                  <Select value={newColumnRenderer} onValueChange={(v) => setNewColumnRenderer(v as any)}>
-                    <SelectTrigger id="new-column-renderer">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="text">Text</SelectItem>
-                      <SelectItem value="date">Date</SelectItem>
-                      <SelectItem value="number">Number</SelectItem>
-                      <SelectItem value="badge">Badge</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="text-xs text-muted-foreground">
+                    This name will be used to identify the extracted data. It will appear on workflow cards and in the metadata panel.
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -350,7 +312,7 @@ export function FieldMapperStepper({
               extractionMethod={extractionMethod as ExtractionMethod}
               pattern={pattern}
               sampleData={sampleData}
-              columnLabel={selectedColumnId ? columns.find(c => c.id === selectedColumnId)?.label || '' : newColumnName}
+              columnLabel={fieldName}
             />
           )}
         </div>

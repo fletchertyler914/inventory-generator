@@ -32,10 +32,6 @@ interface InventoryState {
   importing: boolean
   syncing: boolean
   
-  // UI state
-  exportDialogOpen: boolean
-  importDialogOpen: boolean
-  
   // Actions
   setItems: (items: InventoryItem[]) => void
   updateItem: (index: number, updates: Partial<InventoryItem>) => void
@@ -48,8 +44,6 @@ interface InventoryState {
   setExporting: (exporting: boolean) => void
   setImporting: (importing: boolean) => void
   setSyncing: (syncing: boolean) => void
-  setExportDialogOpen: (open: boolean) => void
-  setImportDialogOpen: (open: boolean) => void
   reset: () => void
 }
 
@@ -63,8 +57,6 @@ const initialState = {
   exporting: false,
   importing: false,
   syncing: false,
-  exportDialogOpen: false,
-  importDialogOpen: false,
 }
 
 /**
@@ -127,10 +119,6 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   setSyncing: (syncing) => set({ syncing, loading: syncing }),
   
   setSelectedFolder: (folder) => set({ selectedFolder: folder }),
-  
-  setExportDialogOpen: (open) => set({ exportDialogOpen: open }),
-  
-  setImportDialogOpen: (open) => set({ importDialogOpen: open }),
   
   reset: () => set(initialState),
 }))

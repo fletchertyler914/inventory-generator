@@ -2,7 +2,8 @@ import { X, Filter } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface CaseFilters {
   deploymentMode: ('local' | 'cloud')[];
@@ -24,10 +25,71 @@ export function CaseFilters({
   availableClients,
 }: CaseFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0 });
   const hasActiveFilters =
     filters.deploymentMode.length > 0 ||
     filters.departments.length > 0 ||
     filters.clients.length > 0;
+
+  // Get computed card background color to ensure solid background
+  const cardBgColor = useMemo(() => {
+    if (typeof window === 'undefined') {
+      // Dark mode fallback
+      return 'hsl(0, 0%, 10%)';
+    }
+    try {
+      // Try to get the actual computed background color
+      const testEl = document.createElement('div');
+      testEl.className = 'bg-card';
+      testEl.style.display = 'none';
+      testEl.style.visibility = 'hidden';
+      document.body.appendChild(testEl);
+      const computedColor = getComputedStyle(testEl).backgroundColor;
+      document.body.removeChild(testEl);
+      
+      // Check if we got a valid opaque color
+      if (computedColor && 
+          computedColor !== 'rgba(0, 0, 0, 0)' && 
+          computedColor !== 'transparent' &&
+          !computedColor.includes('oklch')) {
+        // If it's rgba/rgb, ensure it's fully opaque
+        if (computedColor.startsWith('rgba')) {
+          const rgbaMatch = computedColor.match(/rgba?\(([^)]+)\)/);
+          if (rgbaMatch) {
+            const parts = rgbaMatch[1].split(',').map(s => s.trim());
+            if (parts.length >= 3) {
+              return `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})`;
+            }
+          }
+        }
+        return computedColor;
+      }
+    } catch (e) {
+      console.warn('Failed to compute card color:', e);
+    }
+    
+    // Fallback: check if dark mode
+    const isDark = document.documentElement.classList.contains('dark') || 
+                   window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (isDark) {
+      return 'hsl(0, 0%, 10%)'; // Dark solid background
+    } else {
+      return 'hsl(0, 0%, 98%)'; // Light solid background
+    }
+  }, []);
+
+  // Calculate panel position when opening
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPanelPosition({
+        top: rect.bottom + 8, // mt-2 = 8px
+        left: rect.left,
+      });
+    }
+  }, [isOpen]);
 
   const toggleDeploymentMode = (mode: 'local' | 'cloud') => {
     const newModes = filters.deploymentMode.includes(mode)
@@ -58,33 +120,23 @@ export function CaseFilters({
     });
   };
 
-  return (
-    <div className="relative">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "relative",
-          hasActiveFilters && "border-primary/50 bg-primary/5"
-        )}
+  const panelContent = isOpen ? (
+    <>
+      <div
+        className="fixed inset-0 z-40"
+        onClick={() => setIsOpen(false)}
+      />
+      <div 
+        className="fixed z-50 w-80 p-4 border rounded-lg shadow-lg border-border/50 dark:border-border/60"
+        style={{
+          top: `${panelPosition.top}px`,
+          left: `${panelPosition.left}px`,
+          backgroundColor: cardBgColor,
+          opacity: 1,
+          backdropFilter: 'none',
+          isolation: 'isolate',
+        } as React.CSSProperties}
       >
-        <Filter className="h-4 w-4 mr-2" />
-        Filters
-        {hasActiveFilters && (
-          <span className="ml-2 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-primary text-primary-foreground">
-            {filters.deploymentMode.length + filters.departments.length + filters.clients.length}
-          </span>
-        )}
-      </Button>
-
-      {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute top-full left-0 mt-2 z-50 w-80 p-4 bg-popover border border-border rounded-lg shadow-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold">Filter Cases</h3>
               {hasActiveFilters && (
@@ -168,8 +220,31 @@ export function CaseFilters({
               )}
             </div>
           </div>
-        </>
-      )}
+    </>
+  ) : null;
+
+  return (
+    <div className="relative">
+      <Button
+        ref={buttonRef}
+        variant="outline"
+        size="sm"
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "relative",
+          hasActiveFilters && "border-primary/50 bg-primary/5"
+        )}
+      >
+        <Filter className="h-4 w-4 mr-2" />
+        Filters
+        {hasActiveFilters && (
+          <span className="ml-2 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-primary text-primary-foreground">
+            {filters.deploymentMode.length + filters.departments.length + filters.clients.length}
+          </span>
+        )}
+      </Button>
+
+      {typeof window !== 'undefined' && panelContent && createPortal(panelContent, document.body)}
 
       {/* Active Filter Chips */}
       {hasActiveFilters && (

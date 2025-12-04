@@ -51,8 +51,9 @@ pub async fn process_file_async(
         .map_err(|e| format!("Failed to get metadata: {}", e))?;
     
     // Check if file exists in DB (on-demand query, not HashMap)
+    // Include deleted files in check - if a file was soft-deleted, we should skip re-adding it
     let existing_file = if incremental {
-        sqlx::query("SELECT id, file_hash, file_size, modified_at, status FROM files WHERE case_id = ? AND absolute_path = ?")
+        sqlx::query("SELECT id, file_hash, file_size, modified_at, status, deleted_at FROM files WHERE case_id = ? AND absolute_path = ?")
             .bind(case_id)
             .bind(&file_metadata.absolute_path)
             .fetch_optional(pool)
@@ -68,6 +69,26 @@ pub async fn process_file_async(
         let existing_size: i64 = row.get("file_size");
         let existing_modified: i64 = row.get("modified_at");
         let existing_status: String = row.get("status");
+        let deleted_at: Option<i64> = row.get("deleted_at");
+        
+        // If file was soft-deleted, skip re-adding it
+        if deleted_at.is_some() {
+            return Ok(ProcessedFile {
+                file_id: existing_id.clone(),
+                case_id: case_id.to_string(),
+                file_name: file_metadata.file_name.clone(),
+                folder_path: file_metadata.folder_path.clone(),
+                absolute_path: file_metadata.absolute_path.clone(),
+                file_hash: existing_hash,
+                file_type: file_metadata.file_type.clone(),
+                file_size: existing_size,
+                created_at: 0,
+                modified_at: existing_modified,
+                source_directory: folder_path.to_string(),
+                inventory_data: String::new(),
+                action: FileAction::Skip,
+            });
+        }
         
         // For reviewed/flagged/finalized files, always verify hash even if metadata matches
         // This ensures we catch content changes that don't affect metadata
