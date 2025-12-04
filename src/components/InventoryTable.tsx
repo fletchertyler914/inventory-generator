@@ -65,6 +65,7 @@ const TableRowMemo = memo(function TableRowMemo({
       if (
         target.closest('input[type="checkbox"]') ||
         target.closest("[data-editable-cell]") ||
+        target.closest("[data-tags-cell]") ||
         target.closest("button") ||
         target.closest('[role="dialog"]') ||
         target.closest("[data-radix-portal]")

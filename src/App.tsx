@@ -13,6 +13,7 @@ import { fileService } from "./services/fileService"
 import { caseService } from "./services/caseService"
 import { createAppError, logError, ErrorCode } from "./lib/error-handler"
 import { toast } from "./hooks/useToast"
+import { getStoreValue, setStoreValue } from "./lib/store-utils"
 import type { Case } from "./types/case"
 
 /**
@@ -47,31 +48,17 @@ function App() {
   const { setSelectedFolder } = useInventoryStore()
 
   /**
-   * Initialize app - wait for theme and React to be ready
-   */
-  useEffect(() => {
-    console.log("[Frontend] [App] useEffect: Initialization effect running")
-    console.log("[Frontend] [App] Setting 800ms timer to complete initialization...")
-
-    // Wait for theme initialization and initial render
-    const initTimer = setTimeout(() => {
-      console.log("[Frontend] [App] Initialization timer fired, setting isInitializing to false")
-      setIsInitializing(false)
-      console.log("[Frontend] [App] Initialization complete")
-    }, 800) // Give enough time for theme detection and smooth splash display
-
-    return () => {
-      console.log("[Frontend] [App] Cleanup: Clearing initialization timer")
-      clearTimeout(initTimer)
-    }
-  }, [])
-
-  /**
    * Handle case selection - ELITE: Load from database instantly
    */
   const handleCaseSelect = useCallback(
     async (case_: Case) => {
       setCurrentCase(case_)
+      // Persist last selected case ID
+      try {
+        await setStoreValue("casespace-last-case-id", case_.id, "settings")
+      } catch (error) {
+        console.error("Failed to save last selected case:", error)
+      }
 
       try {
         // ELITE: Load files from database (blazing fast: < 100ms for thousands of files)
@@ -139,6 +126,57 @@ function App() {
     },
     [setItems, setSelectedFolder]
   )
+
+  /**
+   * Initialize app - wait for theme and React to be ready, and load last selected case
+   */
+  useEffect(() => {
+    console.log("[Frontend] [App] useEffect: Initialization effect running")
+    console.log("[Frontend] [App] Setting 800ms timer to complete initialization...")
+
+    let mounted = true
+
+    // Load last selected case if available
+    const loadLastCase = async () => {
+      try {
+        const lastCaseId = await getStoreValue<string | null>(
+          "casespace-last-case-id",
+          null,
+          "settings"
+        )
+        if (lastCaseId && mounted) {
+          try {
+            const lastCase = await caseService.getCase(lastCaseId)
+            if (mounted) {
+              await handleCaseSelect(lastCase)
+            }
+          } catch (error) {
+            // Case no longer exists, ignore
+            console.log("Last selected case no longer exists:", lastCaseId)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load last selected case:", error)
+      }
+    }
+
+    // Wait for theme initialization and initial render
+    const initTimer = setTimeout(() => {
+      console.log("[Frontend] [App] Initialization timer fired, setting isInitializing to false")
+      if (mounted) {
+        setIsInitializing(false)
+        console.log("[Frontend] [App] Initialization complete")
+        // Load last case after initialization
+        loadLastCase()
+      }
+    }, 800) // Give enough time for theme detection and smooth splash display
+
+    return () => {
+      mounted = false
+      console.log("[Frontend] [App] Cleanup: Clearing initialization timer")
+      clearTimeout(initTimer)
+    }
+  }, [handleCaseSelect])
 
   /**
    * Handle case creation from dialog

@@ -4,6 +4,58 @@ use tokio::fs;
 use chrono::{Local, TimeZone, Datelike};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemFileFilter {
+    pub enabled: bool,
+    pub patterns: Vec<String>,
+}
+
+impl Default for SystemFileFilter {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            patterns: vec![
+                "DS_Store".to_string(),
+                "Thumbs.db".to_string(),
+                "desktop.ini".to_string(),
+                ".directory".to_string(),
+            ],
+        }
+    }
+}
+
+/// Check if a file should be skipped based on system file filter configuration
+pub fn should_skip_system_file(path: &Path, filter_config: &SystemFileFilter) -> bool {
+    if !filter_config.enabled {
+        return false;
+    }
+
+    // Get file name
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+
+    // Check exact matches
+    for pattern in &filter_config.patterns {
+        if file_name == pattern || file_name == format!(".{}", pattern) {
+            return true;
+        }
+    }
+
+    // Check for macOS resource forks (files starting with ._)
+    if file_name.starts_with("._") {
+        return true;
+    }
+
+    // Check for temporary Office files (files starting with ~$)
+    if file_name.starts_with("~$") {
+        return true;
+    }
+
+    false
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileMetadata {
     pub file_name: String,
     pub folder_name: String,
@@ -172,9 +224,10 @@ pub fn compute_additional_fields(metadata: &FileMetadata) -> serde_json::Value {
 
 /// ELITE: Fast async file count - only counts files without reading metadata
 /// Uses tokio::fs for non-blocking directory traversal
-pub async fn count_files_async(root_path: &Path) -> std::io::Result<usize> {
+pub async fn count_files_async(root_path: &Path, filter_config: Option<&SystemFileFilter>) -> std::io::Result<usize> {
+    let filter = filter_config.cloned().unwrap_or_else(|| SystemFileFilter::default());
     // Use a boxed future for recursive async function
-    fn walk_dir_count(dir: PathBuf) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<usize>> + Send>> {
+    fn walk_dir_count(dir: PathBuf, filter: SystemFileFilter) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<usize>> + Send>> {
         Box::pin(async move {
             let mut count = 0;
             let mut entries = fs::read_dir(&dir).await?;
@@ -184,9 +237,12 @@ pub async fn count_files_async(root_path: &Path) -> std::io::Result<usize> {
                 let metadata = entry.metadata().await?;
                 
                 if metadata.is_dir() {
-                    count += walk_dir_count(path).await?;
+                    count += walk_dir_count(path, filter.clone()).await?;
                 } else if metadata.is_file() {
-                    count += 1;
+                    // Skip system files if filter is enabled
+                    if !should_skip_system_file(&path, &filter) {
+                        count += 1;
+                    }
                 }
             }
             
@@ -194,27 +250,28 @@ pub async fn count_files_async(root_path: &Path) -> std::io::Result<usize> {
         })
     }
     
-    walk_dir_count(root_path.to_path_buf()).await
+    walk_dir_count(root_path.to_path_buf(), filter).await
 }
 
 /// Synchronous wrapper for count_files_async
-pub fn count_files(root_path: &Path) -> std::io::Result<usize> {
+pub fn count_files(root_path: &Path, filter_config: Option<&SystemFileFilter>) -> std::io::Result<usize> {
     // Try to use current runtime handle
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        return handle.block_on(count_files_async(root_path));
+        return handle.block_on(count_files_async(root_path, filter_config));
     }
     
     // Fallback: create temporary runtime
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to create runtime: {}", e)))?;
-    rt.block_on(count_files_async(root_path))
+    rt.block_on(count_files_async(root_path, filter_config))
 }
 
 /// ELITE: Async folder scanning using tokio::fs for non-blocking I/O
 /// Processes directories in parallel for maximum performance
-pub async fn scan_folder_async(root_path: &Path) -> std::io::Result<Vec<FileMetadata>> {
+pub async fn scan_folder_async(root_path: &Path, filter_config: Option<&SystemFileFilter>) -> std::io::Result<Vec<FileMetadata>> {
+    let filter = filter_config.cloned().unwrap_or_else(|| SystemFileFilter::default());
     // Use a boxed future for recursive async function
-    fn walk_dir(dir: PathBuf, root: PathBuf) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<Vec<FileMetadata>>> + Send>> {
+    fn walk_dir(dir: PathBuf, root: PathBuf, filter: SystemFileFilter) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::io::Result<Vec<FileMetadata>>> + Send>> {
         Box::pin(async move {
             let mut files = Vec::new();
             let mut entries = fs::read_dir(&dir).await?;
@@ -230,7 +287,10 @@ pub async fn scan_folder_async(root_path: &Path) -> std::io::Result<Vec<FileMeta
                 if metadata.is_dir() {
                     subdirs.push(path);
                 } else if metadata.is_file() {
-                    file_paths.push(path);
+                    // Skip system files if filter is enabled
+                    if !should_skip_system_file(&path, &filter) {
+                        file_paths.push(path);
+                    }
                 }
             }
             
@@ -254,7 +314,7 @@ pub async fn scan_folder_async(root_path: &Path) -> std::io::Result<Vec<FileMeta
             
             // Recursively process subdirectories (can be parallelized further if needed)
             for subdir in subdirs {
-                let subdir_files = walk_dir(subdir, root.clone()).await?;
+                let subdir_files = walk_dir(subdir, root.clone(), filter.clone()).await?;
                 files.extend(subdir_files);
             }
             
@@ -262,19 +322,19 @@ pub async fn scan_folder_async(root_path: &Path) -> std::io::Result<Vec<FileMeta
         })
     }
     
-    walk_dir(root_path.to_path_buf(), root_path.to_path_buf()).await
+    walk_dir(root_path.to_path_buf(), root_path.to_path_buf(), filter).await
 }
 
 /// Synchronous wrapper for scan_folder_async
-pub fn scan_folder(root_path: &Path) -> std::io::Result<Vec<FileMetadata>> {
+pub fn scan_folder(root_path: &Path, filter_config: Option<&SystemFileFilter>) -> std::io::Result<Vec<FileMetadata>> {
     // Try to use current runtime handle
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        return handle.block_on(scan_folder_async(root_path));
+        return handle.block_on(scan_folder_async(root_path, filter_config));
     }
     
     // Fallback: create temporary runtime
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to create runtime: {}", e)))?;
-    rt.block_on(scan_folder_async(root_path))
+    rt.block_on(scan_folder_async(root_path, filter_config))
 }
 

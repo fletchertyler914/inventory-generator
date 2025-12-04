@@ -43,10 +43,23 @@ export function TagsCell({ tags, onTagsChange }: TagsCellProps) {
     }
   }, [open]);
 
+  const handleCellClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleCellMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div className="flex items-center gap-1 min-w-0 flex-wrap">
+        <div 
+          data-tags-cell
+          className="flex items-center gap-1 min-w-0 flex-wrap"
+          onClick={handleCellClick}
+          onMouseDown={handleCellMouseDown}
+        >
           {currentTags.length > 0 ? (
             <>
               {currentTags.slice(0, 2).map((tag) => (

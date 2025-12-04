@@ -53,9 +53,12 @@ export function CaseWorkspace({
   onAddFiles,
 }: CaseWorkspaceProps) {
   const [viewingFile, setViewingFile] = useState<InventoryItem | null>(null)
+  // Track last selected file before switching to timeline (for restoration)
+  const [lastSelectedFile, setLastSelectedFile] = useState<InventoryItem | null>(null)
   // Default to table view for better initial experience - switch to split when file is selected
   const [viewMode, setViewMode] = useState<"split" | "table" | "timeline">("table")
   const [navigatorOpen, setNavigatorOpen] = useState(true)
+  const [lastFileLoaded, setLastFileLoaded] = useState<boolean>(false)
   const [columnConfig, setColumnConfig] = useState<TableColumnConfig>(() =>
     getColumnConfig(case_.id)
   )
@@ -67,17 +70,18 @@ export function CaseWorkspace({
   const [timelineVisible, setTimelineVisible] = useState<boolean>(false)
   const [panesLoaded, setPanesLoaded] = useState<boolean>(false)
 
-  // Load pane visibility from Tauri store on mount
+  // Load pane visibility and last selected file from Tauri store on mount
   useEffect(() => {
     let mounted = true
 
-    const loadPanes = async () => {
+    const loadPanesAndLastFile = async () => {
       try {
-        const [table, notes, findings, timeline] = await Promise.all([
+        const [table, notes, findings, timeline, lastFilePath] = await Promise.all([
           getStoreValue<boolean>(`casespace-pane-table-${case_.id}`, true, "settings"),
           getStoreValue<boolean>(`casespace-pane-notes-${case_.id}`, false, "settings"),
           getStoreValue<boolean>(`casespace-pane-findings-${case_.id}`, false, "settings"),
           getStoreValue<boolean>(`casespace-pane-timeline-${case_.id}`, false, "settings"),
+          getStoreValue<string | null>(`casespace-last-file-${case_.id}`, null, "settings"),
         ])
 
         if (mounted) {
@@ -86,21 +90,31 @@ export function CaseWorkspace({
           setFindingsVisible(findings)
           setTimelineVisible(timeline)
           setPanesLoaded(true)
+
+          // Load last selected file if it exists
+          if (lastFilePath) {
+            const lastFile = items.find((item) => item.absolute_path === lastFilePath)
+            if (lastFile) {
+              setLastSelectedFile(lastFile)
+            }
+          }
+          setLastFileLoaded(true)
         }
       } catch (error) {
         console.error("Failed to load pane visibility from store:", error)
         if (mounted) {
           setPanesLoaded(true)
+          setLastFileLoaded(true)
         }
       }
     }
 
-    loadPanes()
+    loadPanesAndLastFile()
 
     return () => {
       mounted = false
     }
-  }, [case_.id])
+  }, [case_.id, items])
 
   // ELITE UX: Contextual filtering - default to unreviewed (what needs work)
   const [statusFilter, setStatusFilter] = useState<TableFilter>("unreviewed")
@@ -247,8 +261,17 @@ export function CaseWorkspace({
   }, [selectedFolderPath, statusFilter, searchQuery])
 
   const handleFileSelect = useCallback(
-    (file: InventoryItem) => {
+    async (file: InventoryItem) => {
       setViewingFile(file)
+      setLastSelectedFile(file) // Track last selected file
+      // Persist last selected file to store
+      if (lastFileLoaded) {
+        try {
+          await setStoreValue(`casespace-last-file-${case_.id}`, file.absolute_path, "settings")
+        } catch (error) {
+          console.error("Failed to save last selected file:", error)
+        }
+      }
       // Automatically switch to split view when a file is selected
       setViewMode("split")
       // Hide table panel by default when file is selected
@@ -262,7 +285,7 @@ export function CaseWorkspace({
         setTimelineVisible(false)
       }
     },
-    [notesVisible, timelineVisible]
+    [notesVisible, timelineVisible, case_.id, lastFileLoaded]
   )
 
   // Reset to table view when file is closed
@@ -308,8 +331,44 @@ export function CaseWorkspace({
         onClose={onCloseCase}
         onAddFiles={handleAddFilesClick}
         viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        onViewModeChange={async (mode) => {
+          if (mode === "split" && lastSelectedFile && !viewingFile) {
+            // Restore last selected file when switching back to split view from timeline
+            // Verify the file still exists in the items list
+            const fileStillExists = items.some(
+              (item) => item.absolute_path === lastSelectedFile.absolute_path
+            )
+            if (fileStillExists) {
+              setViewingFile(lastSelectedFile)
+              setTableVisible(false)
+              if (!notesVisible) {
+                setNotesVisible(true)
+              }
+            } else {
+              // File no longer exists, clear it and just switch to table view
+              setLastSelectedFile(null)
+              if (lastFileLoaded) {
+                try {
+                  await setStoreValue(`casespace-last-file-${case_.id}`, null, "settings")
+                } catch (error) {
+                  console.error("Failed to clear last selected file:", error)
+                }
+              }
+              setViewMode("table")
+              return
+            }
+          } else if (mode === "table") {
+            // Clear viewing file when switching to table view
+            setViewingFile(null)
+          }
+          setViewMode(mode)
+          // Close timeline when switching away from timeline view
+          if (mode !== "timeline" && timelineVisible) {
+            setTimelineVisible(false)
+          }
+        }}
         viewingFile={viewingFile}
+        lastSelectedFile={lastSelectedFile}
         tableVisible={tableVisible}
         onToggleTable={() => setTableVisible((prev: boolean) => !prev)}
         notesVisible={notesVisible}
@@ -317,13 +376,25 @@ export function CaseWorkspace({
         findingsVisible={findingsVisible}
         onToggleFindings={() => setFindingsVisible((prev: boolean) => !prev)}
         timelineVisible={timelineVisible}
-        onToggleTimeline={() => {
+        onToggleTimeline={async () => {
           if (timelineVisible) {
             // Closing timeline - return to table view
             setTimelineVisible(false)
             setViewMode("table")
           } else {
             // Opening timeline - switch to timeline view mode
+            // Save current file before switching to timeline (for restoration)
+            if (viewingFile) {
+              setLastSelectedFile(viewingFile)
+              // Persist last selected file to store
+              if (lastFileLoaded) {
+                try {
+                  await setStoreValue(`casespace-last-file-${case_.id}`, viewingFile.absolute_path, "settings")
+                } catch (error) {
+                  console.error("Failed to save last selected file:", error)
+                }
+              }
+            }
             setTimelineVisible(true)
             setViewMode("timeline")
             setViewingFile(null)
@@ -336,8 +407,20 @@ export function CaseWorkspace({
           setFindingsVisible(true)
           setViewMode("split")
         }}
-        onTimelineSelect={() => {
+        onTimelineSelect={async () => {
           // Timeline should be a full-screen experience
+          // Save current file before switching to timeline (for restoration)
+          if (viewingFile) {
+            setLastSelectedFile(viewingFile)
+            // Persist last selected file to store
+            if (lastFileLoaded) {
+              try {
+                await setStoreValue(`casespace-last-file-${case_.id}`, viewingFile.absolute_path, "settings")
+              } catch (error) {
+                console.error("Failed to save last selected file:", error)
+              }
+            }
+          }
           setTimelineVisible(true)
           setViewMode("timeline")
           // Close file viewer and notes when opening timeline

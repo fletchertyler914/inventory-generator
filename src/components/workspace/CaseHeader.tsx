@@ -15,6 +15,7 @@ interface CaseHeaderProps {
   viewMode: 'split' | 'table' | 'timeline';
   onViewModeChange: (mode: 'split' | 'table' | 'timeline') => void;
   viewingFile: InventoryItem | null;
+  lastSelectedFile?: InventoryItem | null;
   tableVisible?: boolean;
   onToggleTable?: () => void;
   notesVisible?: boolean;
@@ -38,6 +39,7 @@ export function CaseHeader({
   viewMode,
   onViewModeChange,
   viewingFile,
+  lastSelectedFile = null,
   tableVisible = true,
   onToggleTable,
   notesVisible = false,
@@ -87,6 +89,7 @@ export function CaseHeader({
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* Contextual view mode toggle */}
         {viewingFile ? (
+          // File is currently selected - show split/table toggle
           <div className="flex items-center border border-border rounded-md overflow-hidden">
             <Button
               variant={viewMode === 'split' ? 'default' : 'ghost'}
@@ -109,7 +112,41 @@ export function CaseHeader({
               Table
             </Button>
           </div>
+        ) : viewMode === 'timeline' && lastSelectedFile ? (
+          // In timeline mode with a persisted file - show split view button
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onViewModeChange('split')}
+            title="Switch to split view with last selected file"
+          >
+            <LayoutGrid className="h-4 w-4 mr-1" />
+            Split View
+          </Button>
+        ) : viewMode === 'timeline' ? (
+          // In timeline mode without a persisted file - show table view button
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onViewModeChange('table')}
+            title="Switch to table view"
+          >
+            <Table className="h-4 w-4 mr-1" />
+            Table View
+          </Button>
+        ) : viewMode === 'table' && lastSelectedFile ? (
+          // In table view with a persisted file - show split view button
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onViewModeChange('split')}
+            title="Switch to split view with last selected file"
+          >
+            <LayoutGrid className="h-4 w-4 mr-1" />
+            Split View
+          </Button>
         ) : (
+          // No file selected and no persisted file - show disabled table view button
           <Button
             variant="outline"
             size="sm"

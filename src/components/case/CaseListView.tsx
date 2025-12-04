@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
-import { FolderOpen, Plus, Trash2, Edit2, Clock, FileText, Briefcase, Loader2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { FolderOpen, Plus, Briefcase, Search, X, ArrowUpDown, ChevronRight, TestTube, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Badge } from '../ui/badge';
+import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
 import { SettingsDialog } from '../SettingsDialog';
 import { Skeleton } from '../ui/skeleton';
@@ -10,10 +9,22 @@ import { cn } from '@/lib/utils';
 import { caseService } from '@/services/caseService';
 import { fileService } from '@/services/fileService';
 import type { Case } from '@/types/case';
-import { format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { EditCaseDialog } from './EditCaseDialog';
 import { DeleteCaseConfirmationDialog } from './DeleteCaseConfirmationDialog';
 import { toast } from '@/hooks/useToast';
+import { useDebounce } from '@/hooks/useDebounce';
+import { CaseListCard } from './CaseListCard';
+import { CaseFilters, type CaseFilters as CaseFiltersType } from './CaseFilters';
+import { CaseListViewMode } from './CaseListViewMode';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
+import { generateDummyCases, clearDummyCases } from '@/scripts/generateDummyCases';
 
 interface CaseListViewProps {
   onSelectCase: (case_: Case) => void;
@@ -26,6 +37,13 @@ interface CaseWithFileCount extends Case {
   sources?: string[];
 }
 
+type SortOption = 'recent' | 'name' | 'created' | 'files';
+
+const VIRTUALIZATION_THRESHOLD = 50;
+const ADAPTIVE_LIST_THRESHOLD = 20;
+const RECENT_CASES_DAYS = 7;
+const MAX_RECENT_CASES = 5;
+
 export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: CaseListViewProps) {
   const [cases, setCases] = useState<CaseWithFileCount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +53,48 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
   const [deletingCase, setDeletingCase] = useState<Case | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 150);
+  const [filters, setFilters] = useState<CaseFiltersType>({
+    deploymentMode: [],
+    departments: [],
+    clients: [],
+  });
+  const [sortOption, setSortOption] = useState<SortOption>('recent');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-switch to list view for 20+ cases
+  useEffect(() => {
+    if (cases.length >= ADAPTIVE_LIST_THRESHOLD && viewMode === 'grid') {
+      setViewMode('list');
+    }
+  }, [cases.length, viewMode]);
+
+  // Keyboard shortcut: Cmd/Ctrl+F to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || 
+                      target.tagName === 'TEXTAREA' || 
+                      target.isContentEditable;
+      
+      if (isInput && target !== searchInputRef.current) return;
+      
+      const modifier = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? e.metaKey : e.ctrlKey;
+      
+      if (modifier && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const loadCases = async () => {
     try {
@@ -69,6 +129,11 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
       });
     } catch (error) {
       console.error('Failed to load cases:', error);
+      toast({
+        title: 'Failed to load cases',
+        description: error instanceof Error ? error.message : 'An error occurred while loading cases.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -78,21 +143,103 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
     loadCases();
   }, []);
 
-  const handleEditCase = (case_: Case, e: React.MouseEvent) => {
+  // Extract unique departments and clients for filters
+  const availableDepartments = useMemo(() => {
+    const depts = new Set<string>();
+    cases.forEach(c => {
+      if (c.department) depts.add(c.department);
+    });
+    return Array.from(depts).sort();
+  }, [cases]);
+
+  const availableClients = useMemo(() => {
+    const clients = new Set<string>();
+    cases.forEach(c => {
+      if (c.client) clients.add(c.client);
+    });
+    return Array.from(clients).sort();
+  }, [cases]);
+
+  // Filter cases based on search and filters
+  const filteredCases = useMemo(() => {
+    let result = cases;
+
+    // Apply search filter
+    if (debouncedSearchQuery.trim()) {
+      const query = debouncedSearchQuery.toLowerCase();
+      result = result.filter(c => 
+        c.name.toLowerCase().includes(query) ||
+        c.case_id?.toLowerCase().includes(query) ||
+        c.department?.toLowerCase().includes(query) ||
+        c.client?.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply deployment mode filter
+    if (filters.deploymentMode.length > 0) {
+      result = result.filter(c => filters.deploymentMode.includes(c.deployment_mode));
+    }
+
+    // Apply department filter
+    if (filters.departments.length > 0) {
+      result = result.filter(c => c.department && filters.departments.includes(c.department));
+    }
+
+    // Apply client filter
+    if (filters.clients.length > 0) {
+      result = result.filter(c => c.client && filters.clients.includes(c.client));
+    }
+
+    return result;
+  }, [cases, debouncedSearchQuery, filters]);
+
+  // Sort cases
+  const sortedCases = useMemo(() => {
+    const sorted = [...filteredCases];
+    
+    switch (sortOption) {
+      case 'recent':
+        return sorted.sort((a, b) => b.last_opened_at - a.last_opened_at);
+      case 'name':
+        return sorted.sort((a, b) => a.name.localeCompare(b.name));
+      case 'created':
+        return sorted.sort((a, b) => b.created_at - a.created_at);
+      case 'files':
+        return sorted.sort((a, b) => (b.fileCount ?? 0) - (a.fileCount ?? 0));
+      default:
+        return sorted;
+    }
+  }, [filteredCases, sortOption]);
+
+  // Separate recent cases (opened in last 7 days)
+  const { recentCases, otherCases } = useMemo(() => {
+    const now = Date.now() / 1000;
+    const sevenDaysAgo = now - (RECENT_CASES_DAYS * 24 * 60 * 60);
+    
+    const recent = sortedCases
+      .filter(c => c.last_opened_at >= sevenDaysAgo)
+      .slice(0, MAX_RECENT_CASES);
+    
+    const other = sortedCases.filter(c => !recent.includes(c));
+    
+    return { recentCases: recent, otherCases: other };
+  }, [sortedCases]);
+
+  const handleEditCase = useCallback((case_: Case, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingCase(case_);
     setEditDialogOpen(true);
-  };
+  }, []);
 
-  const handleEditCaseUpdated = () => {
+  const handleEditCaseUpdated = useCallback(() => {
     loadCases();
-  };
+  }, []);
 
-  const handleDeleteCaseClick = (case_: Case, e: React.MouseEvent) => {
+  const handleDeleteCaseClick = useCallback((case_: Case, e: React.MouseEvent) => {
     e.stopPropagation();
     setDeletingCase(case_);
     setDeleteDialogOpen(true);
-  };
+  }, []);
 
   const handleDeleteConfirm = async () => {
     if (!deletingCase) return;
@@ -119,6 +266,11 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
     }
   };
 
+  // Format relative time
+  const getRelativeTime = useCallback((timestamp: number) => {
+    return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true });
+  }, []);
+
   if (loading) {
     return (
       <div className="h-full flex flex-col">
@@ -128,7 +280,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
         </div>
         <div className="flex-1 p-8 space-y-4">
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="p-6">
+            <div key={i} className="p-6 border rounded-lg">
               <Skeleton className="h-6 w-48 mb-3" />
               <Skeleton className="h-4 w-full mb-4" />
               <div className="flex gap-2 mb-3">
@@ -137,12 +289,15 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
                 <Skeleton className="h-5 w-24" />
               </div>
               <Skeleton className="h-4 w-32" />
-            </Card>
+            </div>
           ))}
         </div>
       </div>
     );
   }
+
+  const totalCases = sortedCases.length;
+  const showRecentSection = recentCases.length > 0;
 
   return (
     <div className="h-full flex flex-col bg-background relative overflow-hidden">
@@ -156,22 +311,127 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
 
       {/* Header Section */}
       <div className="relative z-10 p-8 border-b border-border flex-shrink-0 bg-background/80 backdrop-blur-sm">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-                <Briefcase className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">Cases</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Manage and organize your document cases
-                </p>
+        <div className="space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight">Cases</h1>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Manage and organize your document cases
+                  </p>
+                </div>
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              {/* Dev Tools - Generate Test Cases */}
+              {import.meta.env.DEV && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await generateDummyCases();
+                        await loadCases();
+                      } catch (error) {
+                        console.error('Failed to generate dummy cases:', error);
+                      }
+                    }}
+                    title="Generate test cases for development"
+                  >
+                    <TestTube className="h-4 w-4 mr-2" />
+                    Generate Test Cases
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await clearDummyCases();
+                        await loadCases();
+                      } catch (error) {
+                        console.error('Failed to clear dummy cases:', error);
+                      }
+                    }}
+                    title="Clear all test cases"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear Test Cases
+                  </Button>
+                </>
+              )}
+              <SettingsDialog />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <SettingsDialog />
+
+          {/* Search and Controls Bar */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              {/* Search Bar */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search cases by name, ID, department, or client..."
+                  className="pl-9 pr-9 h-10"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Sort Dropdown */}
+              <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+                <SelectTrigger className="w-[180px]">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Recently Opened</SelectItem>
+                  <SelectItem value="name">Name (A-Z)</SelectItem>
+                  <SelectItem value="created">Date Created</SelectItem>
+                  <SelectItem value="files">File Count</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* View Mode Toggle */}
+              <CaseListViewMode viewMode={viewMode} onViewModeChange={setViewMode} />
+
+              {/* Create Case Button */}
+              {onCreateCase && (
+                <Button onClick={onCreateCase} size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Case
+                </Button>
+              )}
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center gap-3">
+              <CaseFilters
+                filters={filters}
+                onFiltersChange={setFilters}
+                availableDepartments={availableDepartments}
+                availableClients={availableClients}
+              />
+              {totalCases > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  {totalCases} {totalCases === 1 ? 'case' : 'cases'}
+                  {searchQuery && ` matching "${searchQuery}"`}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -179,7 +439,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
       {/* Cases List */}
       <ScrollArea className="flex-1 relative z-10">
         <div className="p-8">
-          {cases.length === 0 ? (
+          {totalCases === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 px-4">
               <div className="relative mb-6">
                 <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
@@ -187,9 +447,15 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
                   <FolderOpen className="h-16 w-16 text-muted-foreground/50" />
                 </div>
               </div>
-              <h3 className="text-xl font-semibold mb-2">No cases yet</h3>
+              <h3 className="text-xl font-semibold mb-2">
+                {searchQuery || filters.deploymentMode.length > 0 || filters.departments.length > 0 || filters.clients.length > 0
+                  ? 'No cases found'
+                  : 'No cases yet'}
+              </h3>
               <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
-                Get started by creating your first case to organize and manage your documents
+                {searchQuery || filters.deploymentMode.length > 0 || filters.departments.length > 0 || filters.clients.length > 0
+                  ? 'Try adjusting your search or filters to find what you\'re looking for.'
+                  : 'Get started by creating your first case to organize and manage your documents'}
               </p>
               {onCreateCase && (
                 <Button size="lg" onClick={onCreateCase} className="shadow-sm">
@@ -199,125 +465,100 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
               )}
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">{cases.length}</span>
-                  <span>{cases.length === 1 ? 'case' : 'cases'}</span>
+            <div className="space-y-8">
+              {/* Recent Cases Section */}
+              {showRecentSection && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold">Recently Opened</h2>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  {viewMode === 'grid' ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {recentCases.map((case_) => (
+                        <CaseListCard
+                          key={case_.id}
+                          case_={case_}
+                          currentCaseId={currentCaseId}
+                          loadingFileCount={loadingFileCounts.has(case_.id)}
+                          onSelect={onSelectCase}
+                          onEdit={handleEditCase}
+                          onDelete={handleDeleteCaseClick}
+                          isRecent={true}
+                          relativeTime={getRelativeTime(case_.last_opened_at)}
+                          viewMode={viewMode}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {recentCases.map((case_) => (
+                        <CaseListCard
+                          key={case_.id}
+                          case_={case_}
+                          currentCaseId={currentCaseId}
+                          loadingFileCount={loadingFileCounts.has(case_.id)}
+                          onSelect={onSelectCase}
+                          onEdit={handleEditCase}
+                          onDelete={handleDeleteCaseClick}
+                          isRecent={true}
+                          relativeTime={getRelativeTime(case_.last_opened_at)}
+                          viewMode={viewMode}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {onCreateCase && (
-                  <Button onClick={onCreateCase} size="sm" variant="outline">
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Case
-                  </Button>
-                )}
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {cases.map((case_, index) => (
-              <Card
-                key={case_.id}
-                className={cn(
-                  "group cursor-pointer transition-all duration-200 animate-fade-in",
-                  "hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1",
-                  "border-2 hover:border-primary/20",
-                  currentCaseId === case_.id && "ring-2 ring-primary border-primary/30 shadow-lg shadow-primary/10"
-                )}
-                style={{
-                  animationDelay: `${index * 50}ms`,
-                  opacity: 0,
-                  animationFillMode: 'forwards'
-                }}
-                onClick={() => onSelectCase(case_)}
-              >
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="p-1.5 rounded-md bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors">
-                            <Briefcase className="h-4 w-4 text-primary" />
-                          </div>
-                          <CardTitle className="text-lg font-bold truncate group-hover:text-primary transition-colors">
-                            {case_.name}
-                          </CardTitle>
-                        </div>
-                        <CardDescription className="text-xs mt-1 line-clamp-2 flex items-start gap-1.5">
-                          <FolderOpen className="h-3 w-3 mt-0.5 flex-shrink-0 text-muted-foreground/60" />
-                          <span className="truncate text-muted-foreground/70">
-                            {case_.sources && case_.sources.length > 0
-                              ? `${case_.sources.length} source${case_.sources.length !== 1 ? 's' : ''}`
-                              : 'No sources'}
-                          </span>
-                        </CardDescription>
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={(e) => handleEditCase(case_, e)}
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={(e) => handleDeleteCaseClick(case_, e)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0 space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {case_.case_id && (
-                        <Badge variant="outline" className="text-xs font-medium px-2 py-0.5">
-                          {case_.case_id}
-                        </Badge>
+              )}
+
+              {/* All Cases Section */}
+              {otherCases.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold">
+                      All Cases
+                      {otherCases.length > 0 && (
+                        <span className="ml-2 text-sm font-normal text-muted-foreground">
+                          ({otherCases.length})
+                        </span>
                       )}
-                      {case_.department && (
-                        <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5">
-                          {case_.department}
-                        </Badge>
-                      )}
-                      {case_.client && (
-                        <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5">
-                          {case_.client}
-                        </Badge>
-                      )}
-                      <Badge
-                        variant={case_.deployment_mode === 'cloud' ? 'default' : 'outline'}
-                        className="text-xs font-medium px-2 py-0.5"
-                      >
-                        {case_.deployment_mode}
-                      </Badge>
+                    </h2>
+                  </div>
+                  {viewMode === 'grid' ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {otherCases.map((case_) => (
+                        <CaseListCard
+                          key={case_.id}
+                          case_={case_}
+                          currentCaseId={currentCaseId}
+                          loadingFileCount={loadingFileCounts.has(case_.id)}
+                          onSelect={onSelectCase}
+                          onEdit={handleEditCase}
+                          onDelete={handleDeleteCaseClick}
+                          relativeTime={getRelativeTime(case_.last_opened_at)}
+                          viewMode={viewMode}
+                        />
+                      ))}
                     </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5" />
-                          <span>{format(new Date(case_.last_opened_at * 1000), 'MMM d, yyyy')}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs font-medium">
-                        {loadingFileCounts.has(case_.id) ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                        ) : (
-                          <>
-                            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-foreground">
-                              {case_.fileCount !== undefined ? case_.fileCount.toLocaleString() : '—'}
-                            </span>
-                            <span className="text-muted-foreground">files</span>
-                          </>
-                        )}
-                      </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {otherCases.map((case_) => (
+                        <CaseListCard
+                          key={case_.id}
+                          case_={case_}
+                          currentCaseId={currentCaseId}
+                          loadingFileCount={loadingFileCounts.has(case_.id)}
+                          onSelect={onSelectCase}
+                          onEdit={handleEditCase}
+                          onDelete={handleDeleteCaseClick}
+                          relativeTime={getRelativeTime(case_.last_opened_at)}
+                          viewMode={viewMode}
+                        />
+                      ))}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -342,4 +583,3 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
     </div>
   );
 }
-

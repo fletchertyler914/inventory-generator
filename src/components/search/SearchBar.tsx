@@ -218,6 +218,9 @@ export function SearchBar({ caseId, items, onFileSelect, onNoteSelect, onSearchC
               }
             }}
             onKeyDown={handleKeyDown}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+            }}
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
             className="pl-10 pr-10 h-11 text-base"

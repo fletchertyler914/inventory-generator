@@ -15,6 +15,7 @@ use mappings::process_file_metadata;
 use export::{read_xlsx, read_csv, read_json};
 use error::AppError;
 use database::{Case, Note, File, Finding, TimelineEvent};
+use scanner::SystemFileFilter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -77,9 +78,48 @@ fn get_database_path() -> Result<String, String> {
     database::get_db_path()
 }
 
+/// Get system file filter configuration
+#[tauri::command]
+async fn get_system_file_filter_config(app: tauri::AppHandle) -> Result<String, String> {
+    let filter = load_system_file_filter(&app).await;
+    serde_json::to_string(&filter)
+        .map_err(|e| format!("Failed to serialize filter config: {}", e))
+}
+
+/// Save system file filter configuration
+#[tauri::command]
+async fn save_system_file_filter_config(config: String, app: tauri::AppHandle) -> Result<(), String> {
+    // Validate JSON
+    let _filter: SystemFileFilter = serde_json::from_str(&config)
+        .map_err(|e| format!("Invalid filter config JSON: {}", e))?;
+    
+    let pool = database::get_db_pool(&app).await?;
+    database::save_app_setting(&pool, "system_file_filter", &config).await?;
+    
+    Ok(())
+}
+
+/// Helper function to load system file filter config from database
+async fn load_system_file_filter(app: &tauri::AppHandle) -> SystemFileFilter {
+    let pool = match database::get_db_pool(app).await {
+        Ok(pool) => pool,
+        Err(_) => return SystemFileFilter::default(),
+    };
+
+    match database::get_app_setting(&pool, "system_file_filter").await {
+        Ok(Some(config_json)) => {
+            match serde_json::from_str::<SystemFileFilter>(&config_json) {
+                Ok(filter) => filter,
+                Err(_) => SystemFileFilter::default(),
+            }
+        }
+        _ => SystemFileFilter::default(),
+    }
+}
+
 /// ELITE: Async file counting using tokio::fs
 #[tauri::command]
-async fn count_directory_files(path: String) -> Result<usize, String> {
+async fn count_directory_files(path: String, app: tauri::AppHandle) -> Result<usize, String> {
     let root_path = PathBuf::from(&path);
     
     // ELITE: Use tokio::fs for async file system checks
@@ -94,14 +134,17 @@ async fn count_directory_files(path: String) -> Result<usize, String> {
         return Err(AppError::NotADirectory(path).to_string_message());
     }
     
+    // Load filter config from database
+    let filter_config = load_system_file_filter(&app).await;
+    
     // ELITE: Use async counting for non-blocking performance
-    scanner::count_files_async(&root_path).await
+    scanner::count_files_async(&root_path, Some(&filter_config)).await
         .map_err(|e| AppError::ScanError(e.to_string()).to_string_message())
 }
 
 /// ELITE: Async directory scanning using tokio::fs
 #[tauri::command]
-async fn scan_directory(path: String) -> Result<Vec<InventoryItem>, String> {
+async fn scan_directory(path: String, app: tauri::AppHandle) -> Result<Vec<InventoryItem>, String> {
     log::info!("Scanning directory: {}", path);
     // SECURITY: Validate and canonicalize path (prevents path traversal)
     let root_path = path_validation::validate_directory_path(&PathBuf::from(&path)).await
@@ -110,8 +153,11 @@ async fn scan_directory(path: String) -> Result<Vec<InventoryItem>, String> {
             AppError::PathNotFound(format!("{}: {}", path, e)).to_string_message()
         })?;
     
+    // Load filter config from database
+    let filter_config = load_system_file_filter(&app).await;
+    
     // ELITE: Use async scanning for non-blocking performance
-    let files = scanner::scan_folder_async(&root_path).await
+    let files = scanner::scan_folder_async(&root_path, Some(&filter_config)).await
         .map_err(|e| {
             log::error!("Failed to scan directory {}: {}", path, e);
             AppError::ScanError(e.to_string()).to_string_message()
@@ -256,6 +302,7 @@ fn import_inventory(
 async fn sync_inventory(
     folder_path: String,
     existing_items: Vec<InventoryItem>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<InventoryItem>, String> {
     let root_path = PathBuf::from(&folder_path);
     
@@ -271,8 +318,11 @@ async fn sync_inventory(
         return Err(AppError::NotADirectory(folder_path).to_string_message());
     }
     
+    // Load filter config from database
+    let filter_config = load_system_file_filter(&app).await;
+    
     // ELITE: Use async scanning for non-blocking performance
-    let files = scanner::scan_folder_async(&root_path).await
+    let files = scanner::scan_folder_async(&root_path, Some(&filter_config)).await
         .map_err(|e| AppError::ScanError(e.to_string()).to_string_message())?;
     
     // Create a map of existing items by absolute_path for quick lookup
@@ -1952,8 +2002,11 @@ async fn ingest_files_to_case(
             format!("Invalid folder path: {}", e)
         })?;
     
+    // Load filter config from database
+    let filter_config = load_system_file_filter(&app).await;
+    
     // ELITE: Use async scanning for non-blocking performance
-    let file_metadatas = scanner::scan_folder_async(&root_path).await
+    let file_metadatas = scanner::scan_folder_async(&root_path, Some(&filter_config)).await
         .map_err(|e| {
             log::error!("Failed to scan folder {}: {}", folder_path, e);
             format!("Failed to scan folder: {}", e)
@@ -3115,7 +3168,9 @@ pub fn run() {
             get_column_config_db,
             save_column_config_db,
             get_mapping_config_db,
-            save_mapping_config_db
+            save_mapping_config_db,
+            get_system_file_filter_config,
+            save_system_file_filter_config
         ]);
     eprintln!("[CaseSpace] Invoke handlers registered");
     

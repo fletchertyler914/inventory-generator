@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from "react"
-import { Plus, AlertCircle, AlertTriangle, Info, XCircle, X } from "lucide-react"
-import { Button } from "../ui/button"
-import { ScrollArea } from "../ui/scroll-area"
+import { Plus, AlertCircle, AlertTriangle, Info, XCircle } from "lucide-react"
 import { Badge } from "../ui/badge"
 import { findingService } from "@/services/findingService"
 import type { Finding } from "@/types/finding"
 import { CreateFindingDialog } from "./CreateFindingDialog"
+import { PanelContainer } from "../panel/PanelContainer"
+import { PanelHeader } from "../panel/PanelHeader"
+import { PanelContent } from "../panel/PanelContent"
+import { PanelEmptyState } from "../panel/PanelEmptyState"
+import { PanelCard } from "../panel/PanelCard"
 
 interface FindingsPanelProps {
   caseId: string
@@ -73,97 +76,82 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading findings...</div>
-      </div>
+      <PanelContainer>
+        <div className="h-full flex items-center justify-center">
+          <div className="text-sm text-muted-foreground">Loading findings...</div>
+        </div>
+      </PanelContainer>
     )
   }
 
   return (
-    <div className="h-full flex flex-col bg-card">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <h3 className="text-sm font-semibold text-foreground">Findings</h3>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleCreate}>
-            <Plus className="h-4 w-4 mr-1" />
-            New
-          </Button>
-          {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-6 w-6 p-0">
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
+    <PanelContainer>
+      <PanelHeader
+        title="Findings"
+        count={findings.length}
+        onCreate={handleCreate}
+        createButtonLabel="New"
+        onClose={onClose}
+      />
 
-      {/* Content */}
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="p-2 space-y-2">
-          {findings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-                <Plus className="h-6 w-6 text-muted-foreground/50" />
-              </div>
-              <p className="text-sm font-medium text-foreground mb-1">No findings yet</p>
-              <p className="text-xs text-muted-foreground">Click &quot;New&quot; to create one.</p>
-            </div>
-          ) : (
-            findings.map((finding) => {
-              const config = severityConfig[finding.severity]
-              const SeverityIcon = config.icon
+      <PanelContent>
+        {findings.length === 0 ? (
+          <PanelEmptyState
+            icon={Plus}
+            title="No findings yet"
+            description='Click "New" to create one.'
+          />
+        ) : (
+          findings.map((finding) => {
+            const config = severityConfig[finding.severity]
+            const SeverityIcon = config.icon
 
-              return (
-                <div
-                  key={finding.id}
-                  className="p-2 rounded-md border border-border/30 hover:border-border/50 bg-background hover:bg-muted/30 transition-all duration-150 cursor-pointer"
-                  onClick={() => handleEdit(finding)}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold truncate">{finding.title}</h4>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        {finding.description}
-                      </p>
-                    </div>
-                    <Badge variant={config.variant} className="text-[10px] flex-shrink-0">
-                      <SeverityIcon className="h-3 w-3 mr-1" />
-                      {config.label}
-                    </Badge>
+            return (
+              <PanelCard key={finding.id} onClick={() => handleEdit(finding)}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold truncate">{finding.title}</h4>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {finding.description}
+                    </p>
                   </div>
-
-                  <div className="flex items-center gap-2 mt-2">
-                    {finding.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {finding.tags.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="outline" className="text-[10px]">
-                            {tag}
-                          </Badge>
-                        ))}
-                        {finding.tags.length > 3 && (
-                          <Badge variant="outline" className="text-[10px]">
-                            +{finding.tags.length - 3}
-                          </Badge>
-                        )}
-                      </div>
-                    )}
-                    {finding.linked_files.length > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {finding.linked_files.length} file
-                        {finding.linked_files.length !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="text-xs text-muted-foreground mt-2">
-                    {new Date(finding.updated_at * 1000).toLocaleString()}
-                  </div>
+                  <Badge variant={config.variant} className="text-[10px] flex-shrink-0">
+                    <SeverityIcon className="h-3 w-3 mr-1" />
+                    {config.label}
+                  </Badge>
                 </div>
-              )
-            })
-          )}
-        </div>
-      </ScrollArea>
+
+                <div className="flex items-center gap-2 mt-2">
+                  {finding.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {finding.tags.slice(0, 3).map((tag) => (
+                        <Badge key={tag} variant="outline" className="text-[10px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                      {finding.tags.length > 3 && (
+                        <Badge variant="outline" className="text-[10px]">
+                          +{finding.tags.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  {finding.linked_files.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {finding.linked_files.length} file
+                      {finding.linked_files.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-xs text-muted-foreground mt-2">
+                  {new Date(finding.updated_at * 1000).toLocaleString()}
+                </div>
+              </PanelCard>
+            )
+          })
+        )}
+      </PanelContent>
 
       {/* Create/Edit Dialog */}
       <CreateFindingDialog
@@ -178,6 +166,6 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
         finding={editingFinding}
         onSave={handleDialogClose}
       />
-    </div>
+    </PanelContainer>
   )
 }
