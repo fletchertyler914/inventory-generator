@@ -22,15 +22,42 @@ export function PdfViewerWrapper({ fileUrl }: PdfViewerWrapperProps) {
   const workerUrl = './pdf.worker.min.js';
 
   return (
-    <div className={`w-full h-full ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
-      <Worker workerUrl={workerUrl}>
-        <Viewer
-          fileUrl={fileUrl}
-          plugins={[defaultLayoutPluginInstance]}
-          theme={pdfTheme}
-        />
-      </Worker>
-    </div>
+    <>
+      <style>{`
+        /* Hide open file button */
+        button[data-testid="open__button"],
+        button[aria-label*="Open file"],
+        button[aria-label*="Open"],
+        button[title*="Open file"],
+        button[title*="Open"],
+        .rpv-core__display--block[aria-label*="Open file"],
+        .rpv-core__display--block[aria-label*="Open"],
+        [data-testid="open__button"] {
+          display: none !important;
+        }
+        
+        /* Hide fullscreen button */
+        button[data-testid="full-screen__button"],
+        button[aria-label*="Full screen"],
+        button[aria-label*="Fullscreen"],
+        button[title*="Full screen"],
+        button[title*="Fullscreen"],
+        .rpv-core__display--block[aria-label*="Full screen"],
+        .rpv-core__display--block[aria-label*="Fullscreen"],
+        [data-testid="full-screen__button"] {
+          display: none !important;
+        }
+      `}</style>
+      <div className={`w-full h-full ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
+        <Worker workerUrl={workerUrl}>
+          <Viewer
+            fileUrl={fileUrl}
+            plugins={[defaultLayoutPluginInstance]}
+            theme={pdfTheme}
+          />
+        </Worker>
+      </div>
+    </>
   );
 }
 
