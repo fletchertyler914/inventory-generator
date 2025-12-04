@@ -343,21 +343,6 @@ export const CaseWorkspace = memo(function CaseWorkspace({
     return filtered
   }, [items, statusFilter, selectedFolderPath, searchQuery])
 
-  // Get context description for UI
-  const contextDescription = useMemo(() => {
-    const parts: string[] = []
-
-    if (selectedFolderPath) {
-      const folderName = selectedFolderPath.split("/").pop() || selectedFolderPath
-      parts.push(`Folder: ${folderName}`)
-    }
-
-    if (searchQuery.trim()) {
-      parts.push(`Search: "${searchQuery}"`)
-    }
-
-    return parts.length > 0 ? parts.join(" • ") : "All workflow states"
-  }, [selectedFolderPath, searchQuery])
 
   const handleFileSelect = useCallback(
     async (file: InventoryItem) => {
@@ -937,7 +922,7 @@ export const CaseWorkspace = memo(function CaseWorkspace({
                     maxSize={50}
                   >
                     <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
-                      <TimelineView caseId={case_.id} currentFileId={viewingFile?.id} />
+                      <TimelineView caseId={case_.id} {...(viewingFile?.id !== undefined && { currentFileId: viewingFile.id })} />
                     </div>
                   </Panel>
                 </>

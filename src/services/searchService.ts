@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core';
-import { cachedInvoke } from '@/lib/request-cache';
 
 export interface SearchResult {
   file_id?: string;

@@ -56,7 +56,7 @@ export function CaseFilters({
         // If it's rgba/rgb, ensure it's fully opaque
         if (computedColor.startsWith('rgba')) {
           const rgbaMatch = computedColor.match(/rgba?\(([^)]+)\)/);
-          if (rgbaMatch) {
+          if (rgbaMatch && rgbaMatch[1]) {
             const parts = rgbaMatch[1].split(',').map(s => s.trim());
             if (parts.length >= 3) {
               return `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})`;

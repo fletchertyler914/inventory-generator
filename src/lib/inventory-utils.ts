@@ -93,8 +93,7 @@ export function getKeyMappingFields(
  * Format a mapping field value for display
  */
 export function formatMappingValue(
-  value: any,
-  extractionMethod?: string
+  value: any
 ): string {
   if (value === null || value === undefined) return ''
   

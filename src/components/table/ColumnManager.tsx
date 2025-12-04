@@ -109,12 +109,6 @@ export function ColumnManager({
     return getMappingsForColumn(columnId, caseId);
   }, [caseId]);
 
-  const handleColumnCreated = useCallback((newColumn: TableColumn) => {
-    setLocalConfig(prev => ({
-      ...prev,
-      columns: [...prev.columns, newColumn],
-    }));
-  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

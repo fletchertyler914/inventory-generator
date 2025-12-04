@@ -57,10 +57,9 @@ export const FileNavigator = memo(function FileNavigator({
   navigatorOpen = true,
   onToggleNavigator,
   onFileRemove,
-  caseId,
 }: FileNavigatorProps) {
   // Feature flag for bulk delete
-  const bulkDeleteEnabled = import.meta.env.VITE_BULK_DELETE_ENABLED === 'true' || import.meta.env.BULK_DELETE_ENABLED === 'true';
+  const bulkDeleteEnabled = import.meta.env['VITE_BULK_DELETE_ENABLED'] === 'true' || import.meta.env['BULK_DELETE_ENABLED'] === 'true';
   
   const [searchQuery, setSearchQuery] = React.useState('');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());

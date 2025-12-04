@@ -42,7 +42,6 @@ interface CaseHeaderProps {
 
 export function CaseHeader({
   case: case_,
-  fileCount,
   items,
   onClose,
   onAddFiles,
@@ -87,11 +86,11 @@ export function CaseHeader({
         <SearchBar
           caseId={case_.id}
           items={items}
-          onFileSelect={onFileOpen}
-          onNoteSelect={onNoteSelect}
-          onSearchChange={onSearchChange}
-          onFindingSelect={onFindingSelect}
-          onTimelineSelect={onTimelineSelect}
+          {...(onFileOpen !== undefined && { onFileSelect: onFileOpen })}
+          {...(onNoteSelect !== undefined && { onNoteSelect })}
+          {...(onSearchChange !== undefined && { onSearchChange })}
+          {...(onFindingSelect !== undefined && { onFindingSelect })}
+          {...(onTimelineSelect !== undefined && { onTimelineSelect })}
         />
       </div>
 

@@ -199,6 +199,7 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
         window.removeEventListener('scroll', updatePosition, true);
       };
     }
+    return undefined;
   }, [metadataPanelOpen]);
   const [vscDarkPlusStyle, setVscDarkPlusStyle] = useState<any>(null);
   const [syntaxHighlighterModule, setSyntaxHighlighterModule] = useState<any>(null);
@@ -971,7 +972,7 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
               <h3 className="text-sm font-semibold">Metadata</h3>
             </div>
             <div className="flex-1 overflow-hidden min-h-0">
-              <MetadataPanel filePath={file.absolute_path} fileType={fileType} item={file} caseId={caseId} />
+              <MetadataPanel filePath={file.absolute_path} fileType={fileType} item={file} {...(caseId !== undefined && { caseId })} />
             </div>
           </div>
         </PopoverContent>

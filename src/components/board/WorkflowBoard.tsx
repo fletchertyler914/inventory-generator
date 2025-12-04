@@ -130,7 +130,6 @@ export function WorkflowBoard({
   onSelectionChange: _onSelectionChange,
   selectedIndices,
   onFileOpen,
-  onFileRemove,
   statusFilter: _statusFilter = "all",
   onStatusFilterChange: _onStatusFilterChange,
   totalFiles: _totalFiles,
@@ -377,7 +376,7 @@ export function WorkflowBoard({
                         {...(onFileOpen && { onFileOpen })}
                         fileChanged={changedFiles.has(item.id || item.absolute_path)}
                         isDragging={activeId === `file-${item.absolute_path}`}
-                        caseId={caseId}
+                        {...(caseId !== undefined && { caseId })}
                       />
                     ))
                   )}
@@ -392,7 +391,7 @@ export function WorkflowBoard({
       <DragOverlay>
         {activeItem ? (
           <div className="opacity-90 rotate-2">
-            <WorkflowCard item={activeItem} isDragging={true} caseId={caseId} />
+            <WorkflowCard item={activeItem} isDragging={true} {...(caseId !== undefined && { caseId })} />
           </div>
         ) : null}
       </DragOverlay>

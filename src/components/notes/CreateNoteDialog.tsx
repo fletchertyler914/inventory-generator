@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { Label } from '../ui/label';
 import { TiptapEditor } from './TiptapEditor';
 import { noteService } from '@/services/noteService';
 import type { Note } from '@/types/note';

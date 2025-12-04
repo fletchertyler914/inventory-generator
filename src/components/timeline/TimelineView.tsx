@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, memo } from 'react';
-import { Calendar, Edit2, Save, Plus, Trash2, Sparkles } from 'lucide-react';
+import { Calendar, Edit2, Save, Trash2, Sparkles } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
@@ -136,7 +136,7 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId }
           />
         ) : (
           <div className="space-y-4">
-            {groupedEvents.map((group, groupIndex) => (
+            {groupedEvents.map((group) => (
               <div key={group.dateKey} className="space-y-2.5">
                 {/* Date Header */}
                 <div className="flex items-center gap-2 px-1">

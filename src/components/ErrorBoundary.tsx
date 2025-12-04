@@ -8,7 +8,7 @@
  */
 
 import React, { Component, type ReactNode } from "react"
-import { AlertTriangle, RefreshCw, Home } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { Button } from "./ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { reportError, createAppErrorWithRecovery, ErrorCode } from "@/lib/error-handler"

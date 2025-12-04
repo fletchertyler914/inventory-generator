@@ -85,7 +85,7 @@ export const SearchBar = memo(function SearchBar({
 
   // Use optimized search hook
   const { query, setQuery, results, loading, error } = useSearch({
-    caseId,
+    ...(caseId !== undefined && { caseId }),
     items,
     debounceMs: DEBOUNCE_MS,
     maxResults: MAX_RESULTS,
@@ -385,42 +385,50 @@ export const SearchBar = memo(function SearchBar({
                 </div>
               ) : groupedResults ? (
                 <div className="space-y-4 bg-popover">
-                  <SearchResultsGroup
-                    title="Files"
-                    results={groupedResults.file}
-                    query={query}
-                    onSelect={handleResultClick}
-                    isClickable={isResultClickable}
-                    highlightMatch={highlightMatch}
-                    getFileExtension={getFileExtension}
-                  />
-                  <SearchResultsGroup
-                    title="Notes"
-                    results={groupedResults.note}
-                    query={query}
-                    onSelect={handleResultClick}
-                    isClickable={isResultClickable}
-                    highlightMatch={highlightMatch}
-                    getFileExtension={getFileExtension}
-                  />
-                  <SearchResultsGroup
-                    title="Findings"
-                    results={groupedResults.finding}
-                    query={query}
-                    onSelect={handleResultClick}
-                    isClickable={isResultClickable}
-                    highlightMatch={highlightMatch}
-                    getFileExtension={getFileExtension}
-                  />
-                  <SearchResultsGroup
-                    title="Timeline"
-                    results={groupedResults.timeline}
-                    query={query}
-                    onSelect={handleResultClick}
-                    isClickable={isResultClickable}
-                    highlightMatch={highlightMatch}
-                    getFileExtension={getFileExtension}
-                  />
+                  {groupedResults['file'] && (
+                    <SearchResultsGroup
+                      title="Files"
+                      results={groupedResults['file']}
+                      query={query}
+                      onSelect={handleResultClick}
+                      isClickable={isResultClickable}
+                      highlightMatch={highlightMatch}
+                      getFileExtension={getFileExtension}
+                    />
+                  )}
+                  {groupedResults['note'] && (
+                    <SearchResultsGroup
+                      title="Notes"
+                      results={groupedResults['note']}
+                      query={query}
+                      onSelect={handleResultClick}
+                      isClickable={isResultClickable}
+                      highlightMatch={highlightMatch}
+                      getFileExtension={getFileExtension}
+                    />
+                  )}
+                  {groupedResults['finding'] && (
+                    <SearchResultsGroup
+                      title="Findings"
+                      results={groupedResults['finding']}
+                      query={query}
+                      onSelect={handleResultClick}
+                      isClickable={isResultClickable}
+                      highlightMatch={highlightMatch}
+                      getFileExtension={getFileExtension}
+                    />
+                  )}
+                  {groupedResults['timeline'] && (
+                    <SearchResultsGroup
+                      title="Timeline"
+                      results={groupedResults['timeline']}
+                      query={query}
+                      onSelect={handleResultClick}
+                      isClickable={isResultClickable}
+                      highlightMatch={highlightMatch}
+                      getFileExtension={getFileExtension}
+                    />
+                  )}
                 </div>
               ) : null}
             </div>

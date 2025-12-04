@@ -336,7 +336,7 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
                   return (
                     <div key={columnId} className="flex items-start justify-between gap-4 px-2">
                       <span className="text-muted-foreground font-medium">{label}:</span>
-                      <span className="text-right break-words flex-1">{formatMappingValue(value, mapping.extractionMethod)}</span>
+                      <span className="text-right break-words flex-1">{formatMappingValue(value)}</span>
                     </div>
                   )
                 })}
