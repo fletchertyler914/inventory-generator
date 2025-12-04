@@ -9,13 +9,12 @@ interface CaseListViewModeProps {
 
 export function CaseListViewMode({ viewMode, onViewModeChange }: CaseListViewModeProps) {
   return (
-    <div className="flex items-center gap-1 p-1 bg-muted rounded-md border border-border">
+    <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-md border border-border/40 dark:border-border/50 h-10">
       <Button
         variant={viewMode === 'grid' ? 'default' : 'ghost'}
-        size="sm"
         onClick={() => onViewModeChange('grid')}
         className={cn(
-          "h-7 px-2",
+          "h-9 w-9 p-0 flex-shrink-0",
           viewMode === 'grid' && "shadow-sm"
         )}
       >
@@ -23,10 +22,9 @@ export function CaseListViewMode({ viewMode, onViewModeChange }: CaseListViewMod
       </Button>
       <Button
         variant={viewMode === 'list' ? 'default' : 'ghost'}
-        size="sm"
         onClick={() => onViewModeChange('list')}
         className={cn(
-          "h-7 px-2",
+          "h-9 w-9 p-0 flex-shrink-0",
           viewMode === 'list' && "shadow-sm"
         )}
       >

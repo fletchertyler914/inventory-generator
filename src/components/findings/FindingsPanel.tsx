@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, memo } from "react"
 import { Plus, AlertCircle, AlertTriangle, Info, XCircle } from "lucide-react"
 import { Badge } from "../ui/badge"
 import { findingService } from "@/services/findingService"
@@ -29,7 +29,14 @@ const severityConfig: Record<
   critical: { label: "Critical", icon: XCircle, variant: "destructive" },
 }
 
-export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
+/**
+ * FindingsPanel - Panel for displaying and managing findings
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Memoized to prevent unnecessary re-renders
+ * - Optimized event handlers with useCallback
+ */
+export const FindingsPanel = memo(function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -99,7 +106,7 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
           <PanelEmptyState
             icon={Plus}
             title="No findings yet"
-            description='Click "New" to create one.'
+            description="Click the + button above to create one"
           />
         ) : (
           findings.map((finding) => {
@@ -168,4 +175,9 @@ export function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
       />
     </PanelContainer>
   )
-}
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.caseId === nextProps.caseId &&
+    prevProps.onClose === nextProps.onClose
+  )
+})

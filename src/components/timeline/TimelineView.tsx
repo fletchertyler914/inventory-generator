@@ -1,21 +1,32 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, memo } from 'react';
 import { Calendar, Edit2, Save, Plus, Trash2, Sparkles } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
-import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
 import { format } from 'date-fns';
 import { timelineService } from '@/services/timelineService';
 import type { TimelineEvent } from '@/types/timeline';
 import { CreateTimelineEventDialog } from './CreateTimelineEventDialog';
+import { PanelContainer } from '../panel/PanelContainer';
+import { PanelHeader } from '../panel/PanelHeader';
+import { PanelContent } from '../panel/PanelContent';
+import { PanelCard } from '../panel/PanelCard';
+import { PanelEmptyState } from '../panel/PanelEmptyState';
 
 interface TimelineViewProps {
   caseId: string;
   currentFileId?: string;
 }
 
-export function TimelineView({ caseId, currentFileId }: TimelineViewProps) {
+/**
+ * TimelineView - Timeline event viewer and editor
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Memoized to prevent unnecessary re-renders
+ * - Optimized event handlers with useCallback
+ * - Memoized grouped events computation
+ */
+export const TimelineView = memo(function TimelineView({ caseId, currentFileId }: TimelineViewProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -99,78 +110,85 @@ export function TimelineView({ caseId, currentFileId }: TimelineViewProps) {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading timeline...</div>
-      </div>
+      <PanelContainer>
+        <div className="h-full flex items-center justify-center">
+          <div className="text-sm text-muted-foreground">Loading timeline...</div>
+        </div>
+      </PanelContainer>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-card">
-      <div className="p-3 border-b border-border flex-shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold">Case Timeline</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Chronological view of events and findings
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCreateDialogOpen(true)}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          New Event
-        </Button>
-      </div>
+    <PanelContainer>
+      <PanelHeader
+        title="Timeline"
+        count={events.length}
+        onCreate={() => setCreateDialogOpen(true)}
+        createButtonLabel=""
+      />
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="p-3 space-y-4">
-          {groupedEvents.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              No timeline events yet. Click &quot;New Event&quot; to create one.
-            </div>
-          ) : (
-            groupedEvents.map((group, groupIndex) => (
-              <div key={group.dateKey} className="relative">
-                {/* Timeline line */}
-                {groupIndex < groupedEvents.length - 1 && (
-                  <div className="absolute left-6 top-12 bottom-0 w-0.5 bg-border" />
-                )}
-                
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 mt-1">
-                        <div className="rounded-full bg-primary p-2">
-                          <Calendar className="h-4 w-4 text-primary-foreground" />
+      <PanelContent>
+        {groupedEvents.length === 0 ? (
+          <PanelEmptyState
+            icon={Calendar}
+            title="No timeline events yet"
+            description="Click the + button above to create one"
+          />
+        ) : (
+          <div className="space-y-4">
+            {groupedEvents.map((group, groupIndex) => (
+              <div key={group.dateKey} className="space-y-2.5">
+                {/* Date Header */}
+                <div className="flex items-center gap-2 px-1">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground/60" />
+                  <h3 className="text-xs font-semibold text-foreground">
+                    {format(group.date, 'MMMM d, yyyy')}
+                  </h3>
+                  <Badge variant="outline" className="text-[10px] ml-auto">
+                    {group.events.length} event{group.events.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+
+                {/* Events */}
+                {group.events.map((event) => {
+                  const isEditing = editingEventId === event.id;
+                  const isActive = currentFileId && event.source_file_id === currentFileId;
+                  
+                  return (
+                    <PanelCard
+                      key={event.id}
+                      className={isActive ? 'bg-primary/5 border-l-2 border-l-primary/30 dark:bg-primary/10' : ''}
+                    >
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editingDescription}
+                            onChange={(e) => setEditingDescription(e.target.value)}
+                            placeholder="Enter event description..."
+                            className="min-h-[80px] text-sm"
+                            autoFocus
+                          />
+                          <div className="flex gap-1.5 justify-end pt-2 border-t border-border/40 dark:border-border/50">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={handleCancelEdit}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => handleSaveDescription(event.id)}
+                            >
+                              <Save className="h-3 w-3 mr-1" />
+                              Save
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-sm font-semibold">
-                          {format(group.date, 'MMMM d, yyyy')}
-                        </CardTitle>
-                        <CardDescription className="text-xs mt-1">
-                          {group.events.length} event{group.events.length !== 1 ? 's' : ''}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="pt-0 space-y-3">
-                    {group.events.map((event) => {
-                      const isEditing = editingEventId === event.id;
-                      const isActive = currentFileId && event.source_file_id === currentFileId;
-                      
-                      return (
-                        <div 
-                          key={event.id} 
-                          className={`p-3 rounded-lg border bg-background border-border/40 dark:border-border/50 ${
-                            isActive 
-                              ? 'bg-primary/5 border-l-2 border-l-primary/30 dark:bg-primary/10' 
-                              : ''
-                          }`}
-                        >
+                      ) : (
+                        <>
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               {event.event_type === 'auto' && (
@@ -188,62 +206,49 @@ export function TimelineView({ caseId, currentFileId }: TimelineViewProps) {
                                 {format(new Date(event.event_date * 1000), 'h:mm a')}
                               </span>
                             </div>
-                            <div className="flex gap-1">
+                            <div
+                              className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0"
-                                onClick={() => handleStartEdit(event)}
+                                className="h-5 w-5 p-0 hover:bg-muted"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEdit(event);
+                                }}
                                 title="Edit event"
                               >
-                                <Edit2 className="h-3 w-3" />
+                                <Edit2 className="h-2.5 w-2.5" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteEvent(event.id)}
+                                className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteEvent(event.id);
+                                }}
                                 title="Delete event"
                               >
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className="h-2.5 w-2.5" />
                               </Button>
                             </div>
                           </div>
-                          
-                          {isEditing ? (
-                            <div className="space-y-2">
-                              <Textarea
-                                value={editingDescription}
-                                onChange={(e) => setEditingDescription(e.target.value)}
-                                placeholder="Enter event description..."
-                                className="min-h-[80px] text-sm"
-                                autoFocus
-                              />
-                              <div className="flex gap-2">
-                                <Button size="sm" onClick={() => handleSaveDescription(event.id)}>
-                                  <Save className="h-3 w-3 mr-1" />
-                                  Save
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={handleCancelEdit}>
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-foreground whitespace-pre-wrap">
-                              {event.description}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
+                          <p className="text-xs text-foreground/90 whitespace-pre-wrap line-clamp-3">
+                            {event.description}
+                          </p>
+                        </>
+                      )}
+                    </PanelCard>
+                  );
+                })}
               </div>
-            ))
-          )}
-        </div>
-      </ScrollArea>
+            ))}
+          </div>
+        )}
+      </PanelContent>
 
       {/* Create Event Dialog */}
       <CreateTimelineEventDialog
@@ -256,7 +261,12 @@ export function TimelineView({ caseId, currentFileId }: TimelineViewProps) {
         caseId={caseId}
         onSave={handleDialogClose}
       />
-    </div>
+    </PanelContainer>
   );
-}
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.caseId === nextProps.caseId &&
+    prevProps.currentFileId === nextProps.currentFileId
+  )
+})
 

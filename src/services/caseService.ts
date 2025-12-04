@@ -1,4 +1,5 @@
 import { safeInvoke } from '@/lib/tauri-utils';
+import { cachedInvoke, clearCache } from '@/lib/request-cache';
 import type { Case } from '../types/case';
 
 export const caseService = {
@@ -9,13 +10,16 @@ export const caseService = {
     department?: string,
     client?: string
   ): Promise<Case> {
-    return safeInvoke<Case>('create_case', {
+    const result = await safeInvoke<Case>('create_case', {
       name,
       caseId, // Tauri converts camelCase to snake_case automatically
       department,
       client,
       sources, // Array of file/folder paths
     });
+    // Clear cases list cache
+    clearCache('list_cases');
+    return result;
   },
 
   async getOrCreateCase(folderPath: string): Promise<Case> {
@@ -24,8 +28,12 @@ export const caseService = {
     });
   },
 
+  /**
+   * List all cases
+   * Cached for 1 minute to reduce redundant queries
+   */
   async listCases(): Promise<Case[]> {
-    return safeInvoke<Case[]>('list_cases');
+    return cachedInvoke<Case[]>('list_cases', {}, 60 * 1000);
   },
 
   async getCase(caseId: string): Promise<Case> {
@@ -50,9 +58,11 @@ export const caseService = {
   },
 
   async deleteCase(caseId: string): Promise<void> {
-    return safeInvoke('delete_case', {
+    await safeInvoke('delete_case', {
       caseId, // Tauri converts camelCase to snake_case automatically
     });
+    // Clear cases list cache
+    clearCache('list_cases');
   },
 };
 

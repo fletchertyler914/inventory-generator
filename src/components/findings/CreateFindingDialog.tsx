@@ -10,8 +10,8 @@ import {
 } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
-import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { TiptapEditor } from '../notes/TiptapEditor';
 import { findingService } from '@/services/findingService';
 import type { Finding, FindingSeverity } from '@/types/finding';
 
@@ -100,13 +100,15 @@ export function CreateFindingDialog({
 
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter finding description..."
-              className="min-h-[120px]"
-            />
+            <div className="border border-border/30 dark:border-border/40 rounded-md min-h-[120px] flex flex-col overflow-hidden">
+              <TiptapEditor
+                content={description}
+                onChange={setDescription}
+                placeholder="Enter finding description..."
+                editable={true}
+                className="h-full"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">

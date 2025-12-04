@@ -7,6 +7,8 @@ export interface WorkspacePreferences {
   findings_visible: boolean;
   timeline_visible: boolean;
   navigator_open: boolean;
+  auto_sync_enabled?: boolean;
+  auto_sync_interval_minutes?: number;
 }
 
 export const workspacePreferencesService = {
@@ -43,6 +45,8 @@ export const workspacePreferencesService = {
       findings_visible: false,
       timeline_visible: false,
       navigator_open: true,
+      auto_sync_enabled: true, // Enabled by default
+      auto_sync_interval_minutes: 5, // Default 5 minutes
     };
   },
 };

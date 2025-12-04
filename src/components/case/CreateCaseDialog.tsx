@@ -211,7 +211,7 @@ export function CreateCaseDialog({ open, onOpenChange, onCaseCreated }: CreateCa
                 </Button>
               </div>
               {sources.length > 0 && (
-                <div className="space-y-1 max-h-40 overflow-y-auto border rounded-md p-2">
+                <div className="space-y-1 max-h-40 overflow-y-auto border border-border/30 rounded-md p-2">
                   {sources.map((source, index) => (
                     <div
                       key={index}

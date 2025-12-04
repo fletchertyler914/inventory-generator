@@ -21,7 +21,7 @@ function TableActionsComponent({
   return (
     <div
       className={cn(
-        "sticky bottom-0 left-0 right-0 z-10 flex items-center justify-between border-t border-border bg-card px-4 py-2.5",
+        "sticky bottom-0 left-0 right-0 z-10 flex items-center justify-between border-t border-border/40 dark:border-border/50 bg-card px-4 py-2.5",
         className
       )}
     >

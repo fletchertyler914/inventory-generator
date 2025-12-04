@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, memo, lazy, Suspense } from "react"
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels"
-import { FileText, ChevronRight } from "lucide-react"
+import { FileText, ChevronRight, Loader2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { CaseHeader } from "./CaseHeader"
 import { FileNavigator } from "./FileNavigator"
@@ -8,10 +8,12 @@ import { IntegratedFileViewer } from "./IntegratedFileViewer"
 import { NotePanel } from "../notes/NotePanel"
 import { FindingsPanel } from "../findings/FindingsPanel"
 import { TimelineView } from "../timeline/TimelineView"
-import { WorkflowBoard } from "../board/WorkflowBoard"
-import { ProgressDashboard } from "../dashboard/ProgressDashboard"
 import { ReportGenerator } from "../reports/ReportGenerator"
-import { ReportView } from "../reports/ReportView"
+
+// Lazy load heavy components for better initial load performance
+const LazyWorkflowBoard = lazy(() => import("../board/WorkflowBoard").then(m => ({ default: m.WorkflowBoard })))
+const LazyProgressDashboard = lazy(() => import("../dashboard/ProgressDashboard").then(m => ({ default: m.ProgressDashboard })))
+const LazyReportView = lazy(() => import("../reports/ReportView").then(m => ({ default: m.ReportView })))
 import { workspacePreferencesService } from "@/services/workspacePreferencesService"
 import { useDebounce } from "@/hooks/useDebounce"
 import { getStoreValue, setStoreValue } from "@/lib/store-utils"
@@ -50,7 +52,15 @@ export type TableFilter =
   | "finalized"
   | "all"
 
-export function CaseWorkspace({
+/**
+ * CaseWorkspace - Integrated Multi-Pane Layout
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Memoized to prevent unnecessary re-renders
+ * - All event handlers use useCallback
+ * - Expensive computations memoized with useMemo
+ */
+export const CaseWorkspace = memo(function CaseWorkspace({
   case: case_,
   items,
   onItemsChange,
@@ -71,6 +81,9 @@ export function CaseWorkspace({
   const [findingsVisible, setFindingsVisible] = useState<boolean>(false)
   const [timelineVisible, setTimelineVisible] = useState<boolean>(false)
   const [preferencesLoaded, setPreferencesLoaded] = useState<boolean>(false)
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true) // Enabled by default
+  const [autoSyncIntervalMinutes, setAutoSyncIntervalMinutes] = useState<number>(5)
   
   // Report generation dialog state
   const [reportDialogOpen, setReportDialogOpen] = useState<boolean>(false)
@@ -97,6 +110,8 @@ export function CaseWorkspace({
             setNotesVisible(prefs.notes_visible)
             setFindingsVisible(prefs.findings_visible)
             setTimelineVisible(prefs.timeline_visible)
+            setAutoSyncEnabled(prefs.auto_sync_enabled ?? false)
+            setAutoSyncIntervalMinutes(prefs.auto_sync_interval_minutes ?? 5)
           } else {
             // Use defaults if no preferences found
             setViewMode(defaults.view_mode)
@@ -124,9 +139,11 @@ export function CaseWorkspace({
           setViewMode(defaults.view_mode)
           setReportMode(defaults.report_mode)
           setNavigatorOpen(defaults.navigator_open)
-          setNotesVisible(defaults.notes_visible)
-          setFindingsVisible(defaults.findings_visible)
-          setTimelineVisible(defaults.timeline_visible)
+            setNotesVisible(defaults.notes_visible)
+            setFindingsVisible(defaults.findings_visible)
+            setTimelineVisible(defaults.timeline_visible)
+            setAutoSyncEnabled(defaults.auto_sync_enabled ?? true)
+            setAutoSyncIntervalMinutes(defaults.auto_sync_interval_minutes ?? 5)
           setPreferencesLoaded(true)
           setLastFileLoaded(true)
         }
@@ -152,6 +169,8 @@ export function CaseWorkspace({
   const debouncedNotesVisible = useDebounce(notesVisible, 500)
   const debouncedFindingsVisible = useDebounce(findingsVisible, 500)
   const debouncedTimelineVisible = useDebounce(timelineVisible, 500)
+  const debouncedAutoSyncEnabled = useDebounce(autoSyncEnabled, 500)
+  const debouncedAutoSyncIntervalMinutes = useDebounce(autoSyncIntervalMinutes, 500)
 
   // Save preferences to database (debounced)
   useEffect(() => {
@@ -166,6 +185,8 @@ export function CaseWorkspace({
           notes_visible: debouncedNotesVisible,
           findings_visible: debouncedFindingsVisible,
           timeline_visible: debouncedTimelineVisible,
+          auto_sync_enabled: debouncedAutoSyncEnabled,
+          auto_sync_interval_minutes: debouncedAutoSyncIntervalMinutes,
         })
       } catch (error) {
         console.error("Failed to save workspace preferences:", error)
@@ -181,6 +202,8 @@ export function CaseWorkspace({
     debouncedNotesVisible,
     debouncedFindingsVisible,
     debouncedTimelineVisible,
+    debouncedAutoSyncEnabled,
+    debouncedAutoSyncIntervalMinutes,
     preferencesLoaded,
   ])
 
@@ -207,6 +230,81 @@ export function CaseWorkspace({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
+
+  // Build folder tree structure (same as FileNavigator) and flatten in display order
+  // This ensures navigation buttons follow the same order as the file tree
+  const flattenedFileList = useMemo(() => {
+    interface FolderNode {
+      name: string
+      path: string
+      files: InventoryItem[]
+      subfolders: Map<string, FolderNode>
+    }
+
+    // Build folder tree structure (same logic as FileNavigator)
+    const root: FolderNode = {
+      name: '',
+      path: '',
+      files: [],
+      subfolders: new Map(),
+    }
+
+    items.forEach(item => {
+      // Handle empty or root folder paths
+      const folderPath = item.folder_path || ''
+      
+      // Parse folder path into segments
+      const pathParts = folderPath.split('/').filter(p => p.trim())
+      
+      // If no folder path, add file to root
+      if (pathParts.length === 0) {
+        root.files.push(item)
+        return
+      }
+
+      let current = root
+
+      // Navigate/create folder structure
+      pathParts.forEach((part, index) => {
+        if (!current.subfolders.has(part)) {
+          const fullPath = pathParts.slice(0, index + 1).join('/')
+          current.subfolders.set(part, {
+            name: part,
+            path: fullPath,
+            files: [],
+            subfolders: new Map(),
+          })
+        }
+        current = current.subfolders.get(part)!
+      })
+
+      // Add file to current folder
+      current.files.push(item)
+    })
+
+    // Flatten tree in display order (same as FileNavigator renders)
+    // Folders first (sorted), then files within each folder (sorted)
+    const flattened: InventoryItem[] = []
+    
+    const flattenNode = (node: FolderNode) => {
+      // Sort and process subfolders first (alphabetically)
+      const sortedSubfolders = Array.from(node.subfolders.values())
+        .sort((a, b) => a.name.localeCompare(b.name))
+      
+      sortedSubfolders.forEach(subfolder => {
+        flattenNode(subfolder)
+      })
+
+      // Then add files in this folder (sorted alphabetically)
+      const sortedFiles = node.files
+        .sort((a, b) => a.file_name.localeCompare(b.file_name))
+      
+      flattened.push(...sortedFiles)
+    }
+
+    flattenNode(root)
+    return flattened
+  }, [items])
 
   // Filter items based on folder and search (status filtering handled by swimlanes)
   const filteredItems = useMemo(() => {
@@ -356,6 +454,247 @@ export function CaseWorkspace({
     [case_.id, items, onItemsChange, viewingFile, handleFileClose]
   )
 
+  // Memoized toggle handlers
+  const handleToggleReportMode = useCallback(() => {
+    setReportMode((prev) => !prev)
+  }, [])
+
+  const handleToggleNotes = useCallback(() => {
+    setNotesVisible((prev: boolean) => !prev)
+  }, [])
+
+  const handleToggleFindings = useCallback(() => {
+    setFindingsVisible((prev: boolean) => !prev)
+  }, [])
+
+  const handleToggleTimeline = useCallback(() => {
+    setTimelineVisible((prev) => !prev)
+  }, [])
+
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query)
+  }, [])
+
+  const handleNoteSelect = useCallback((noteId: string) => {
+    // Open notes panel, switch to split view, and navigate to the note
+    setSelectedNoteId(noteId)
+    if (!notesVisible) {
+      setNotesVisible(true)
+    }
+    if (viewMode !== "split") {
+      setViewMode("split")
+    }
+  }, [notesVisible, viewMode])
+
+  const handleFindingSelect = useCallback(() => {
+    setFindingsVisible(true)
+    setViewMode("split")
+  }, [])
+
+  const handleTimelineSelect = useCallback(() => {
+    // Open timeline panel and switch to review mode if not already
+    if (!timelineVisible) {
+      setTimelineVisible(true)
+    }
+    if (viewMode !== "split" && viewingFile) {
+      setViewMode("split")
+    } else if (viewMode !== "split" && !viewingFile) {
+      // If no file is selected, just show the timeline panel
+      setTimelineVisible(true)
+    }
+  }, [timelineVisible, viewMode, viewingFile])
+
+  const handleGenerateReport = useCallback(() => {
+    setReportDialogOpen(true)
+  }, [])
+
+  // Memoized navigation handlers
+  const handleNextFile = useCallback(() => {
+    const currentIndex = flattenedFileList.findIndex(
+      (f) => f.absolute_path === viewingFile?.absolute_path
+    )
+    const nextFile =
+      currentIndex >= 0 && currentIndex < flattenedFileList.length - 1
+        ? flattenedFileList[currentIndex + 1]
+        : undefined
+    if (nextFile) {
+      handleFileSelect(nextFile)
+    }
+  }, [flattenedFileList, viewingFile?.absolute_path, handleFileSelect])
+
+  const handlePreviousFile = useCallback(() => {
+    const currentIndex = flattenedFileList.findIndex(
+      (f) => f.absolute_path === viewingFile?.absolute_path
+    )
+    const prevFile = currentIndex > 0 ? flattenedFileList[currentIndex - 1] : undefined
+    if (prevFile) {
+      handleFileSelect(prevFile)
+    }
+  }, [flattenedFileList, viewingFile?.absolute_path, handleFileSelect])
+
+  const handleFileRefresh = useCallback(async () => {
+    // Reload case files after refresh (force cache clear)
+    try {
+      const { fileService } = await import("@/services/fileService")
+      const refreshedItems = await fileService.loadCaseFilesWithInventory(case_.id, true)
+      onItemsChange(refreshedItems)
+    } catch (error) {
+      console.error("Failed to reload files after refresh:", error)
+    }
+  }, [case_.id, onItemsChange])
+
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [lastAutoSyncTime, setLastAutoSyncTime] = useState<number | null>(null)
+
+  /**
+   * Auto-sync logic - Only runs for the currently active/open case
+   * 
+   * ELITE PERFORMANCE & SCALABILITY:
+   * - Auto-sync only runs when this component is mounted (case is open)
+   * - When case is closed, component unmounts and cleanup stops all timers
+   * - This ensures we never sync multiple cases simultaneously
+   * - Resource-efficient: only one case syncs at a time
+   * - Pauses when app/tab is hidden (document.hidden check)
+   */
+  useEffect(() => {
+    if (!autoSyncEnabled || !preferencesLoaded) return
+
+    const syncInterval = autoSyncIntervalMinutes * 60 * 1000 // Convert to milliseconds
+    let lastSyncTime = lastAutoSyncTime
+
+    const performAutoSync = async () => {
+      // Check if document is visible (pauses when app is inactive)
+      if (document.hidden) {
+        return
+      }
+
+      // Don't sync if manual sync just happened (within last minute)
+      const now = Date.now()
+      if (lastSyncTime && now - lastSyncTime < 60000) {
+        return
+      }
+
+      // Don't sync if manual sync is in progress
+      if (isSyncing) {
+        return
+      }
+
+      try {
+        setIsSyncing(true)
+        const { fileService } = await import("@/services/fileService")
+        const result = await fileService.syncCaseAllSources(case_.id, true) // Incremental only
+
+        // Reload files after sync
+        const refreshedItems = await fileService.loadCaseFilesWithInventory(case_.id, true)
+        onItemsChange(refreshedItems)
+
+        lastSyncTime = now
+        setLastAutoSyncTime(now)
+
+        // Show subtle notification only if files were actually changed
+        if (result.files_inserted > 0 || result.files_updated > 0) {
+          toast({
+            title: "Files synced",
+            description: `${result.files_inserted} new, ${result.files_updated} updated`,
+            variant: "default",
+            duration: 3000, // Shorter duration for auto-sync
+          })
+        }
+
+        if (result.errors && result.errors.length > 0) {
+          toast({
+            title: "Sync completed with errors",
+            description: result.errors.slice(0, 2).join(", "),
+            variant: "destructive",
+            duration: 4000,
+          })
+        }
+      } catch (error) {
+        // Silent failure for auto-sync (don't spam user with errors)
+        console.error("Auto-sync failed:", error)
+      } finally {
+        setIsSyncing(false)
+      }
+    }
+
+    // Initial sync after interval (don't sync immediately on mount)
+    const initialTimeout = setTimeout(() => {
+      performAutoSync()
+    }, syncInterval)
+
+    // Set up periodic sync
+    const interval = setInterval(performAutoSync, syncInterval)
+
+    return () => {
+      clearTimeout(initialTimeout)
+      clearInterval(interval)
+    }
+  }, [
+    autoSyncEnabled,
+    autoSyncIntervalMinutes,
+    case_.id,
+    onItemsChange,
+    preferencesLoaded,
+    isSyncing,
+  ])
+
+  const handleSyncFiles = useCallback(async () => {
+    setIsSyncing(true)
+    try {
+      const { fileService } = await import("@/services/fileService")
+      const result = await fileService.syncCaseAllSources(case_.id, true)
+      
+      // Reload files after sync (cache is already cleared by syncCaseAllSources)
+      const refreshedItems = await fileService.loadCaseFilesWithInventory(case_.id, true)
+      onItemsChange(refreshedItems)
+
+      // Update last sync time to prevent immediate auto-sync
+      setLastAutoSyncTime(Date.now())
+
+      toast({
+        title: "Files synced",
+        description: `${result.files_inserted} new, ${result.files_updated} updated, ${result.files_skipped} skipped`,
+        variant: "success",
+      })
+
+      if (result.errors && result.errors.length > 0) {
+        toast({
+          title: "Sync completed with errors",
+          description: result.errors.slice(0, 3).join(", "),
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Failed to sync files",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [case_.id, onItemsChange])
+
+  const handleToggleNavigator = useCallback(() => {
+    setNavigatorOpen((prev: boolean) => !prev)
+  }, [])
+
+  const handleExpandNavigator = useCallback(() => {
+    setNavigatorOpen(true)
+  }, [])
+
+  const handleCloseNotes = useCallback(() => {
+    setNotesVisible(false)
+  }, [])
+
+  const handleCloseFindings = useCallback(() => {
+    setFindingsVisible(false)
+  }, [])
+
+  const handleToggleAutoSync = useCallback(() => {
+    setAutoSyncEnabled((prev) => !prev)
+  }, [])
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
       {/* Header */}
@@ -368,96 +707,37 @@ export function CaseWorkspace({
         viewMode={viewMode}
         viewingFile={viewingFile}
         reportMode={reportMode}
-        onToggleReportMode={() => setReportMode((prev) => !prev)}
+        onToggleReportMode={handleToggleReportMode}
         notesVisible={notesVisible}
-        onToggleNotes={() => setNotesVisible((prev: boolean) => !prev)}
+        onToggleNotes={handleToggleNotes}
         findingsVisible={findingsVisible}
-        onToggleFindings={() => setFindingsVisible((prev: boolean) => !prev)}
+        onToggleFindings={handleToggleFindings}
         timelineVisible={timelineVisible}
-        onToggleTimeline={() => {
-          setTimelineVisible((prev) => !prev)
-        }}
+        onToggleTimeline={handleToggleTimeline}
         onFileOpen={handleFileOpen}
-        onSearchChange={setSearchQuery}
-        onFindingSelect={() => {
-          setFindingsVisible(true)
-          setViewMode("split")
-        }}
-        onTimelineSelect={() => {
-          // Open timeline panel and switch to review mode if not already
-          if (!timelineVisible) {
-            setTimelineVisible(true)
-          }
-          if (viewMode !== "split" && viewingFile) {
-            setViewMode("split")
-          } else if (viewMode !== "split" && !viewingFile) {
-            // If no file is selected, just show the timeline panel
-            setTimelineVisible(true)
-          }
-        }}
-        onGenerateReport={() => setReportDialogOpen(true)}
+        onSearchChange={handleSearchChange}
+        onNoteSelect={handleNoteSelect}
+        onFindingSelect={handleFindingSelect}
+        onTimelineSelect={handleTimelineSelect}
+        onGenerateReport={handleGenerateReport}
+        onSyncFiles={handleSyncFiles}
+        isSyncing={isSyncing}
+        autoSyncEnabled={autoSyncEnabled}
+        onToggleAutoSync={handleToggleAutoSync}
       />
 
       {/* Main Content Area */}
       {reportMode ? (
-        /* Report Mode - Show ReportView */
-        <PanelGroup direction="horizontal" className="flex-1 overflow-hidden min-h-0">
-          {/* Left Sidebar - File Navigator (resizable, stays visible) */}
-          {navigatorOpen && (
-            <>
-              <Panel
-                defaultSize={20}
-                minSize={15}
-                maxSize={40}
-                className="flex flex-col overflow-hidden"
-              >
-                <div className="h-full bg-card flex flex-col">
-                  <FileNavigator
-                    items={items}
-                    currentFile={viewingFile}
-                    onFileSelect={handleFileSelect}
-                    selectedFolderPath={selectedFolderPath}
-                    onFolderSelect={setSelectedFolderPath}
-                    navigatorOpen={navigatorOpen}
-                    onToggleNavigator={() => setNavigatorOpen((prev: boolean) => !prev)}
-                    onFileRemove={handleFileRemove}
-                    caseId={case_.id}
-                  />
-                </div>
-              </Panel>
-              <PanelResizeHandle className="group w-1.5 bg-transparent hover:bg-border/30 transition-colors duration-200 cursor-col-resize relative flex items-center justify-center">
-                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border group-hover:bg-primary/60 transition-colors" />
-                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
-                  <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
-                  <div className="w-0.5 h-3 bg-primary/70 rounded-full" />
-                </div>
-              </PanelResizeHandle>
-            </>
-          )}
-
-          {/* Toggle Button - When Sidebar is Collapsed */}
-          {!navigatorOpen && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setNavigatorOpen(true)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-r border-l-0 border border-border bg-background hover:bg-muted transition-colors duration-150"
-              title="Expand sidebar"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          )}
-
-          {/* Report View */}
-          <Panel className="flex flex-col overflow-hidden min-h-0 relative">
-            <ReportView
+        /* Report Mode - Full screen ReportView (no file navigator) */
+        <div className="flex-1 overflow-hidden min-h-0">
+          <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+            <LazyReportView
               case_={case_}
               items={items}
-              onToggleReportMode={() => setReportMode(false)}
+              onToggleReportMode={handleToggleReportMode}
             />
-          </Panel>
-        </PanelGroup>
+          </Suspense>
+        </div>
       ) : (
         /* Review Mode - Show existing split/table views */
         <PanelGroup direction="horizontal" className="flex-1 overflow-hidden min-h-0">
@@ -478,7 +758,7 @@ export function CaseWorkspace({
                   selectedFolderPath={selectedFolderPath}
                   onFolderSelect={setSelectedFolderPath}
                   navigatorOpen={navigatorOpen}
-                  onToggleNavigator={() => setNavigatorOpen((prev: boolean) => !prev)}
+                  onToggleNavigator={handleToggleNavigator}
                   onFileRemove={handleFileRemove}
                   caseId={case_.id}
                 />
@@ -500,8 +780,8 @@ export function CaseWorkspace({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setNavigatorOpen(true)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-r border-l-0 border border-border bg-background hover:bg-muted transition-colors duration-150"
+            onClick={handleExpandNavigator}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-r border-l-0 border border-border/40 dark:border-border/50 bg-background hover:bg-muted transition-colors duration-150"
             title="Expand sidebar"
           >
             <ChevronRight className="h-4 w-4" />
@@ -532,47 +812,17 @@ export function CaseWorkspace({
                     <IntegratedFileViewer
                       file={viewingFile}
                       onClose={handleFileClose}
-                      onNext={() => {
-                        const currentIndex = items.findIndex(
-                          (f) => f.absolute_path === viewingFile.absolute_path
-                        )
-                        const nextFile =
-                          currentIndex >= 0 && currentIndex < items.length - 1
-                            ? items[currentIndex + 1]
-                            : undefined
-                        if (nextFile) {
-                          handleFileSelect(nextFile)
-                        }
-                      }}
-                      onPrevious={() => {
-                        const currentIndex = items.findIndex(
-                          (f) => f.absolute_path === viewingFile.absolute_path
-                        )
-                        const prevFile = currentIndex > 0 ? items[currentIndex - 1] : undefined
-                        if (prevFile) {
-                          handleFileSelect(prevFile)
-                        }
-                      }}
+                      onNext={handleNextFile}
+                      onPrevious={handlePreviousFile}
                       hasNext={
-                        items.findIndex((f) => f.absolute_path === viewingFile.absolute_path) <
-                        items.length - 1
+                        flattenedFileList.findIndex((f) => f.absolute_path === viewingFile.absolute_path) <
+                        flattenedFileList.length - 1
                       }
                       hasPrevious={
-                        items.findIndex((f) => f.absolute_path === viewingFile.absolute_path) > 0
+                        flattenedFileList.findIndex((f) => f.absolute_path === viewingFile.absolute_path) > 0
                       }
                       caseId={case_.id}
-                      onFileRefresh={async () => {
-                        // Reload case files after refresh
-                        try {
-                          const { fileService } = await import("@/services/fileService")
-                          const refreshedItems = await fileService.loadCaseFilesWithInventory(
-                            case_.id
-                          )
-                          onItemsChange(refreshedItems)
-                        } catch (error) {
-                          console.error("Failed to reload files after refresh:", error)
-                        }
-                      }}
+                      onFileRefresh={handleFileRefresh}
                       onFileRemove={handleFileRemove}
                     />
                   ) : (
@@ -623,7 +873,8 @@ export function CaseWorkspace({
                       <NotePanel
                         caseId={case_.id}
                         fileId={viewingFile?.id}
-                        onClose={() => setNotesVisible(false)}
+                        onClose={handleCloseNotes}
+                        initialNoteId={selectedNoteId}
                       />
                     </div>
                   </Panel>
@@ -657,7 +908,7 @@ export function CaseWorkspace({
                     maxSize={40}
                   >
                     <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
-                      <FindingsPanel caseId={case_.id} onClose={() => setFindingsVisible(false)} />
+                      <FindingsPanel caseId={case_.id} onClose={handleCloseFindings} />
                     </div>
                   </Panel>
                 </>
@@ -686,12 +937,7 @@ export function CaseWorkspace({
                     maxSize={50}
                   >
                     <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
-                      <div className="p-3 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-                        <h3 className="text-sm font-semibold">Timeline</h3>
-                      </div>
-                      <div className="flex-1 overflow-hidden min-h-0">
-                        <TimelineView caseId={case_.id} currentFileId={viewingFile?.id} />
-                      </div>
+                      <TimelineView caseId={case_.id} currentFileId={viewingFile?.id} />
                     </div>
                   </Panel>
                 </>
@@ -700,7 +946,7 @@ export function CaseWorkspace({
           ) : (
             /* Board-only view - Full width for optimal board experience */
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-              <div className="px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
+              <div className="px-4 pt-4 pb-3 border-b border-border/40 dark:border-border/50 flex-shrink-0">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex-1 min-w-0">
                     <h2 className="text-lg font-semibold mb-1">Workflow Board</h2>
@@ -709,20 +955,26 @@ export function CaseWorkspace({
                     </p>
                   </div>
                 </div>
-                {items.length > 0 && <ProgressDashboard items={items} />}
+                {items.length > 0 && (
+                  <Suspense fallback={<div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>}>
+                    <LazyProgressDashboard items={items} />
+                  </Suspense>
+                )}
               </div>
               <div className={cn("flex-1 overflow-hidden min-h-0 min-w-0", !navigatorOpen && "pl-8")}>
-                <WorkflowBoard
-                  items={filteredItems}
-                  onItemsChange={onItemsChange}
-                  selectedIndices={selectedIndices}
-                  onSelectionChange={onSelectionChange}
-                  onFileOpen={handleFileOpen}
-                  onFileRemove={handleFileRemove}
-                  statusFilter="all"
-                  totalFiles={items.length}
-                  caseId={case_.id}
-                />
+                <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                  <LazyWorkflowBoard
+                    items={filteredItems}
+                    onItemsChange={onItemsChange}
+                    selectedIndices={selectedIndices}
+                    onSelectionChange={onSelectionChange}
+                    onFileOpen={handleFileOpen}
+                    onFileRemove={handleFileRemove}
+                    statusFilter="all"
+                    totalFiles={items.length}
+                    caseId={case_.id}
+                  />
+                </Suspense>
               </div>
             </div>
           )}
@@ -739,4 +991,18 @@ export function CaseWorkspace({
       />
     </div>
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom memoization comparison for optimal performance
+  return (
+    prevProps.case.id === nextProps.case.id &&
+    prevProps.case.name === nextProps.case.name &&
+    prevProps.items === nextProps.items &&
+    prevProps.selectedIndices === nextProps.selectedIndices &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.onItemsChange === nextProps.onItemsChange &&
+    prevProps.onSelectionChange === nextProps.onSelectionChange &&
+    prevProps.onCloseCase === nextProps.onCloseCase &&
+    prevProps.onAddFiles === nextProps.onAddFiles &&
+    prevProps.onBulkUpdate === nextProps.onBulkUpdate
+  )
+})

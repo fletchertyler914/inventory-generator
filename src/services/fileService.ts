@@ -1,5 +1,6 @@
 import { safeInvoke } from '@/lib/tauri-utils';
 import { isTauri } from '@/lib/tauri-utils';
+import { cachedInvoke, clearCache } from '@/lib/request-cache';
 import type { File } from '@/types/file';
 import type { InventoryItem } from '@/types/inventory';
 
@@ -53,17 +54,22 @@ export const fileService = {
   /**
    * Ingest files from a folder into a case
    * Stores files in database with hashing, deduplication, and incremental sync
+   * Clears cache after ingestion to ensure fresh data
    */
   async ingestFilesToCase(
     caseId: string,
     folderPath: string,
     incremental?: boolean
   ): Promise<IngestResult> {
-    return safeInvoke<IngestResult>('ingest_files_to_case', {
+    const result = await safeInvoke<IngestResult>('ingest_files_to_case', {
       caseId,
       folderPath,
       incremental: incremental ?? true,
     });
+    // Clear cache for this case's files
+    clearCache('load_case_files_with_inventory');
+    clearCache('get_case_file_count');
+    return result;
   },
 
   /**
@@ -78,17 +84,31 @@ export const fileService = {
    * Load files with inventory metadata for UI display
    * Converts File + inventory_data to InventoryItem for compatibility
    * ELITE: Optimized for large datasets (10k+ files)
+   * 
+   * CACHING STRATEGY:
+   * - Cached for 30 seconds to reduce redundant database queries
+   * - Database is source of truth (files must be synced/ingested first)
+   * - Cache is cleared automatically after sync/ingest operations
+   * - Use syncCaseAllSources() to refresh from filesystem/cloud
+   * - Short TTL ensures data freshness while reducing load
    */
-  async loadCaseFilesWithInventory(caseId: string): Promise<InventoryItem[]> {
-    return safeInvoke<InventoryItem[]>('load_case_files_with_inventory', { caseId });
+  async loadCaseFilesWithInventory(caseId: string, forceRefresh?: boolean): Promise<InventoryItem[]> {
+    if (forceRefresh) {
+      clearCache('load_case_files_with_inventory');
+    }
+    return cachedInvoke<InventoryItem[]>('load_case_files_with_inventory', { caseId }, 30 * 1000);
   },
 
   /**
    * Get total file count for a case (fast count query)
    * ELITE: Optimized count query for large datasets
+   * Cached for 30 seconds (same as file list for consistency)
    */
-  async getCaseFileCount(caseId: string): Promise<number> {
-    return safeInvoke<number>('get_case_file_count', { caseId });
+  async getCaseFileCount(caseId: string, forceRefresh?: boolean): Promise<number> {
+    if (forceRefresh) {
+      clearCache('get_case_file_count');
+    }
+    return cachedInvoke<number>('get_case_file_count', { caseId }, 30 * 1000);
   },
 
   /**
@@ -101,20 +121,26 @@ export const fileService = {
 
   /**
    * List all source folders/files for a case
+   * Cached for 5 minutes (sources rarely change)
    */
   async listCaseSources(caseId: string): Promise<string[]> {
-    return safeInvoke<string[]>('list_case_sources', { caseId });
+    return cachedInvoke<string[]>('list_case_sources', { caseId }, 5 * 60 * 1000);
   },
 
   /**
    * Sync all source folders/files for a case
    * This syncs ALL sources, not just the original folder
+   * Clears cache after sync
    */
   async syncCaseAllSources(caseId: string, incremental?: boolean): Promise<IngestResult> {
-    return safeInvoke<IngestResult>('sync_case_all_sources', {
+    const result = await safeInvoke<IngestResult>('sync_case_all_sources', {
       caseId,
       incremental: incremental ?? true,
     });
+    // Clear cache for this case's files
+    clearCache('load_case_files_with_inventory');
+    clearCache('get_case_file_count');
+    return result;
   },
 
   /**
@@ -144,29 +170,38 @@ export const fileService = {
   /**
    * Refresh/re-ingest a single file
    * Updates file metadata and optionally transitions status
+   * Clears cache to ensure fresh data
    */
   async refreshSingleFile(
     fileId: string,
     autoTransitionStatus: boolean
   ): Promise<void> {
-    return safeInvoke('refresh_single_file', {
+    await safeInvoke('refresh_single_file', {
       fileId,
       autoTransitionStatus,
     });
+    // Clear cache for file lists (file count may have changed)
+    clearCache('load_case_files_with_inventory');
+    clearCache('get_case_file_count');
   },
 
   /**
    * Refresh/re-ingest multiple files (bulk)
    * Updates file metadata and optionally transitions status
+   * Clears cache to ensure fresh data
    */
   async refreshFilesBulk(
     fileIds: string[],
     autoTransitionStatus: boolean
   ): Promise<RefreshResult> {
-    return safeInvoke<RefreshResult>('refresh_files_bulk', {
+    const result = await safeInvoke<RefreshResult>('refresh_files_bulk', {
       fileIds,
       autoTransitionStatus,
     });
+    // Clear cache for file lists
+    clearCache('load_case_files_with_inventory');
+    clearCache('get_case_file_count');
+    return result;
   },
 
   /**
@@ -193,9 +228,13 @@ export const fileService = {
   /**
    * Remove a file from a case
    * Deletes the file record and all related records (notes, findings, timeline events, metadata)
+   * Clears cache after removal
    */
   async removeFileFromCase(fileId: string, caseId: string): Promise<void> {
-    return safeInvoke('remove_file_from_case', { fileId, caseId });
+    await safeInvoke('remove_file_from_case', { fileId, caseId });
+    // Clear cache for this case's files
+    clearCache('load_case_files_with_inventory');
+    clearCache('get_case_file_count');
   },
 };
 

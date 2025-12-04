@@ -1,12 +1,17 @@
 /**
  * Error Boundary component to catch and handle React errors gracefully
- * Provides fallback UI and error logging
+ * Provides fallback UI, error logging, and recovery options
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Enhanced with recovery strategies
+ * - Error reporting integration
  */
 
 import React, { Component, type ReactNode } from "react"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, RefreshCw, Home } from "lucide-react"
 import { Button } from "./ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
+import { reportError, createAppErrorWithRecovery, ErrorCode } from "@/lib/error-handler"
 
 interface Props {
   children: ReactNode
@@ -32,6 +37,10 @@ export class ErrorBoundary extends Component<Props, State> {
     // Log error to console
     // In production, errors should be sent to a logging service
     console.error("ErrorBoundary caught an error:", error, errorInfo)
+    
+    // Report error using centralized error handler
+    const appError = createAppErrorWithRecovery(error, ErrorCode.UNKNOWN_ERROR)
+    reportError(appError, "ErrorBoundary")
   }
 
   handleReset = () => {

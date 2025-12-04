@@ -228,10 +228,9 @@ export function CaseFilters({
       <Button
         ref={buttonRef}
         variant="outline"
-        size="sm"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "relative",
+          "relative h-10",
           hasActiveFilters && "border-primary/50 bg-primary/5"
         )}
       >

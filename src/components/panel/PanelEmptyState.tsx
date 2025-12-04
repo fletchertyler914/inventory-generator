@@ -16,16 +16,16 @@ export function PanelEmptyState({
   onAction,
 }: PanelEmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-        <Icon className="h-6 w-6 text-muted-foreground/50" />
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="w-12 h-12 rounded-full bg-muted/30 flex items-center justify-center mb-3">
+        <Icon className="h-5 w-5 text-muted-foreground/60" />
       </div>
-      <p className="text-sm font-medium text-foreground mb-1">{title}</p>
-      <p className="text-xs text-muted-foreground">{description}</p>
+      <p className="text-sm font-medium text-foreground mb-1.5">{title}</p>
+      <p className="text-xs text-muted-foreground/80 max-w-[200px]">{description}</p>
       {actionLabel && onAction && (
         <button
           onClick={onAction}
-          className="mt-4 text-xs text-primary hover:text-primary/80 underline"
+          className="mt-4 text-xs text-primary hover:text-primary/80 underline transition-colors"
         >
           {actionLabel}
         </button>

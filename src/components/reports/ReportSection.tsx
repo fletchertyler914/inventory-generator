@@ -20,10 +20,10 @@ export function ReportSection({
 }: ReportSectionProps) {
   return (
     <div className={cn("mb-8", className)}>
-      <h2 className="text-2xl font-semibold mb-4 border-b border-border pb-2">{title}</h2>
+      <h2 className="text-2xl font-semibold mb-4 border-b border-border/40 dark:border-border/50 pb-2">{title}</h2>
       <div className="prose prose-sm max-w-none">
         {editable && onContentChange ? (
-          <div className="min-h-[200px] p-4 border border-border rounded-lg bg-background">
+          <div className="min-h-[200px] p-4 border border-border/40 dark:border-border/50 rounded-lg bg-background">
             <p className="text-muted-foreground text-sm">
               Rich text editor will be integrated here
             </p>

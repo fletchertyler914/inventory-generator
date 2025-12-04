@@ -136,7 +136,7 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
               placeholder="e.g., Acme Corp"
             />
           </div>
-          <div className="space-y-2 pt-2 border-t border-border">
+          <div className="space-y-2 pt-2 border-t border-border/40 dark:border-border/50">
             <Label>Table Settings</Label>
             <Button
               variant="outline"

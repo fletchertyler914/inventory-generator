@@ -1,33 +1,32 @@
-import { useState, useEffect, useCallback, useRef } from "react"
-import { Pin, PinOff, Plus, Trash2, Save, Download, Edit2 } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Pin, PinOff, Plus, Trash2, Download, Edit2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { ScrollArea } from "../ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
 import { cn } from "@/lib/utils"
 import { noteService } from "@/services/noteService"
 import type { Note } from "@/types/note"
-import { useDebounce } from "@/hooks/useDebounce"
 import { TiptapEditor } from "./TiptapEditor"
 import { PanelContainer } from "../panel/PanelContainer"
 import { PanelHeader } from "../panel/PanelHeader"
 import { PanelContent } from "../panel/PanelContent"
 import { PanelEmptyState } from "../panel/PanelEmptyState"
 import { PanelCard } from "../panel/PanelCard"
+import { CreateNoteDialog } from "./CreateNoteDialog"
 
 interface NotePanelProps {
   caseId: string
   fileId?: string | undefined
   onClose?: () => void
+  initialNoteId?: string | null
 }
 
-export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
+export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
-  const [editingContent, setEditingContent] = useState("")
-  const [isCreating, setIsCreating] = useState(false)
-  const [newNoteContent, setNewNoteContent] = useState("")
-  const [viewingNoteId, setViewingNoteId] = useState<string | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editingNote, setEditingNote] = useState<Note | null>(null)
+  const [viewingNoteId, setViewingNoteId] = useState<string | null>(initialNoteId || null)
 
   // Load notes
   const loadNotes = useCallback(async () => {
@@ -46,66 +45,34 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
     loadNotes()
   }, [loadNotes])
 
-  // Auto-save debounced content
-  const debouncedContent = useDebounce(editingContent, 1000)
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const handleSaveNote = useCallback(async (noteId: string, content: string) => {
-    try {
-      await noteService.updateNote(noteId, content)
-      setNotes((prev) =>
-        prev.map((n) => (n.id === noteId ? { ...n, content, updated_at: Date.now() } : n))
-      )
-      setEditingNoteId(null)
-      setEditingContent("")
-    } catch (_error) {
-      console.error("Failed to save note:", _error)
+  // Update viewingNoteId when initialNoteId prop changes
+  useEffect(() => {
+    if (initialNoteId !== undefined) {
+      setViewingNoteId(initialNoteId)
     }
+  }, [initialNoteId])
+
+  const handleCreate = useCallback(() => {
+    setEditingNote(null)
+    setCreateDialogOpen(true)
   }, [])
 
-  // Auto-save when debounced content changes
-  useEffect(() => {
-    const currentNote = notes.find((n) => n.id === editingNoteId)
-    if (editingNoteId && debouncedContent !== "" && debouncedContent !== currentNote?.content) {
-      // Clear existing timeout
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-      // Set new timeout for auto-save
-      saveTimeoutRef.current = setTimeout(() => {
-        handleSaveNote(editingNoteId, debouncedContent)
-      }, 500)
-    }
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-    }
-  }, [debouncedContent, editingNoteId, notes, handleSaveNote])
-
-  const handleCreateNote = async () => {
-    setIsCreating(true)
-  }
-
-  const handleSaveNewNote = async () => {
-    if (!newNoteContent.trim()) return
-
-    try {
-      const note = await noteService.createNote(caseId, newNoteContent.trim(), fileId)
-      setNotes((prev) => [note, ...prev])
-      setNewNoteContent("")
-      setIsCreating(false)
-    } catch (_error) {
-      console.error("Failed to create note:", _error)
-    }
-  }
-
-  const handleStartEdit = (note: Note) => {
-    setEditingNoteId(note.id)
-    setEditingContent(note.content)
+  const handleEdit = useCallback((note: Note) => {
     setViewingNoteId(null) // Close view dialog if open
-  }
+    setEditingNote(note)
+    setCreateDialogOpen(true)
+  }, [])
+
+  const handleDialogClose = useCallback(
+    (saved: boolean) => {
+      setCreateDialogOpen(false)
+      setEditingNote(null)
+      if (saved) {
+        loadNotes()
+      }
+    },
+    [loadNotes]
+  )
 
   const handleViewNote = (note: Note) => {
     setViewingNoteId(note.id)
@@ -141,10 +108,6 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
     }
   }
 
-  const handleCancelEdit = () => {
-    setEditingNoteId(null)
-    setEditingContent("")
-  }
 
   // Sort notes: pinned first, then by updated_at
   const sortedNotes = [...notes].sort((a, b) => {
@@ -168,52 +131,18 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
       <PanelHeader
         title={fileId ? "File Notes" : "Case Notes"}
         count={notes.length}
-        onCreate={handleCreateNote}
+        onCreate={handleCreate}
         createButtonLabel=""
         {...(onClose && { onClose })}
       />
 
       <PanelContent>
-        {/* Create new note */}
-        {isCreating && (
-          <div className="space-y-2 p-3 rounded-lg border border-dashed bg-muted/30 border-border/40 dark:border-border/50">
-            <TiptapEditor
-              content={newNoteContent}
-              onChange={setNewNoteContent}
-              placeholder="Write a note..."
-              editable={true}
-            />
-            <div className="flex gap-1.5 justify-end pt-1">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => {
-                  setIsCreating(false)
-                  setNewNoteContent("")
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="h-7 text-xs"
-                onClick={handleSaveNewNote}
-                disabled={!newNoteContent.trim()}
-              >
-                <Save className="h-3 w-3 mr-1" />
-                Save
-              </Button>
-            </div>
-          </div>
-        )}
-
         {/* Notes list */}
-        {sortedNotes.length === 0 && !isCreating ? (
+        {sortedNotes.length === 0 ? (
           <PanelEmptyState
             icon={Plus}
             title="No notes yet"
-            description='Click "New" to create your first note'
+            description="Click the + button above to create your first note"
           />
         ) : (
           <div className="space-y-2.5">
@@ -231,40 +160,12 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
                   </div>
                 )}
 
-                {editingNoteId === note.id ? (
-                  <div className="space-y-2">
-                    <TiptapEditor
-                      content={editingContent}
-                      onChange={setEditingContent}
-                      placeholder="Edit note..."
-                      editable={true}
-                      onExport={() => {
-                        // Export handled by TiptapEditor
-                      }}
-                    />
-                    <div className="flex gap-1.5 justify-end pt-2 border-t border-border/40 dark:border-border/50">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs"
-                        onClick={handleCancelEdit}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => handleSaveNote(note.id, editingContent)}
-                      >
-                        <Save className="h-3 w-3 mr-1" />
-                        Save
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={cn(note.pinned && "pr-6")}>
+                <div className={cn(note.pinned && "pr-6", "min-w-0 overflow-hidden w-full")}>
                     {/* Condensed note preview */}
-                    <div className="text-xs text-foreground/90 line-clamp-2 mb-1.5">
+                    <div 
+                      className="text-xs text-foreground/90 line-clamp-2 mb-1.5 break-words overflow-hidden"
+                      style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                    >
                       {getNotePreview(note.content)}
                     </div>
 
@@ -282,7 +183,7 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
 
                       {/* Action buttons */}
                       <div
-                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button
@@ -291,7 +192,7 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
                           className="h-5 w-5 p-0 hover:bg-muted"
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleStartEdit(note)
+                            handleEdit(note)
                           }}
                           title="Edit note"
                         >
@@ -370,8 +271,7 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
                       </div>
                     </div>
                   </div>
-                )}
-              </PanelCard>
+                </PanelCard>
             ))}
           </div>
         )}
@@ -407,7 +307,7 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
                     className="ml-4"
                     onClick={() => {
                       setViewingNoteId(null)
-                      handleStartEdit(viewingNote)
+                      handleEdit(viewingNote)
                     }}
                   >
                     <Edit2 className="h-4 w-4 mr-1.5" />
@@ -502,6 +402,21 @@ export function NotePanel({ caseId, fileId, onClose }: NotePanelProps) {
           </Dialog>
         )
       })()}
+
+      {/* Create/Edit Dialog */}
+      <CreateNoteDialog
+        open={createDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateDialogOpen(false)
+            setEditingNote(null)
+          }
+        }}
+        caseId={caseId}
+        fileId={fileId}
+        note={editingNote}
+        onSave={handleDialogClose}
+      />
     </PanelContainer>
   )
 }

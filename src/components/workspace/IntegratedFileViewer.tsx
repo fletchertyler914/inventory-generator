@@ -1,7 +1,14 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { X, FileText, Image as ImageIcon, File, ChevronLeft, ChevronRight, Maximize2, Hash, Trash2, ExternalLink } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef, memo } from 'react';
+import { X, FileText, Image as ImageIcon, File, ChevronLeft, ChevronRight, Maximize2, Hash, Trash2, ExternalLink, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { InventoryItem } from '@/types/inventory';
 import type { FileStatus } from '@/types/inventory';
@@ -137,8 +144,13 @@ function getLanguageFromExtension(ext: string): string {
  * - Video/Audio players (HTML5 native)
  * - Keyboard navigation (arrow keys, Esc)
  * - Previous/Next file controls
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Memoized to prevent unnecessary re-renders
+ * - Lazy-loaded heavy components
+ * - Optimized event handlers
  */
-export function IntegratedFileViewer({
+export const IntegratedFileViewer = memo(function IntegratedFileViewer({
   file,
   onClose,
   onNext,
@@ -160,6 +172,34 @@ export function IntegratedFileViewer({
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [shouldLoadContent, setShouldLoadContent] = useState(false); // ELITE: Lazy load content
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(false);
+  const metadataJustOpenedRef = useRef(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const popoverTriggerRef = useRef<HTMLButtonElement>(null);
+  
+  // Update popover trigger position when menu button position changes
+  useEffect(() => {
+    if (metadataPanelOpen && menuButtonRef.current && popoverTriggerRef.current) {
+      const updatePosition = () => {
+        if (menuButtonRef.current && popoverTriggerRef.current) {
+          const rect = menuButtonRef.current.getBoundingClientRect();
+          popoverTriggerRef.current.style.position = 'fixed';
+          popoverTriggerRef.current.style.left = `${rect.left}px`;
+          popoverTriggerRef.current.style.top = `${rect.top}px`;
+          popoverTriggerRef.current.style.width = `${rect.width}px`;
+          popoverTriggerRef.current.style.height = `${rect.height}px`;
+        }
+      };
+      
+      updatePosition();
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, true);
+      
+      return () => {
+        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('scroll', updatePosition, true);
+      };
+    }
+  }, [metadataPanelOpen]);
   const [vscDarkPlusStyle, setVscDarkPlusStyle] = useState<any>(null);
   const [syntaxHighlighterModule, setSyntaxHighlighterModule] = useState<any>(null);
   const [fileChanged, setFileChanged] = useState<FileChangeStatus | null>(null);
@@ -676,14 +716,14 @@ export function IntegratedFileViewer({
           return (
             <div className="w-full h-full overflow-auto p-4">
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-border">
+                <table className="min-w-full border-collapse border border-border/40 dark:border-border/50">
                   <tbody>
                     {excelData.map((row, rowIndex) => (
                       <tr key={rowIndex}>
                         {row.map((cell, cellIndex) => (
                           <td
                             key={cellIndex}
-                            className="border border-border p-2 text-sm"
+                            className="border border-border/40 dark:border-border/50 p-2 text-sm"
                           >
                             {cell !== null && cell !== undefined ? String(cell) : ''}
                           </td>
@@ -790,112 +830,152 @@ export function IntegratedFileViewer({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background animate-in fade-in-0 duration-200">
       {/* Header */}
-      <div className="flex items-center gap-2 p-3 border-b border-border bg-card flex-shrink-0 shadow-sm">
-        {/* Left Section - File Info */}
+      <div className="relative flex items-center gap-2 p-3 border-b border-border/40 dark:border-border/50 bg-card flex-shrink-0 shadow-sm">
+        {/* Left Section - File Name */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {fileCategory === 'pdf' && <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
           {fileCategory === 'image' && <ImageIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
           {!['pdf', 'image'].includes(fileCategory) && <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
           <h2 className="text-sm font-semibold truncate min-w-0">{file.file_name}</h2>
-          <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded flex-shrink-0">
-            {fileType.toUpperCase()}
-          </span>
         </div>
         
         {/* Center Section - Status Selector */}
-        <div className="flex items-center justify-center flex-shrink-0">
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
           <StatusCell 
             status={localStatus} 
             onStatusChange={handleStatusChange} 
           />
         </div>
         
-        {/* Right Section - Actions */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Navigation */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onPrevious}
-            disabled={!hasPrevious}
-            title="Previous file (←)"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onNext}
-            disabled={!hasNext}
-            title="Next file (→)"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-
-          <div className="w-px h-6 bg-border mx-1" />
-          
-          {fileCategory === 'image' && (
+        {/* Right Section - Menu and Close */}
+        <div className="flex items-center gap-1 flex-shrink-0 ml-auto relative">
+          {/* Navigation Buttons - Only show when available */}
+          {hasPrevious && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setImageVisible(true)}
-              title="Fullscreen"
+              onClick={onPrevious}
+              title="Previous file (←)"
             >
-              <Maximize2 className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
+          {hasNext && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onNext}
+              title="Next file (→)"
+            >
+              <ChevronRight className="h-4 w-4" />
             </Button>
           )}
           
-          <Popover open={metadataPanelOpen} onOpenChange={setMetadataPanelOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant={metadataPanelOpen ? 'default' : 'outline'}
-                size="sm"
-                title="Show metadata"
-              >
-                <Hash className="h-4 w-4" />
+          {/* Overflow Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button ref={menuButtonRef} variant="ghost" size="sm" title="More options">
+                <MoreVertical className="h-4 w-4" />
               </Button>
-            </PopoverTrigger>
-            <PopoverContent 
-              className="w-[28rem] max-h-[80vh] p-0" 
-              align="end"
-              side="bottom"
-              sideOffset={8}
-            >
-              <div className="flex flex-col h-full max-h-[80vh]">
-                <div className="p-3 border-b border-border flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-                  <h3 className="text-sm font-semibold">Metadata</h3>
-                </div>
-                <div className="flex-1 overflow-hidden min-h-0">
-                  <MetadataPanel filePath={file.absolute_path} fileType={fileType} item={file} caseId={caseId} />
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {/* Image fullscreen */}
+              {fileCategory === 'image' && (
+                <DropdownMenuItem onClick={() => setImageVisible(true)}>
+                  <Maximize2 className="h-4 w-4 mr-2" />
+                  Fullscreen
+                </DropdownMenuItem>
+              )}
+              
+              {/* Metadata */}
+              <DropdownMenuItem 
+                onSelect={(e) => {
+                  e.preventDefault();
+                  // Toggle metadata panel - if already open, close it; otherwise open it
+                  if (metadataPanelOpen) {
+                    setMetadataPanelOpen(false);
+                  } else {
+                    // Mark that we're programmatically opening, then delay to allow dropdown to close
+                    metadataJustOpenedRef.current = true;
+                    setTimeout(() => {
+                      setMetadataPanelOpen(true);
+                      // Clear the flag after a short delay
+                      setTimeout(() => {
+                        metadataJustOpenedRef.current = false;
+                      }, 200);
+                    }, 150);
+                  }
+                }}
+              >
+                <Hash className="h-4 w-4 mr-2" />
+                {metadataPanelOpen ? 'Hide metadata' : 'Show metadata'}
+              </DropdownMenuItem>
+              
+              {/* Open in system */}
+              <DropdownMenuItem onClick={handleOpenInSystem}>
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in system
+              </DropdownMenuItem>
+              
+              {/* Remove file */}
+              {onFileRemove && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setDeleteDialogOpen(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remove file
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleOpenInSystem} 
-            title="Open file in system application"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </Button>
-          {onFileRemove && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(true)}
-              title="Remove file from case"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
+          {/* Close Button */}
           <Button variant="ghost" size="sm" onClick={onClose} title="Close (Esc)">
             <X className="h-4 w-4" />
           </Button>
         </div>
       </div>
+      
+      {/* Metadata Popover - positioned relative to menu button */}
+      <Popover 
+        open={metadataPanelOpen} 
+        onOpenChange={(open) => {
+          // Prevent closing immediately after opening (when dropdown closes)
+          if (!open && metadataJustOpenedRef.current) {
+            metadataJustOpenedRef.current = false;
+            return;
+          }
+          setMetadataPanelOpen(open);
+        }}
+        modal={false}
+      >
+        <PopoverTrigger asChild>
+          <button 
+            ref={popoverTriggerRef}
+            className="opacity-0 pointer-events-none fixed" 
+            aria-hidden="true" 
+          />
+        </PopoverTrigger>
+        <PopoverContent 
+          className="w-[28rem] max-h-[80vh] p-0" 
+          align="end"
+          side="bottom"
+          sideOffset={8}
+        >
+          <div className="flex flex-col h-full max-h-[80vh]">
+            <div className="p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+              <h3 className="text-sm font-semibold">Metadata</h3>
+            </div>
+            <div className="flex-1 overflow-hidden min-h-0">
+              <MetadataPanel filePath={file.absolute_path} fileType={fileType} item={file} caseId={caseId} />
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       {/* Content with optional metadata panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -946,4 +1026,20 @@ export function IntegratedFileViewer({
       />
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom memoization comparison
+  return (
+    prevProps.file.id === nextProps.file.id &&
+    prevProps.file.absolute_path === nextProps.file.absolute_path &&
+    prevProps.file.file_name === nextProps.file.file_name &&
+    prevProps.file.status === nextProps.file.status &&
+    prevProps.hasNext === nextProps.hasNext &&
+    prevProps.hasPrevious === nextProps.hasPrevious &&
+    prevProps.caseId === nextProps.caseId &&
+    prevProps.onClose === nextProps.onClose &&
+    prevProps.onNext === nextProps.onNext &&
+    prevProps.onPrevious === nextProps.onPrevious &&
+    prevProps.onFileRefresh === nextProps.onFileRefresh &&
+    prevProps.onFileRemove === nextProps.onFileRemove
+  )
+})

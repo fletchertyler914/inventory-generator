@@ -69,9 +69,8 @@ export function TiptapEditor({
     editorProps: {
       attributes: {
         class: cn(
-          'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[120px] p-2',
-          'overflow-x-hidden overflow-y-auto break-words',
-          editable && 'border border-border rounded-md'
+          'prose prose-sm dark:prose-invert max-w-none focus:outline-none p-2',
+          'overflow-x-hidden break-words h-full',
         ),
       },
     },
@@ -172,9 +171,9 @@ export function TiptapEditor({
   };
 
   return (
-    <div className={className}>
+    <div className={cn("flex flex-col h-full overflow-hidden", className)}>
       {editable && (
-        <div className="flex items-center justify-end gap-0.5 p-1 border-b border-border bg-muted/30 rounded-t-md">
+        <div className="flex items-center justify-end gap-0.5 p-1 border-b border-border/40 dark:border-border/50 bg-muted/30 flex-shrink-0 sticky top-0 z-10">
           {/* Font/Heading Menu */}
           <Popover open={fontMenuOpen} onOpenChange={setFontMenuOpen}>
             <PopoverTrigger asChild>
@@ -192,7 +191,7 @@ export function TiptapEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-40 p-1 bg-card border border-border shadow-lg" 
+              className="w-40 p-1 bg-card border border-border/50 dark:border-border/60 shadow-lg" 
               align="end"
               style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
             >
@@ -271,7 +270,7 @@ export function TiptapEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-40 p-1 bg-card border border-border shadow-lg" 
+              className="w-40 p-1 bg-card border border-border/50 dark:border-border/60 shadow-lg" 
               align="end"
               style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
             >
@@ -349,7 +348,7 @@ export function TiptapEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-40 p-1 bg-card border border-border shadow-lg" 
+              className="w-40 p-1 bg-card border border-border/50 dark:border-border/60 shadow-lg" 
               align="end"
               style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
             >
@@ -423,7 +422,7 @@ export function TiptapEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-48 p-1 bg-card border border-border shadow-lg" 
+              className="w-48 p-1 bg-card border border-border/50 dark:border-border/60 shadow-lg" 
               align="end"
               style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
             >
@@ -475,7 +474,9 @@ export function TiptapEditor({
           </Popover>
         </div>
       )}
-      <EditorContent editor={editor} />
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }

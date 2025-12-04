@@ -77,13 +77,13 @@ export function CsvViewer({ data }: CsvViewerProps) {
 
   return (
     <div className="w-full overflow-auto">
-      <table className="min-w-full border-collapse border border-border">
+      <table className="min-w-full border-collapse border border-border/40 dark:border-border/50">
         <thead>
           <tr className="bg-muted">
             {headers.map((header, index) => (
               <th
                 key={index}
-                className="border border-border p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10"
+                className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10"
               >
                 {header || `Column ${index + 1}`}
               </th>
@@ -96,7 +96,7 @@ export function CsvViewer({ data }: CsvViewerProps) {
               {headers.map((_, cellIndex) => (
                 <td
                   key={cellIndex}
-                  className="border border-border p-2 text-sm"
+                  className="border border-border/40 dark:border-border/50 p-2 text-sm"
                 >
                   {row[cellIndex] || ''}
                 </td>

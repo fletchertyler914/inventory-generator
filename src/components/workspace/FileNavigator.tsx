@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo, useCallback, useState, useEffect, memo } from 'react';
 import { ScrollArea } from '../ui/scroll-area';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -42,8 +42,13 @@ interface FolderNode {
  * - File type icons
  * - Current file highlighting
  * - Search filters folders and files
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Memoized to prevent unnecessary re-renders
+ * - Optimized folder tree building with useMemo
+ * - Memoized event handlers
  */
-export function FileNavigator({
+export const FileNavigator = memo(function FileNavigator({
   items,
   currentFile,
   onFileSelect,
@@ -168,6 +173,39 @@ export function FileNavigator({
       return next;
     });
   }, []);
+
+  // Auto-expand folder for current file if not already expanded
+  useEffect(() => {
+    if (!currentFile) return;
+
+    const folderPath = currentFile.folder_path || '';
+    if (!folderPath) return; // File is in root, nothing to expand
+
+    // Parse folder path into segments
+    const pathParts = folderPath.split('/').filter(p => p.trim());
+    if (pathParts.length === 0) return; // No folders to expand
+
+    // Build all parent folder paths
+    const parentPaths: string[] = [];
+    for (let i = 1; i <= pathParts.length; i++) {
+      parentPaths.push(pathParts.slice(0, i).join('/'));
+    }
+
+    // Use functional update to check and expand only if needed
+    setExpandedFolders(prev => {
+      // Check if any parent folders are not expanded
+      const needsExpansion = parentPaths.some(path => !prev.has(path));
+      
+      if (!needsExpansion) {
+        return prev; // No change needed
+      }
+
+      // Add all parent paths
+      const next = new Set(prev);
+      parentPaths.forEach(path => next.add(path));
+      return next;
+    });
+  }, [currentFile]);
 
   // Collect all folder paths recursively
   function getAllFolderPaths(node: FolderNode): string[] {
@@ -365,7 +403,7 @@ export function FileNavigator({
                         "hover:bg-muted/50 flex items-center gap-2 overflow-hidden min-w-0 group",
                         currentFile?.absolute_path === item.absolute_path && "bg-primary/10 text-primary font-medium"
                   )}
-                  style={{ paddingLeft: `${isRoot ? 12 : 28 + level * 16}px` }}
+                  style={{ paddingLeft: `${isRoot ? 12 : 40 + level * 16}px` }}
                     >
                       {bulkDeleteEnabled && (
                         <Checkbox
@@ -420,7 +458,7 @@ export function FileNavigator({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 border-b border-border flex-shrink-0 space-y-3">
+      <div className="p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0">
         <div className="relative flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -428,7 +466,7 @@ export function FileNavigator({
               placeholder="Search folders..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 text-sm"
+              className="pl-9 h-8 text-sm"
             />
           </div>
           {onToggleNavigator && (
@@ -436,7 +474,7 @@ export function FileNavigator({
               variant="ghost"
               size="icon"
               onClick={onToggleNavigator}
-              className="h-9 w-9 flex-shrink-0"
+              className="h-8 w-8 flex-shrink-0"
               title={navigatorOpen ? 'Collapse sidebar' : 'Expand sidebar'}
             >
               {navigatorOpen ? (
@@ -531,5 +569,19 @@ export function FileNavigator({
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom memoization comparison
+  return (
+    prevProps.items === nextProps.items &&
+    prevProps.currentFile?.id === nextProps.currentFile?.id &&
+    prevProps.currentFile?.absolute_path === nextProps.currentFile?.absolute_path &&
+    prevProps.selectedFolderPath === nextProps.selectedFolderPath &&
+    prevProps.navigatorOpen === nextProps.navigatorOpen &&
+    prevProps.caseId === nextProps.caseId &&
+    prevProps.onFileSelect === nextProps.onFileSelect &&
+    prevProps.onFolderSelect === nextProps.onFolderSelect &&
+    prevProps.onToggleNavigator === nextProps.onToggleNavigator &&
+    prevProps.onFileRemove === nextProps.onFileRemove
+  )
+})
 

@@ -178,7 +178,7 @@ export const CaseListCard = memo(function CaseListCard({
             {case_.deployment_mode}
           </Badge>
         </div>
-        <div className="flex items-center justify-between pt-2 border-t border-border">
+        <div className="flex items-center justify-between pt-2 border-t border-border/40 dark:border-border/50">
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />

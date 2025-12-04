@@ -279,7 +279,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
   if (loading) {
     return (
       <div className="h-full flex flex-col">
-        <div className="p-8 border-b border-border flex-shrink-0">
+        <div className="p-8 border-b border-border/40 dark:border-border/50 flex-shrink-0">
           <Skeleton className="h-8 w-32 mb-2" />
           <Skeleton className="h-4 w-24" />
         </div>
@@ -315,7 +315,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
       </div>
 
       {/* Header Section */}
-      <div className="relative z-10 p-8 border-b border-border flex-shrink-0 bg-background/80 backdrop-blur-sm">
+      <div className="relative z-10 p-8 border-b border-border/40 dark:border-border/50 flex-shrink-0 bg-background/80 backdrop-blur-sm">
         <div className="space-y-4">
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -374,69 +374,59 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
           </div>
 
           {/* Search and Controls Bar */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              {/* Search Bar */}
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  ref={searchInputRef}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search cases by name, ID, department, or client..."
-                  className="pl-9 pr-9 h-10"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Sort Dropdown */}
-              <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-                <SelectTrigger className="w-[180px]">
-                  <ArrowUpDown className="h-4 w-4 mr-2" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recent">Recently Opened</SelectItem>
-                  <SelectItem value="name">Name (A-Z)</SelectItem>
-                  <SelectItem value="created">Date Created</SelectItem>
-                  <SelectItem value="files">File Count</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* View Mode Toggle */}
-              <CaseListViewMode viewMode={viewMode} onViewModeChange={setViewMode} />
-
-              {/* Create Case Button */}
-              {onCreateCase && (
-                <Button onClick={onCreateCase} size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Case
-                </Button>
+          <div className="flex items-center gap-3">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search cases by name, ID, department, or client..."
+                className="pl-9 pr-9 h-10"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               )}
             </div>
 
             {/* Filters */}
-            <div className="flex items-center gap-3">
-              <CaseFilters
-                filters={filters}
-                onFiltersChange={setFilters}
-                availableDepartments={availableDepartments}
-                availableClients={availableClients}
-              />
-              {totalCases > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  {totalCases} {totalCases === 1 ? 'case' : 'cases'}
-                  {searchQuery && ` matching "${searchQuery}"`}
-                </div>
-              )}
-            </div>
+            <CaseFilters
+              filters={filters}
+              onFiltersChange={setFilters}
+              availableDepartments={availableDepartments}
+              availableClients={availableClients}
+            />
+
+            {/* Sort Dropdown */}
+            <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+              <SelectTrigger className="w-[180px] h-10">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">Recently Opened</SelectItem>
+                <SelectItem value="name">Name (A-Z)</SelectItem>
+                <SelectItem value="created">Date Created</SelectItem>
+                <SelectItem value="files">File Count</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* View Mode Toggle */}
+            <CaseListViewMode viewMode={viewMode} onViewModeChange={setViewMode} />
+
+            {/* Create Case Button */}
+            {onCreateCase && (
+              <Button onClick={onCreateCase} className="h-10">
+                <Plus className="h-4 w-4 mr-2" />
+                New Case
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -448,7 +438,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
             <div className="flex flex-col items-center justify-center py-24 px-4">
               <div className="relative mb-6">
                 <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
-                <div className="relative p-6 rounded-2xl bg-muted/50 border border-border">
+                <div className="relative p-6 rounded-2xl bg-muted/50 border border-border/40 dark:border-border/50">
                   <FolderOpen className="h-16 w-16 text-muted-foreground/50" />
                 </div>
               </div>
@@ -474,9 +464,17 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
               {/* Recent Cases Section */}
               {showRecentSection && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold">Recently Opened</h2>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-semibold">Recently Opened</h2>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    {totalCases > 0 && (
+                      <div className="text-sm text-muted-foreground">
+                        {totalCases} {totalCases === 1 ? 'case' : 'cases'}
+                        {searchQuery && ` matching "${searchQuery}"`}
+                      </div>
+                    )}
                   </div>
                   {viewMode === 'grid' ? (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

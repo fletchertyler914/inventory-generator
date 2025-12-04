@@ -83,7 +83,7 @@ export function TagsCell({ tags, onTagsChange }: TagsCellProps) {
         </div>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-64 p-2 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground border-border" 
+        className="w-64 p-2 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground border-border/50 dark:border-border/60" 
         align="start"
       >
         <div className="space-y-2">

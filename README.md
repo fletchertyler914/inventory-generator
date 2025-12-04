@@ -46,9 +46,16 @@ All inventory data is stored in a flexible JSON structure (`inventory_data`) tha
 - **State Management**: Zustand for centralized state
 - **UI Framework**: React 18 with Tailwind CSS
 - **Virtualization**: @tanstack/react-virtual for large tables (10k+ files)
-- **Error Handling**: Custom error boundaries and toast notifications
+- **Error Handling**: Custom error boundaries with recovery strategies, retry logic, and centralized error reporting
 - **Testing**: Vitest with React Testing Library
-- **Performance**: Memoization, caching, and optimized rendering
+- **Performance Optimizations**:
+  - **Component Memoization**: Large components (CaseWorkspace, IntegratedFileViewer, FileNavigator, etc.) are memoized with custom comparison functions
+  - **Event Handler Optimization**: All event handlers use `useCallback` to prevent unnecessary re-renders
+  - **Request Caching**: TTL-based caching with automatic deduplication for Tauri commands (5-minute default TTL)
+  - **Lazy Loading**: Heavy components (ReportView, WorkflowBoard, ProgressDashboard) are lazy-loaded with React.lazy
+  - **Code Splitting**: Granular chunk splitting in Vite config for optimal bundle size
+  - **WeakMap Caching**: Memory-efficient caching using WeakMap for JSON parsing and component instances
+  - **Service Layer**: Base service utilities with standardized error handling and retry logic
 
 ### Backend (Rust)
 
@@ -228,6 +235,37 @@ Key tables:
 - ✅ Tauri plugin-store (sandboxed, secure)
 - ✅ Platform-specific secure storage locations
 - ✅ SHA-256 for file integrity verification
+
+## Performance Optimizations
+
+The codebase implements comprehensive performance optimizations for scalability and maintainability:
+
+### Component Performance
+- **Memoization**: All large components (CaseWorkspace, IntegratedFileViewer, FileNavigator, FindingsPanel, TimelineView) are memoized with `React.memo` and custom comparison functions
+- **Event Handlers**: All event handlers use `useCallback` to prevent unnecessary re-renders
+- **Computed Values**: Expensive computations are memoized with `useMemo`
+- **Lazy Loading**: Heavy components (ReportView, WorkflowBoard, ProgressDashboard) are lazy-loaded with `React.lazy` and `Suspense`
+
+### Request Optimization
+- **Caching**: TTL-based caching (default 5 minutes) for frequently accessed data via `@/lib/request-cache`
+- **Deduplication**: Automatic request deduplication prevents duplicate API calls
+- **Cache Invalidation**: Automatic cache clearing on write operations ensures data consistency
+- **Service Layer**: Base service utilities (`@/services/baseService`) provide standardized error handling and retry logic
+
+### Error Handling
+- **Recovery Strategies**: Enhanced error handling with recovery strategies and retry logic
+- **Error Reporting**: Centralized error reporting with `reportError` for analytics integration
+- **Error Boundaries**: React error boundaries with recovery options
+
+### Memory Management
+- **WeakMap Caching**: Memory-efficient caching using WeakMap for JSON parsing
+- **Cleanup**: Proper cleanup in all `useEffect` hooks (timers, intervals, event listeners)
+- **Cache Expiration**: Automatic cache expiration and cleanup
+
+### Bundle Optimization
+- **Code Splitting**: Granular code splitting by feature and vendor in Vite config
+- **Chunk Optimization**: Optimized chunk sizes (1MB limit per chunk)
+- **Tree Shaking**: Full tree shaking enabled for minimal bundle size
 
 ## Development
 

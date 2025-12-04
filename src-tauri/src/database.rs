@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tauri_plugin_sql::{Migration, MigrationKind};
 use tauri::Manager;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::Row;
 
 /// Normalize a folder path to create a stable workspace ID
 fn normalize_path(path: &str) -> String {
@@ -460,6 +461,10 @@ pub struct WorkspacePreferences {
     pub findings_visible: bool,
     pub timeline_visible: bool,
     pub navigator_open: bool,
+    #[serde(default)]
+    pub auto_sync_enabled: Option<bool>,
+    #[serde(default)]
+    pub auto_sync_interval_minutes: Option<i32>,
 }
 
 /// Get workspace preferences for a case
@@ -469,7 +474,8 @@ pub async fn get_workspace_preferences(
 ) -> Result<Option<WorkspacePreferences>, String> {
     let row = sqlx::query(
         r#"
-        SELECT view_mode, report_mode, notes_visible, findings_visible, timeline_visible, navigator_open
+        SELECT view_mode, report_mode, notes_visible, findings_visible, timeline_visible, navigator_open,
+               auto_sync_enabled, auto_sync_interval_minutes
         FROM workspace_preferences
         WHERE case_id = ?
         "#
@@ -487,6 +493,13 @@ pub async fn get_workspace_preferences(
             findings_visible: row.get::<i64, _>("findings_visible") != 0,
             timeline_visible: row.get::<i64, _>("timeline_visible") != 0,
             navigator_open: row.get::<i64, _>("navigator_open") != 0,
+            auto_sync_enabled: row.try_get::<Option<i64>, _>("auto_sync_enabled")
+                .ok()
+                .flatten()
+                .map(|v| v != 0),
+            auto_sync_interval_minutes: row.try_get::<Option<i32>, _>("auto_sync_interval_minutes")
+                .ok()
+                .flatten(),
         }))
     } else {
         Ok(None)
@@ -509,8 +522,9 @@ pub async fn save_workspace_preferences(
     sqlx::query(
         r#"
         INSERT OR REPLACE INTO workspace_preferences
-        (id, case_id, view_mode, report_mode, notes_visible, findings_visible, timeline_visible, navigator_open, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 
+        (id, case_id, view_mode, report_mode, notes_visible, findings_visible, timeline_visible, navigator_open,
+         auto_sync_enabled, auto_sync_interval_minutes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             COALESCE((SELECT created_at FROM workspace_preferences WHERE case_id = ?), ?),
             ?)
         "#
@@ -523,6 +537,8 @@ pub async fn save_workspace_preferences(
     .bind(if prefs.findings_visible { 1 } else { 0 })
     .bind(if prefs.timeline_visible { 1 } else { 0 })
     .bind(if prefs.navigator_open { 1 } else { 0 })
+    .bind(prefs.auto_sync_enabled.map(|v| if v { 1 } else { 0 }).unwrap_or(0))
+    .bind(prefs.auto_sync_interval_minutes.unwrap_or(5))
     .bind(case_id)
     .bind(now)
     .bind(now)
@@ -690,6 +706,8 @@ pub fn get_migrations() -> Vec<Migration> {
                     findings_visible INTEGER DEFAULT 0,
                     timeline_visible INTEGER DEFAULT 0,
                     navigator_open INTEGER DEFAULT 1,
+                    auto_sync_enabled INTEGER DEFAULT 1, -- 0 = false, 1 = true (enabled by default)
+                    auto_sync_interval_minutes INTEGER DEFAULT 5, -- Default 5 minutes
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL,
                     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE

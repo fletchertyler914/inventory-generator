@@ -1,6 +1,7 @@
 import { Button } from '../ui/button';
-import { X, MoreVertical, FileText, StickyNote, AlertTriangle, Calendar, Plus, FileEdit } from 'lucide-react';
+import { X, MoreVertical, FileText, StickyNote, AlertTriangle, Calendar, Plus, FileSearch, FileBarChart, RefreshCw } from 'lucide-react';
 import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
 import { SearchBar } from '../search/SearchBar';
 import {
   DropdownMenu,
@@ -29,9 +30,14 @@ interface CaseHeaderProps {
   onToggleTimeline?: () => void;
   onFileOpen?: (filePath: string) => void;
   onSearchChange?: (query: string) => void;
+  onNoteSelect?: (noteId: string) => void;
   onFindingSelect?: () => void;
   onTimelineSelect?: () => void;
   onGenerateReport?: () => void;
+  onSyncFiles?: () => void;
+  isSyncing?: boolean;
+  autoSyncEnabled?: boolean;
+  onToggleAutoSync?: () => void;
 }
 
 export function CaseHeader({
@@ -52,14 +58,19 @@ export function CaseHeader({
   onToggleTimeline,
   onFileOpen,
   onSearchChange,
+  onNoteSelect,
   onFindingSelect,
   onTimelineSelect,
   onGenerateReport,
+  onSyncFiles,
+  isSyncing = false,
+  autoSyncEnabled = false,
+  onToggleAutoSync,
 }: CaseHeaderProps) {
   return (
-    <div className="h-16 border-b border-border bg-card flex-shrink-0 relative px-6 shadow-sm">
+    <div className="h-16 border-b border-border/40 dark:border-border/50 bg-card flex-shrink-0 relative px-3 shadow-sm">
       {/* Left Section - Case Info */}
-      <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center gap-3 min-w-0 max-w-[calc(50%-320px)]">
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-3 min-w-0 max-w-[calc(50%-320px)]">
         <h1 className="text-lg font-semibold truncate">{case_.name}</h1>
         {case_.case_id && (
           <>
@@ -77,6 +88,7 @@ export function CaseHeader({
           caseId={case_.id}
           items={items}
           onFileSelect={onFileOpen}
+          onNoteSelect={onNoteSelect}
           onSearchChange={onSearchChange}
           onFindingSelect={onFindingSelect}
           onTimelineSelect={onTimelineSelect}
@@ -84,24 +96,27 @@ export function CaseHeader({
       </div>
 
       {/* Right Section - Actions */}
-      <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2">
-        {/* Reports button - toggle report mode */}
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+        {/* Reports/Review button - toggle between report mode and review mode */}
         {onToggleReportMode && (
           <Button
-            variant={reportMode ? 'default' : 'ghost'}
+            variant="ghost"
             size="sm"
             onClick={onToggleReportMode}
             title={reportMode ? 'Switch to Review Mode' : 'Switch to Report Mode'}
-            className="h-8 px-3 transition-all duration-200"
+            className="h-8 w-8 p-0 transition-all duration-200"
           >
-            <FileEdit className="h-4 w-4 mr-2" />
-            Reports
+            {reportMode ? (
+              <FileSearch className="h-4 w-4" />
+            ) : (
+              <FileBarChart className="h-4 w-4" />
+            )}
           </Button>
         )}
 
         {/* Pane toggles - only show in review mode, compact icon-only buttons */}
         {viewMode === 'split' && !reportMode && (
-          <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
+          <div className="flex items-center gap-1 border border-border/40 dark:border-border/50 rounded-md p-0.5">
             {onToggleNotes && (
               <Button
                 variant={notesVisible ? 'default' : 'ghost'}
@@ -155,6 +170,33 @@ export function CaseHeader({
               <Plus className="h-4 w-4 mr-2" />
               Add Files
             </DropdownMenuItem>
+            {onSyncFiles && (
+              <DropdownMenuItem onClick={onSyncFiles} disabled={isSyncing}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                {isSyncing ? 'Syncing...' : 'Sync Files'}
+              </DropdownMenuItem>
+            )}
+            {onToggleAutoSync && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  onToggleAutoSync();
+                }}
+                onSelect={(e) => {
+                  e.preventDefault();
+                }}
+                className="cursor-pointer"
+              >
+                <div className="flex items-center gap-2 w-full">
+                  <Checkbox
+                    checked={autoSyncEnabled}
+                    onCheckedChange={onToggleAutoSync}
+                    className="pointer-events-none"
+                  />
+                  <span>Auto-sync files</span>
+                </div>
+              </DropdownMenuItem>
+            )}
             {onGenerateReport && items.length > 0 && (
               <DropdownMenuItem onClick={onGenerateReport}>
                 <FileText className="h-4 w-4 mr-2" />
