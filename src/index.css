@@ -195,6 +195,12 @@
     scroll-behavior: smooth;
   }
 
+  /* Override Radix UI ScrollArea's default display: table on internal wrapper */
+  [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+    min-width: 0 !important;
+  }
+
   /* Style react-day-picker dropdown selectors */
   [data-slot="calendar"] select,
   .rdp select,

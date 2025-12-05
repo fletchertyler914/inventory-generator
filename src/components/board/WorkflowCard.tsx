@@ -19,6 +19,7 @@ interface WorkflowCardProps {
   noteCount?: number
   duplicateCount?: number
   duplicateGroupId?: string
+  duplicateShape?: "dot" | "square" | "diamond"
   dragListeners?: any
   dragAttributes?: any
 }
@@ -34,12 +35,13 @@ export const WorkflowCard = memo(function WorkflowCard({
   noteCount,
   duplicateCount,
   duplicateGroupId,
+  duplicateShape,
   dragListeners: externalListeners,
   dragAttributes: externalAttributes,
 }: WorkflowCardProps) {
   // Get key mapping fields to display (top 2 priority fields)
   const keyFields = getKeyMappingFields(item, caseId, 2)
-  
+
   // Use external drag listeners/attributes if provided (from sortable), otherwise use draggable
   const {
     attributes: draggableAttributes,
@@ -101,11 +103,13 @@ export const WorkflowCard = memo(function WorkflowCard({
       style={style}
       {...listeners}
       {...attributes}
+      data-workflow-card
       className={cn(
         "group relative rounded-lg border bg-card p-2.5 shadow-sm transition-all duration-200",
         "border-border/40 dark:border-border/50",
         "hover:shadow-md hover:border-primary/60 dark:hover:border-primary/50 cursor-grab active:cursor-grabbing",
-        isSelected && "ring-2 ring-primary ring-offset-1 border-primary dark:border-primary",
+        isSelected &&
+          "ring-1 ring-primary/60 border-primary/40 dark:border-primary/40 bg-primary/5 dark:bg-primary/10",
         (isDragging || isDndDragging) && "opacity-50 scale-95",
         "flex flex-col gap-2 select-none overflow-hidden w-full max-w-full"
       )}
@@ -113,42 +117,48 @@ export const WorkflowCard = memo(function WorkflowCard({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
           handleClick(e as any)
         }
       }}
     >
       {/* File Icon and Type Badge */}
-      <div className="flex items-center justify-between gap-2 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <div className="text-muted-foreground flex-shrink-0">
-            {getFileIcon(item.file_type)}
-          </div>
-          <h4 className="text-xs font-medium text-foreground truncate leading-tight" title={item.file_name}>
+      <div className="flex items-center justify-between gap-2 min-w-0 w-full">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+          <div className="text-muted-foreground flex-shrink-0">{getFileIcon(item.file_type)}</div>
+          <h4
+            className="text-xs font-medium text-foreground truncate leading-tight"
+            style={{ maxWidth: "225px" }}
+            title={item.file_name}
+          >
             {item.file_name}
           </h4>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {duplicateCount !== undefined && duplicateCount > 0 && (
-            <DuplicateBadge 
-              groupId={duplicateGroupId} 
-              count={duplicateCount} 
-              className="h-1.5 w-1.5" 
+            <DuplicateBadge
+              groupId={duplicateGroupId}
+              count={duplicateCount}
+              {...(duplicateShape && { shape: duplicateShape })}
+              className="h-1.5 w-1.5"
             />
           )}
-          <Badge variant="outline" className="text-[9px] font-medium px-1.5 py-0 h-4 pointer-events-none">
+          <Badge
+            variant="outline"
+            className="text-[9px] font-medium px-1.5 py-0 h-4 pointer-events-none"
+          >
             {item.file_type.toUpperCase()}
           </Badge>
         </div>
       </div>
 
       {/* Folder Path */}
-      {item.folder_name && item.folder_name !== '-' && (
-        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+      {item.folder_name && item.folder_name !== "-" && (
+        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground min-w-0 w-full">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
             <Folder className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate" title={item.folder_path}>
+            <span className="truncate min-w-0 max-w-full" title={item.folder_path}>
               {item.folder_name}
             </span>
           </div>
@@ -161,15 +171,20 @@ export const WorkflowCard = memo(function WorkflowCard({
 
       {/* Key Mapping Fields */}
       {keyFields.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 w-full">
           {keyFields.map((field, idx) => (
-            <div key={field.columnId} className={cn(
-              "flex items-center text-[10px] text-muted-foreground min-w-0",
-              idx === keyFields.length - 1 ? "justify-between gap-2" : "gap-1.5"
-            )}>
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <span className="font-medium truncate">{field.label}:</span>
-                <span className="truncate text-foreground">{formatMappingValue(field.value)}</span>
+            <div
+              key={field.columnId}
+              className={cn(
+                "flex items-center text-[10px] text-muted-foreground min-w-0 w-full",
+                idx === keyFields.length - 1 ? "justify-between gap-2" : "gap-1.5"
+              )}
+            >
+              <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                <span className="font-medium truncate min-w-0">{field.label}:</span>
+                <span className="truncate text-foreground min-w-0 max-w-full">
+                  {formatMappingValue(field.value)}
+                </span>
               </div>
               {/* Note indicator - inline with last key field */}
               {idx === keyFields.length - 1 && noteCount !== undefined && noteCount > 0 && (
@@ -209,7 +224,10 @@ export const WorkflowCard = memo(function WorkflowCard({
       {/* File Changed Indicator */}
       {fileChanged && (
         <div className="absolute top-1.5 right-1.5">
-          <div className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400 shadow-sm" title="File has been modified" />
+          <div
+            className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400 shadow-sm"
+            title="File has been modified"
+          />
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState, useEffect } from "react"
+import { useMemo, useCallback, useState, useEffect, useRef } from "react"
 import { ScrollArea } from "../ui/scroll-area"
 import { Badge } from "../ui/badge"
 import { Input } from "../ui/input"
@@ -12,6 +12,8 @@ import { useFileNoteCounts } from "@/hooks/useFileNoteCounts"
 import { useFileDuplicateCounts } from "@/hooks/useFileDuplicateCounts"
 import { useWorkflowSelection } from "@/hooks/useWorkflowSelection"
 import { useSwimlaneFilter } from "@/hooks/useSwimlaneFilter"
+import { getDuplicateGroupVisualEncoding, clearEncodingCache } from "@/lib/duplicate-color-palette"
+import { useTheme } from "@/hooks/useTheme"
 import {
   DndContext,
   DragOverlay,
@@ -82,6 +84,8 @@ function SortableWorkflowCard({
   caseId,
   noteCount,
   duplicateCount,
+  duplicateGroupId,
+  duplicateShape,
 }: {
   item: InventoryItem
   index: number
@@ -93,6 +97,8 @@ function SortableWorkflowCard({
   caseId?: string
   noteCount?: number
   duplicateCount?: number
+  duplicateGroupId?: string
+  duplicateShape?: 'dot' | 'square' | 'diamond'
 }) {
   const {
     attributes,
@@ -123,6 +129,8 @@ function SortableWorkflowCard({
         caseId={caseId}
         noteCount={noteCount}
         duplicateCount={duplicateCount}
+        duplicateGroupId={duplicateGroupId}
+        duplicateShape={duplicateShape}
         dragListeners={listeners}
         dragAttributes={attributes}
       />
@@ -166,7 +174,7 @@ function DroppableColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex flex-col min-h-[240px] max-h-full min-w-[340px] w-[340px] rounded-lg border transition-all duration-200 bg-card shadow-sm flex-shrink-0",
+        "flex flex-col h-full min-h-[240px] min-w-[340px] w-[340px] rounded-lg border transition-all duration-200 bg-card shadow-sm flex-shrink-0",
         "border-border/40 dark:border-border/50",
         isOver || isDroppableOver
           ? "border-primary border-2 dark:border-primary bg-primary/5 shadow-lg scale-[1.01]"
@@ -234,15 +242,13 @@ function DroppableColumn({
       )}
 
       {/* Column Content - fits content with scrolling when needed */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-2 space-y-2">
-            <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-              {children}
-            </SortableContext>
-          </div>
-        </ScrollArea>
-      </div>
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="p-2 space-y-2">
+          <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+            {children}
+          </SortableContext>
+        </div>
+      </ScrollArea>
     </div>
   )
 }
@@ -281,6 +287,9 @@ export function WorkflowBoard({
   const [overId, setOverId] = useState<string | null>(null)
   // Track selected items being dragged (for multi-drag)
   const [draggingSelectedItems, setDraggingSelectedItems] = useState<InventoryItem[]>([])
+  // Track if mouse moved during mousedown (to distinguish clicks from drags)
+  const mouseMovedRef = useRef(false)
+  const mouseDownTimeRef = useRef<number | null>(null)
 
   // Use optimized selection hook
   const { isSelected, handleSelect, selectedCount } = useWorkflowSelection({
@@ -334,6 +343,45 @@ export function WorkflowBoard({
     })
     return counts
   }, [items, duplicateCounts])
+
+  // ELITE: Collect visible duplicate groupIds and compute visual encodings
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
+  
+  // Collect all visible duplicate groupIds
+  const visibleGroupIds = useMemo(() => {
+    const groupIdSet = new Set<string>()
+    items.forEach((item) => {
+      if (item.id) {
+        const groupId = duplicateGroupIds.get(item.id)
+        if (groupId) {
+          groupIdSet.add(groupId)
+        }
+      }
+    })
+    return Array.from(groupIdSet)
+  }, [items, duplicateGroupIds])
+
+  // Compute visual encodings for all visible groups (memoized, batch processed)
+  const groupShapes = useMemo(() => {
+    const shapes = new Map<string, 'dot' | 'square' | 'diamond'>()
+    
+    // Clear cache when visible groups change significantly
+    if (visibleGroupIds.length > 0) {
+      // Compute encodings for all visible groups
+      visibleGroupIds.forEach((groupId) => {
+        const encoding = getDuplicateGroupVisualEncoding(groupId, visibleGroupIds, isDark)
+        shapes.set(groupId, encoding.shape)
+      })
+    }
+    
+    return shapes
+  }, [visibleGroupIds, isDark])
+
+  // Clear encoding cache when caseId changes
+  useEffect(() => {
+    clearEncodingCache()
+  }, [caseId])
 
   // Check file changes for visible items (debounced)
   useEffect(() => {
@@ -672,6 +720,92 @@ export function WorkflowBoard({
     })
   )
 
+  // Ref for board container to detect clicks outside
+  const boardRef = useRef<HTMLDivElement>(null)
+
+  // Handle clicks outside cards to deselect all
+  useEffect(() => {
+    const handleMouseDown = () => {
+      // Reset mouse moved flag on mousedown
+      mouseMovedRef.current = false
+      mouseDownTimeRef.current = Date.now()
+    }
+
+    const handleMouseMove = () => {
+      // Only track movement if we're in a mousedown cycle
+      if (mouseDownTimeRef.current !== null) {
+        mouseMovedRef.current = true
+      }
+    }
+
+    const handleMouseUp = () => {
+      // Clear mousedown time after a short delay to allow click event to check
+      setTimeout(() => {
+        mouseDownTimeRef.current = null
+      }, 100)
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      // Don't clear selection if a drag is in progress
+      if (activeId !== null) {
+        mouseMovedRef.current = false
+        return
+      }
+
+      // Don't clear if mouse moved significantly (indicating drag attempt)
+      // The drag system uses 10px activation, so any movement suggests drag intent
+      if (mouseMovedRef.current) {
+        mouseMovedRef.current = false
+        return
+      }
+
+      // Don't clear selection if clicking on interactive elements
+      const target = event.target as HTMLElement
+      if (
+        target.tagName === "BUTTON" ||
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.closest("button") ||
+        target.closest("input") ||
+        target.closest("textarea") ||
+        target.closest("[role='button']") ||
+        target.closest("[role='dialog']") ||
+        target.closest("[data-radix-portal]")
+      ) {
+        return
+      }
+
+      // Check if click is on a card (cards have the data attribute)
+      const isCardClick = target.closest('[data-workflow-card]') !== null
+
+      // If clicking outside the board container or on empty space within the board (not on a card)
+      if (boardRef.current) {
+        const isInsideBoard = boardRef.current.contains(target)
+        // Clear selection when clicking outside the board or on empty space within the board (not on a card)
+        if ((!isInsideBoard || (isInsideBoard && !isCardClick)) && selectedCount > 0 && onSelectionChange) {
+          onSelectionChange([])
+        }
+      }
+    }
+
+    // Only attach listeners if there are selected items
+    if (selectedCount > 0) {
+      // Track mousedown, mousemove, and mouseup to detect drags
+      document.addEventListener("mousedown", handleMouseDown)
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+      // Use 'click' instead of 'mousedown' to avoid interfering with drag operations
+      // 'click' fires after mouseup, so we can check if mouse moved
+      document.addEventListener("click", handleClickOutside)
+      return () => {
+        document.removeEventListener("mousedown", handleMouseDown)
+        document.removeEventListener("mousemove", handleMouseMove)
+        document.removeEventListener("mouseup", handleMouseUp)
+        document.removeEventListener("click", handleClickOutside)
+      }
+    }
+  }, [selectedCount, onSelectionChange, activeId])
+
   return (
     <DndContext
       sensors={sensors}
@@ -680,7 +814,7 @@ export function WorkflowBoard({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="h-full flex flex-col overflow-hidden">
+      <div ref={boardRef} className="h-full flex flex-col overflow-hidden">
         {/* Modifier Key Hint - Clean and intuitive */}
         <div className="px-4 pt-2 pb-1 flex-shrink-0 border-b border-border/20">
           <p className="text-xs text-muted-foreground/60">
@@ -753,6 +887,7 @@ export function WorkflowBoard({
                           noteCount={itemNoteCounts.get(item.absolute_path)}
                           duplicateCount={itemDuplicateCounts.get(item.absolute_path) ?? undefined}
                           duplicateGroupId={duplicateGroupIds.get(item.id)}
+                          duplicateShape={item.id ? groupShapes.get(duplicateGroupIds.get(item.id) || '') : undefined}
                         />
                       )
                     })
@@ -786,6 +921,7 @@ export function WorkflowBoard({
                     noteCount={itemNoteCounts.get(item.absolute_path)}
                     duplicateCount={itemDuplicateCounts.get(item.absolute_path) ?? undefined}
                     duplicateGroupId={duplicateGroupIds.get(item.id)}
+                    duplicateShape={item.id ? groupShapes.get(duplicateGroupIds.get(item.id) || '') : undefined}
                   />
                 </div>
               </div>
@@ -809,8 +945,9 @@ export function WorkflowBoard({
               isDragging={true}
               caseId={caseId}
               noteCount={itemNoteCounts.get(activeItem.absolute_path)}
-                duplicateCount={itemDuplicateCounts.get(activeItem.absolute_path) ?? undefined}
-                duplicateGroupId={duplicateGroupIds.get(activeItem.id)}
+              duplicateCount={itemDuplicateCounts.get(activeItem.absolute_path) ?? undefined}
+              duplicateGroupId={duplicateGroupIds.get(activeItem.id)}
+              duplicateShape={activeItem.id ? groupShapes.get(duplicateGroupIds.get(activeItem.id) || '') : undefined}
             />
           </div>
         ) : null}

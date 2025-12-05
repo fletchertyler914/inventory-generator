@@ -49,13 +49,14 @@ export function ProgressDashboard({ items }: ProgressDashboardProps) {
   }
 
   return (
-    <div className="flex items-center gap-4 py-2 px-1">
+    <div className="flex items-center gap-6">
+      {/* Progress Bar Section */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between text-xs mb-1">
-          <span className="text-muted-foreground font-medium">Review Progress</span>
-          <span className="font-semibold text-foreground">{stats.progressPercentage}%</span>
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          <span className="text-muted-foreground">Review Progress</span>
+          <span className="font-medium text-foreground">{stats.progressPercentage}%</span>
         </div>
-        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted/20">
+        <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/30">
           {/* Segmented progress bar */}
           <div className="absolute inset-0 flex">
             {/* Unreviewed - gray */}
@@ -84,18 +85,22 @@ export function ProgressDashboard({ items }: ProgressDashboardProps) {
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-4 text-xs flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Remaining:</span>
-          <span className="font-semibold">{stats.remaining}</span>
+
+      {/* Stats Section */}
+      <div className="flex items-center gap-3 text-xs flex-shrink-0">
+        <div className="text-right">
+          <div className="text-muted-foreground text-[10px] leading-tight">Remaining</div>
+          <div className="font-semibold text-foreground leading-tight">{stats.remaining}</div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Completed:</span>
-          <span className="font-semibold text-success">{stats.completedCount}</span>
+        <div className="h-4 w-px bg-border" />
+        <div className="text-right">
+          <div className="text-muted-foreground text-[10px] leading-tight">Completed</div>
+          <div className="font-semibold text-green-500 leading-tight">{stats.completedCount}</div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Total:</span>
-          <span className="font-semibold">{stats.total}</span>
+        <div className="h-4 w-px bg-border" />
+        <div className="text-right">
+          <div className="text-muted-foreground text-[10px] leading-tight">Total</div>
+          <div className="font-semibold text-foreground leading-tight">{stats.total}</div>
         </div>
       </div>
     </div>

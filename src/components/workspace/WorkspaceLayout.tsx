@@ -1,7 +1,5 @@
 import { memo } from "react"
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels"
-import { Button } from "../ui/button"
-import { ChevronRight } from "lucide-react"
 import { FileNavigator } from "./FileNavigator"
 import { SplitView } from "./SplitView"
 import { BoardView } from "./BoardView"
@@ -104,12 +102,12 @@ export const WorkspaceLayout = memo(function WorkspaceLayout({
       {navigatorOpen && (
         <>
           <Panel
-            defaultSize={30}
+            defaultSize={20}
             minSize={20}
             maxSize={40}
             className="flex flex-col overflow-hidden"
           >
-            <div className="h-full bg-card flex flex-col" style={{ minWidth: '240px' }}>
+            <div className="h-full bg-card flex flex-col" style={{ minWidth: '190px' }}>
               <FileNavigator
                 items={items}
                 currentFile={viewingFile}
@@ -127,19 +125,6 @@ export const WorkspaceLayout = memo(function WorkspaceLayout({
         </>
       )}
 
-      {/* Toggle Button - When Sidebar is Collapsed */}
-      {!navigatorOpen && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onExpandNavigator}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-8 w-8 rounded-r border-l-0 border border-border/40 dark:border-border/50 bg-background hover:bg-muted transition-colors duration-150"
-          title="Expand sidebar"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      )}
-
       {/* Center/Right - Review Mode or Board View */}
       <Panel className="flex flex-col overflow-hidden min-h-0 relative">
         {viewMode === "split" ? (
@@ -153,6 +138,9 @@ export const WorkspaceLayout = memo(function WorkspaceLayout({
             selectedNoteId={selectedNoteId}
             selectedFindingId={selectedFindingId}
             selectedTimelineEventId={selectedTimelineEventId}
+            navigatorOpen={navigatorOpen}
+            onExpandNavigator={onExpandNavigator}
+            onToggleNavigator={onToggleNavigator}
             onFileClose={onFileClose}
             onNext={onNext}
             onPrevious={onPrevious}
@@ -171,6 +159,8 @@ export const WorkspaceLayout = memo(function WorkspaceLayout({
             items={items}
             filteredItems={filteredItems}
             navigatorOpen={navigatorOpen}
+            onExpandNavigator={onExpandNavigator}
+            onToggleNavigator={onToggleNavigator}
             selectedIndices={selectedIndices}
             selectedFolderPath={selectedFolderPath}
             onItemsChange={onItemsChange}

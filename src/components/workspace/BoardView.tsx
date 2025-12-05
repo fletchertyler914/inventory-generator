@@ -1,5 +1,6 @@
 import { memo, lazy, Suspense } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "../ui/button"
 import { cn } from "@/lib/utils"
 import type { InventoryItem } from "@/types/inventory"
 
@@ -15,6 +16,8 @@ interface BoardViewProps {
   items: InventoryItem[]
   filteredItems: InventoryItem[]
   navigatorOpen: boolean
+  onExpandNavigator?: () => void
+  onToggleNavigator?: () => void
   selectedIndices: number[]
   selectedFolderPath: string | null
   onItemsChange: (items: InventoryItem[]) => void
@@ -26,7 +29,7 @@ interface BoardViewProps {
 
 /**
  * ELITE: Board view component for workflow board layout
- * 
+ *
  * Features:
  * - Full-width workflow board for optimal experience
  * - Progress dashboard showing review statistics
@@ -36,6 +39,8 @@ export const BoardView = memo(function BoardView({
   items,
   filteredItems,
   navigatorOpen,
+  onExpandNavigator,
+  onToggleNavigator,
   selectedIndices,
   selectedFolderPath,
   onItemsChange,
@@ -45,32 +50,45 @@ export const BoardView = memo(function BoardView({
   caseId,
 }: BoardViewProps) {
   const isFiltered = selectedFolderPath !== null
-  const folderName = selectedFolderPath ? selectedFolderPath.split("/").pop() || selectedFolderPath : null
+  const folderName = selectedFolderPath
+    ? selectedFolderPath.split("/").pop() || selectedFolderPath
+    : null
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-      <div className="px-4 pt-4 pb-3 border-b border-border/40 dark:border-border/50 flex-shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-semibold mb-1">Workflow Board</h2>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">
-                {isFiltered
-                  ? `Showing ${filteredItems.length} of ${items.length} files from folder "${folderName}"`
-                  : "Organize and track files through review stages"}
-              </p>
-              {isFiltered && (
-                <p className="text-xs text-muted-foreground/70 italic">
-                  Click a folder in the navigator to filter, or click "All Files" to show all case files
-                </p>
+      <div className="px-4 pt-3 pb-3 border-b border-border/40 dark:border-border/50 flex-shrink-0">
+        {/* Header Row - Title and Toggle */}
+        <div className="flex items-center gap-2 mb-3">
+          {(onToggleNavigator || onExpandNavigator) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={navigatorOpen ? onToggleNavigator : onExpandNavigator}
+              className="h-8 w-8 flex-shrink-0"
+              title={navigatorOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              {navigatorOpen ? (
+                <ChevronLeft className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
               )}
-            </div>
+            </Button>
+          )}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold">Workflow Board</h2>
+            {isFiltered && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Showing {filteredItems.length} of {items.length} files from "{folderName}"
+              </p>
+            )}
           </div>
         </div>
+
+        {/* Progress Section */}
         {items.length > 0 && (
           <Suspense
             fallback={
-              <div className="flex items-center justify-center py-4">
+              <div className="flex items-center justify-center py-2">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             }
@@ -79,12 +97,7 @@ export const BoardView = memo(function BoardView({
           </Suspense>
         )}
       </div>
-      <div
-        className={cn(
-          "flex-1 overflow-hidden min-h-0 min-w-0",
-          !navigatorOpen && "pl-8"
-        )}
-      >
+      <div className={cn("flex-1 overflow-hidden min-h-0 min-w-0 mr-8")}>
         <Suspense
           fallback={
             <div className="flex items-center justify-center h-full">
@@ -108,4 +121,3 @@ export const BoardView = memo(function BoardView({
     </div>
   )
 })
-

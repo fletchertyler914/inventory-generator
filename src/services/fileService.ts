@@ -168,6 +168,22 @@ export const fileService = {
   },
 
   /**
+   * ELITE: Rename a file on filesystem and update database
+   * Atomic operation with staleness check and transaction safety
+   * 
+   * @param fileId - File ID to rename
+   * @param newName - New filename (without path)
+   * @returns New absolute path of renamed file
+   */
+  async renameFile(fileId: string, newName: string): Promise<string> {
+    const result = await safeInvoke<string>('rename_file', { fileId, newName });
+    // Clear cache after rename to ensure fresh data
+    clearCache('load_case_files_with_inventory');
+    clearCache('get_case_file_count');
+    return result;
+  },
+
+  /**
    * Refresh/re-ingest a single file
    * Updates file metadata and optionally transitions status
    * Clears cache to ensure fresh data

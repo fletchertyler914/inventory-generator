@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
-import { X, MoreVertical, FileText, StickyNote, AlertTriangle, Calendar, Plus, FileSearch, FileBarChart, RefreshCw, Search, Copy } from 'lucide-react';
+import { X, MoreVertical, StickyNote, AlertTriangle, Calendar, Plus, FileSearch, FileBarChart, RefreshCw, Search, Copy, File, FolderOpen } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { SearchDialog } from '../search/SearchDialog';
@@ -9,6 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '../ui/dropdown-menu';
 import type { Case } from '@/types/case';
 import type { InventoryItem } from '@/types/inventory';
@@ -18,7 +19,8 @@ interface CaseHeaderProps {
   fileCount: number;
   items: InventoryItem[];
   onClose: () => void;
-  onAddFiles: () => void;
+  onAddFiles?: () => void;
+  onAddFolders?: () => void;
   viewMode: 'split' | 'board';
   viewingFile: InventoryItem | null;
   reportMode?: boolean;
@@ -34,7 +36,6 @@ interface CaseHeaderProps {
   onNoteSelect?: (noteId: string) => void;
   onFindingSelect?: (filePath?: string, findingId?: string) => void;
   onTimelineSelect?: (filePath?: string, timelineEventId?: string) => void;
-  onGenerateReport?: () => void;
   onSyncFiles?: () => void;
   isSyncing?: boolean;
   autoSyncEnabled?: boolean;
@@ -47,6 +48,7 @@ export function CaseHeader({
   items,
   onClose,
   onAddFiles,
+  onAddFolders,
   viewMode,
   viewingFile: _viewingFile,
   reportMode = false,
@@ -62,7 +64,6 @@ export function CaseHeader({
   onNoteSelect,
   onFindingSelect,
   onTimelineSelect,
-  onGenerateReport,
   onSyncFiles,
   isSyncing = false,
   autoSyncEnabled = false,
@@ -217,42 +218,49 @@ export function CaseHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={onAddFiles}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Files
-            </DropdownMenuItem>
-            {onSyncFiles && (
-              <DropdownMenuItem onClick={onSyncFiles} disabled={isSyncing}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Syncing...' : 'Sync Files'}
+            {onAddFiles && (
+              <DropdownMenuItem onClick={onAddFiles}>
+                <File className="h-4 w-4 mr-2" />
+                Add Files
               </DropdownMenuItem>
             )}
-            {onToggleAutoSync && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.preventDefault();
-                  onToggleAutoSync();
-                }}
-                onSelect={(e) => {
-                  e.preventDefault();
-                }}
-                className="cursor-pointer"
-              >
-                <div className="flex items-center gap-2 w-full">
-                  <Checkbox
-                    checked={autoSyncEnabled}
-                    onCheckedChange={onToggleAutoSync}
-                    className="pointer-events-none"
-                  />
-                  <span>Auto-sync files</span>
-                </div>
+            {onAddFolders && (
+              <DropdownMenuItem onClick={onAddFolders}>
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Add Folders
               </DropdownMenuItem>
             )}
-            {onGenerateReport && items.length > 0 && (
-              <DropdownMenuItem onClick={onGenerateReport}>
-                <FileText className="h-4 w-4 mr-2" />
-                Generate Report
-              </DropdownMenuItem>
+            {(onSyncFiles || onToggleAutoSync) && (
+              <>
+                <DropdownMenuSeparator />
+                {onSyncFiles && (
+                  <DropdownMenuItem onClick={onSyncFiles} disabled={isSyncing}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                    {isSyncing ? 'Syncing...' : 'Sync Files'}
+                  </DropdownMenuItem>
+                )}
+                {onToggleAutoSync && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onToggleAutoSync();
+                    }}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 w-full">
+                      <Checkbox
+                        checked={autoSyncEnabled}
+                        onCheckedChange={onToggleAutoSync}
+                        className="pointer-events-none"
+                      />
+                      <span>Auto-sync files</span>
+                    </div>
+                  </DropdownMenuItem>
+                )}
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

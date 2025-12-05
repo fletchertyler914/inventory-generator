@@ -280,17 +280,18 @@ function App() {
 
   /**
    * Handle adding files to current case
+   * Supports both individual files and folders
    */
   const handleAddFilesToCase = useCallback(
-    async (folderPath: string) => {
+    async (path: string) => {
       if (!currentCase) return
 
       try {
         // Add source to case (if not already added)
-        await fileService.addCaseSource(currentCase.id, folderPath)
+        await fileService.addCaseSource(currentCase.id, path)
 
-        // Ingest files from the new source
-        const result = await fileService.ingestFilesToCase(currentCase.id, folderPath, true)
+        // Ingest files from the new source (backend handles both files and folders)
+        const result = await fileService.ingestFilesToCase(currentCase.id, path, true)
         const updatedItems = await fileService.loadCaseFilesWithInventory(currentCase.id)
         setItems(updatedItems)
 

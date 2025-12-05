@@ -10,6 +10,7 @@ mod metadata_extraction;
 mod date_extraction;
 mod field_extraction;
 mod path_validation;
+mod file_operations;
 
 use mappings::process_file_metadata;
 use export::{read_xlsx, read_csv, read_json};
@@ -1375,17 +1376,36 @@ async fn remove_file_from_case(
     
     let pool = database::get_db_pool(&app).await?;
     
+    // ELITE: Check file staleness before deletion
+    use file_operations::{check_file_staleness, StalenessResult};
+    let staleness = check_file_staleness(&file_id, &pool).await?;
+    
+    // Warn if file is stale, but allow deletion to proceed (user may want to remove stale entry)
+    match staleness {
+        StalenessResult::Deleted => {
+            log::warn!("File {} has already been deleted externally", file_id);
+            // Continue with deletion to clean up database entry
+        }
+        StalenessResult::Modified => {
+            log::warn!("File {} has been modified externally", file_id);
+            // Continue with deletion - user may want to remove modified file
+        }
+        StalenessResult::Fresh => {
+            // File is fresh, proceed normally
+        }
+    }
+    
     // ELITE: Verify file exists and belongs to the specified case (exclude already deleted files)
     let file_row = sqlx::query(
         "SELECT id, case_id FROM files WHERE id = ? AND deleted_at IS NULL LIMIT 1"
     )
-    .bind(&file_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| {
-        log::error!("Database validation error when removing file {}: {}", file_id, e);
-        format!("Database validation error: {}", e)
-    })?;
+        .bind(&file_id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| {
+            log::error!("Database validation error when removing file {}: {}", file_id, e);
+            format!("Database validation error: {}", e)
+        })?;
     
     if let Some(row) = file_row {
         let file_case_id: String = row.get("case_id");
@@ -2857,6 +2877,152 @@ async fn check_file_changed(
     })
 }
 
+/// Rename a file on filesystem and update database
+/// ELITE: Atomic operation with staleness check and transaction safety
+#[tauri::command]
+async fn rename_file(
+    file_id: String,
+    new_name: String,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    use file_operations::{check_file_staleness, validate_filename, construct_new_path, StalenessResult};
+    use crate::scanner::{FileMetadata, compute_additional_fields};
+    use crate::mappings::process_file_metadata;
+    use tokio::fs;
+    
+    let pool = database::get_db_pool(&app).await?;
+    
+    // ELITE: Check file staleness before proceeding
+    let staleness = check_file_staleness(&file_id, &pool).await?;
+    match staleness {
+        StalenessResult::Deleted => {
+            return Err("File has been deleted externally. Please sync first.".to_string());
+        }
+        StalenessResult::Modified => {
+            return Err("File has been modified externally. Please sync first.".to_string());
+        }
+        StalenessResult::Fresh => {
+            // File is fresh, proceed with rename
+        }
+    }
+    
+    // ELITE: Transaction-based atomic operation
+    let mut transaction = pool.begin()
+        .await
+        .map_err(|e| format!("Failed to start transaction: {}", e))?;
+    
+    // Get current file path from database (within transaction)
+    let file_row = sqlx::query(
+        "SELECT case_id, absolute_path, folder_path, file_name, source_directory FROM files WHERE id = ? AND deleted_at IS NULL"
+    )
+        .bind(&file_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|e| format!("Database error: {}", e))?
+        .ok_or_else(|| "File not found or has been deleted".to_string())?;
+    
+    let case_id: String = file_row.get("case_id");
+    let current_path: String = file_row.get("absolute_path");
+    let folder_path: String = file_row.get("folder_path");
+    let source_directory: String = file_row.get("source_directory");
+    
+    // Validate new filename
+    validate_filename(&new_name)
+        .map_err(|e| format!("Invalid filename: {}", e))?;
+    
+    // Construct new path
+    let current_path_buf = PathBuf::from(&current_path);
+    let new_path = construct_new_path(&current_path_buf, &new_name).await?;
+    let new_path_str = new_path.to_string_lossy().to_string();
+    
+    // Check if target path already exists
+    if fs::try_exists(&new_path).await
+        .map_err(|e| format!("Failed to check target path: {}", e))? {
+        return Err("A file with that name already exists".to_string());
+    }
+    
+    // Rename file on filesystem
+    fs::rename(&current_path_buf, &new_path).await
+        .map_err(|e| format!("Failed to rename file: {}", e))?;
+    
+    // Update database (within transaction)
+    // Calculate new folder_path from new absolute_path
+    let new_folder_path = new_path.parent()
+        .and_then(|p| p.strip_prefix(&PathBuf::from(&source_directory)).ok())
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| folder_path.clone());
+    
+    // Update database (within transaction)
+    let update_result = sqlx::query(
+        "UPDATE files SET file_name = ?, folder_path = ?, absolute_path = ?, updated_at = ? WHERE id = ?"
+    )
+        .bind(&new_name)
+        .bind(&new_folder_path)
+        .bind(&new_path_str)
+        .bind(chrono::Utc::now().timestamp())
+        .bind(&file_id)
+        .execute(&mut *transaction)
+        .await;
+    
+    if let Err(e) = update_result {
+        // Rollback transaction on error
+        let _ = transaction.rollback().await;
+        return Err(format!("Failed to update database: {}", e));
+    }
+    
+    // Update file_metadata if it contains path-dependent fields
+    // Re-extract metadata with new path
+    let root_path = new_path.parent()
+        .ok_or_else(|| "Invalid file path".to_string())?
+        .to_path_buf();
+    
+    let file_metadata = match FileMetadata::from_path_async(&root_path, &new_path).await {
+        Ok(metadata) => metadata,
+        Err(e) => {
+            let _ = transaction.rollback().await;
+            return Err(format!("Failed to create file metadata: {}", e));
+        }
+    };
+    
+    // Re-process metadata to update path-dependent fields
+    let doc_info = process_file_metadata(&file_metadata);
+    let additional_fields = compute_additional_fields(&file_metadata);
+    
+    let inventory_data = serde_json::json!({
+        "file_size": file_metadata.size_bytes,
+        "file_extension": additional_fields["file_extension"],
+        "created_at": file_metadata.created,
+        "modified_at": file_metadata.modified,
+        "parent_folder": additional_fields["parent_folder"],
+        "folder_depth": additional_fields["folder_depth"],
+        "file_path_segments": additional_fields["file_path_segments"],
+        "document_type": doc_info.document_type,
+        "document_description": doc_info.document_description,
+        "doc_date_range": doc_info.doc_date_range,
+    });
+    
+    let metadata_update_result = sqlx::query(
+        "UPDATE file_metadata SET inventory_data = ?, last_scanned_at = ? WHERE file_id = ?"
+    )
+        .bind(&inventory_data.to_string())
+        .bind(chrono::Utc::now().timestamp())
+        .bind(&file_id)
+        .execute(&mut *transaction)
+        .await;
+    
+    if let Err(e) = metadata_update_result {
+        let _ = transaction.rollback().await;
+        return Err(format!("Failed to update metadata: {}", e));
+    }
+    
+    // Commit transaction
+    transaction.commit()
+        .await
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+    
+    Ok(new_path_str)
+}
+
 /// Refresh/re-ingest a single file
 #[tauri::command]
 async fn refresh_single_file(
@@ -3684,6 +3850,7 @@ pub fn run() {
             mark_duplicate_primary,
             merge_duplicate_metadata,
             update_file_status,
+            rename_file,
             remove_file_from_case,
             get_column_config_db,
             save_column_config_db,

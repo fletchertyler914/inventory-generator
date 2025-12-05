@@ -17,6 +17,11 @@ interface SplitViewProps {
   duplicatesVisible?: boolean
   caseId: string
   selectedNoteId: string | null
+  selectedFindingId?: string | null
+  selectedTimelineEventId?: string | null
+  navigatorOpen: boolean
+  onExpandNavigator: () => void
+  onToggleNavigator?: () => void
   onFileClose: () => void
   onNext: () => void
   onPrevious: () => void
@@ -50,6 +55,9 @@ export const SplitView = memo(function SplitView({
   selectedNoteId,
   selectedFindingId,
   selectedTimelineEventId,
+  navigatorOpen,
+  onExpandNavigator,
+  onToggleNavigator,
   onFileClose,
   onNext,
   onPrevious,
@@ -96,6 +104,9 @@ export const SplitView = memo(function SplitView({
               hasNext={hasNext}
               hasPrevious={hasPrevious}
               caseId={caseId}
+              navigatorOpen={navigatorOpen}
+              onExpandNavigator={onExpandNavigator}
+              onToggleNavigator={onToggleNavigator}
               onFileRefresh={onFileRefresh}
               onFileRemove={onFileRemove}
               onToggleDuplicates={() => {

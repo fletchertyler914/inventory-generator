@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react"
 import { createPortal } from "react-dom"
-import { X, Loader2, Search, StickyNote, AlertTriangle, Calendar, Folder } from "lucide-react"
+import { X, Loader2, Search, StickyNote, AlertTriangle, Calendar } from "lucide-react"
 import {
   Command,
   CommandInput,
@@ -14,9 +14,9 @@ import { ScrollArea } from "../ui/scroll-area"
 import type { SearchResult } from "@/services/searchService"
 import type { InventoryItem } from "@/types/inventory"
 import { useSearch } from "@/hooks/useSearch"
-import { getFileIcon } from "@/lib/file-icon-utils"
 import { TiptapEditor } from "../notes/TiptapEditor"
 import { MATCH_TYPES } from "./searchConstants"
+import { FileSearchResult } from "./FileSearchResult"
 
 interface SearchBarProps {
   caseId?: string
@@ -225,44 +225,17 @@ export const SearchBar = memo(
       )
     }, [])
 
-    // Memoized file extension getter
-    const getFileExtension = useCallback((fileName?: string): string => {
-      if (!fileName) return ""
-      const parts = fileName.split(".")
-      return parts.length > 1 ? (parts[parts.length - 1] || "").toUpperCase() : ""
-    }, [])
-
     // Render result content based on type
     const renderResultContent = useCallback(
       (result: SearchResult) => {
         switch (result.match_type) {
           case MATCH_TYPES.FILE: {
-            const ext = getFileExtension(result.file_name)
             return (
-              <>
-                {getFileIcon(
-                  result.file_name || "",
-                  "h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0 mt-0.5"
-                )}
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-baseline gap-2">
-                    <div className="text-sm font-medium text-foreground truncate leading-tight">
-                      {result.file_name ? highlightMatch(result.file_name, query) : "Untitled"}
-                    </div>
-                    {ext && (
-                      <span className="text-[10px] text-muted-foreground/70 font-mono px-1.5 py-0.5 bg-muted/30 rounded flex-shrink-0">
-                        {ext}
-                      </span>
-                    )}
-                  </div>
-                  {result.folder_path && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground/80">
-                      <Folder className="h-3 w-3 opacity-60 flex-shrink-0" />
-                      <span className="truncate">{result.folder_path}</span>
-                    </div>
-                  )}
-                </div>
-              </>
+              <FileSearchResult
+                fileName={result.file_name}
+                folderPath={result.folder_path}
+                query={query}
+              />
             )
           }
 
@@ -329,7 +302,7 @@ export const SearchBar = memo(
             return null
         }
       },
-      [query, highlightMatch, getFileExtension]
+      [query, highlightMatch]
     )
 
     // Get search value for CommandItem filtering

@@ -26,14 +26,14 @@ const toastVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-border/50 dark:border-border/60 bg-background text-foreground",
+        default: "border border-border/50 dark:border-border/60 bg-background text-foreground",
         destructive:
-          "destructive group border-destructive/60 dark:border-destructive/70 bg-destructive text-destructive-foreground",
+          "destructive group border border-border/50 dark:border-border/60 border-l-4 border-l-destructive bg-background text-foreground",
         success:
-          "border-success/60 dark:border-success/70 bg-success/10 dark:bg-success/20 text-success dark:text-success",
-        info: "border-info/60 dark:border-info/70 bg-info/10 dark:bg-info/20 text-info dark:text-info",
+          "border border-border/50 dark:border-border/60 border-l-4 border-l-success bg-background text-foreground",
+        info: "border border-border/50 dark:border-border/60 border-l-4 border-l-info bg-background text-foreground",
         warning:
-          "border-warning/60 dark:border-warning/70 bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning",
+          "border border-border/50 dark:border-border/60 border-l-4 border-l-warning bg-background text-foreground",
       },
     },
     defaultVariants: {

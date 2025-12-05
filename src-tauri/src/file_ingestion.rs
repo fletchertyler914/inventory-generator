@@ -150,13 +150,67 @@ pub async fn process_file_async(
         let existing_id_clone = existing_id.clone();
         (FileAction::Update { file_id: existing_id_clone }, existing_id, Some(hash))
     } else {
-        // New file - hash it (using SHA-256 for cryptographic security)
+        // File not found by path - could be new file or renamed file
+        // ELITE: Check for rename by hash matching (detects file renames)
         let hash = calculate_file_hash_secure(&absolute_path)
             .await
             .map_err(|e| format!("Failed to hash file: {}", e))?;
         
-        let new_id = Uuid::new_v4().to_string();
-        (FileAction::Insert, new_id, Some(hash))
+        // Check if there's an existing file with the same hash in the SAME source_directory
+        // ELITE: Only match files whose old path no longer exists (true rename detection)
+        // This prevents matching other duplicates that still exist at their original paths
+        let candidate_files = sqlx::query(
+            "SELECT id, absolute_path, file_hash, file_size, modified_at, status, deleted_at 
+             FROM files 
+             WHERE case_id = ? 
+               AND file_hash = ? 
+               AND absolute_path != ? 
+               AND source_directory = ?
+               AND deleted_at IS NULL"
+        )
+            .bind(case_id)
+            .bind(&hash)
+            .bind(&file_metadata.absolute_path)
+            .bind(folder_path) // Only match files from the same source directory
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("Database query error checking for rename: {}", e))?;
+        
+        // ELITE: Find the file whose old path no longer exists on disk
+        // This ensures we only match the file that was actually renamed, not other duplicates
+        let mut renamed_file_id: Option<String> = None;
+        for row in candidate_files {
+            let candidate_id: String = row.get("id");
+            let candidate_path: String = row.get("absolute_path");
+            
+            // Check if the old path still exists on disk
+            let old_path_exists = tokio::fs::try_exists(&PathBuf::from(&candidate_path))
+                .await
+                .unwrap_or(false);
+            
+            if !old_path_exists {
+                // Found a file with same hash whose old path doesn't exist - this is the renamed file!
+                renamed_file_id = Some(candidate_id);
+                break; // Only match the first one found (should be only one)
+            }
+        }
+        
+        if let Some(existing_id) = renamed_file_id {
+            // Found existing file with same hash whose old path no longer exists - this is a rename!
+            // Update the existing file with new path and metadata
+            // Preserve status and other user data
+            // ELITE: Duplicate groups remain intact because we're updating the same file entry
+            (
+                FileAction::Update { file_id: existing_id.clone() },
+                existing_id,
+                Some(hash)
+            )
+        } else {
+            // Truly new file (or all duplicates still exist at their paths) - create new entry
+            // ELITE: Duplicates in different folders will be detected and grouped separately
+            let new_id = Uuid::new_v4().to_string();
+            (FileAction::Insert, new_id, Some(hash))
+        }
     };
     
     // Process inventory metadata
@@ -406,10 +460,14 @@ pub async fn batch_update_files(
             }
             
             // Update file with optional status transition
+            // ELITE: Also update path fields (file_name, folder_path, absolute_path) to handle renames
             if let Some(ref status) = new_status {
                 sqlx::query(
-                    "UPDATE files SET file_hash = ?, file_size = ?, modified_at = ?, updated_at = ?, status = ? WHERE id = ?"
+                    "UPDATE files SET file_name = ?, folder_path = ?, absolute_path = ?, file_hash = ?, file_size = ?, modified_at = ?, updated_at = ?, status = ? WHERE id = ?"
                 )
+                .bind(&file.file_name)
+                .bind(&file.folder_path)
+                .bind(&file.absolute_path)
                 .bind(&file.file_hash)
                 .bind(file.file_size)
                 .bind(file.modified_at)
@@ -420,17 +478,20 @@ pub async fn batch_update_files(
                 .await
                 .map_err(|e| format!("Failed to update file: {}", e))?;
             } else {
-            sqlx::query(
-                "UPDATE files SET file_hash = ?, file_size = ?, modified_at = ?, updated_at = ? WHERE id = ?"
-            )
-            .bind(&file.file_hash)
-            .bind(file.file_size)
-            .bind(file.modified_at)
-            .bind(now)
-            .bind(file_id)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|e| format!("Failed to update file: {}", e))?;
+                sqlx::query(
+                    "UPDATE files SET file_name = ?, folder_path = ?, absolute_path = ?, file_hash = ?, file_size = ?, modified_at = ?, updated_at = ? WHERE id = ?"
+                )
+                .bind(&file.file_name)
+                .bind(&file.folder_path)
+                .bind(&file.absolute_path)
+                .bind(&file.file_hash)
+                .bind(file.file_size)
+                .bind(file.modified_at)
+                .bind(now)
+                .bind(file_id)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|e| format!("Failed to update file: {}", e))?;
             }
             
             // Update metadata

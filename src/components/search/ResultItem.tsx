@@ -1,10 +1,10 @@
 import { memo, useMemo } from "react"
-import { StickyNote, AlertTriangle, Calendar, Folder } from "lucide-react"
+import { StickyNote, AlertTriangle, Calendar } from "lucide-react"
 import type { SearchResult } from "@/services/searchService"
 import { TiptapSearchViewer } from "./TiptapSearchViewer"
 import { MATCH_TYPES } from "./searchConstants"
 import { htmlToText } from "@/lib/html-to-text"
-import { getFileIcon } from "@/lib/file-icon-utils"
+import { FileSearchResult } from "./FileSearchResult"
 
 interface ResultItemProps {
   result: SearchResult
@@ -31,12 +31,6 @@ const highlightMatch = (text: string, query: string): React.ReactNode => {
   )
 }
 
-const getFileExtension = (fileName?: string): string => {
-  if (!fileName) return ""
-  const parts = fileName.split(".")
-  return parts.length > 1 ? (parts[parts.length - 1] || "").toUpperCase() : ""
-}
-
 /**
  * ELITE: Memoized result item component
  * Renders different result types with optimized components
@@ -51,29 +45,12 @@ export const ResultItem = memo(
     const content = useMemo(() => {
       switch (result.match_type) {
         case MATCH_TYPES.FILE: {
-          const ext = getFileExtension(result.file_name)
           return (
-            <>
-              {getFileIcon(result.file_name || '', 'h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0 mt-0.5')}
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-baseline gap-2">
-                  <div className="text-sm font-medium text-foreground truncate leading-tight">
-                    {result.file_name ? highlightMatch(result.file_name, query) : "Untitled"}
-                  </div>
-                  {ext && (
-                    <span className="text-[10px] text-muted-foreground/70 font-mono px-1.5 py-0.5 bg-muted/30 rounded flex-shrink-0">
-                      {ext}
-                    </span>
-                  )}
-                </div>
-                {result.folder_path && (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground/80">
-                    <Folder className="h-3 w-3 opacity-60 flex-shrink-0" />
-                    <span className="truncate">{result.folder_path}</span>
-                  </div>
-                )}
-              </div>
-            </>
+            <FileSearchResult
+              fileName={result.file_name}
+              folderPath={result.folder_path}
+              query={query}
+            />
           )
         }
 

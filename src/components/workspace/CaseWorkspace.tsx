@@ -30,7 +30,7 @@ interface CaseWorkspaceProps {
   onSelectionChange: (indices: number[]) => void
   loading: boolean
   onCloseCase: () => void
-  onAddFiles: (folderPath: string) => void
+  onAddFiles: (path: string) => void
   onBulkUpdate: (updates: Partial<InventoryItem>, indices?: number[]) => void
 }
 
@@ -177,15 +177,40 @@ export const CaseWorkspace = memo(
       const { open } = await import("@tauri-apps/plugin-dialog")
       try {
         const selected = await open({
-          directory: true,
-          multiple: false,
-          title: "Select folder to add files",
+          multiple: true,
+          title: "Select files to add",
         })
-        if (selected && typeof selected === "string") {
-          onAddFiles(selected)
+        if (selected) {
+          const paths = Array.isArray(selected) ? selected : [selected]
+          for (const path of paths) {
+            if (typeof path === "string") {
+              onAddFiles(path)
+            }
+          }
         }
-      } catch (error) {
-        console.error("Failed to select folder:", error)
+      } catch {
+        // User cancelled
+      }
+    }, [onAddFiles])
+
+    const handleAddFoldersClick = useCallback(async () => {
+      const { open } = await import("@tauri-apps/plugin-dialog")
+      try {
+        const selected = await open({
+          directory: true,
+          multiple: true,
+          title: "Select folders to add",
+        })
+        if (selected) {
+          const paths = Array.isArray(selected) ? selected : [selected]
+          for (const path of paths) {
+            if (typeof path === "string") {
+              onAddFiles(path)
+            }
+          }
+        }
+      } catch {
+        // User cancelled
       }
     }, [onAddFiles])
 
@@ -282,10 +307,6 @@ export const CaseWorkspace = memo(
       ]
     )
 
-    const handleGenerateReport = useCallback(() => {
-      setReportDialogOpen(true)
-    }, [])
-
     const handleSearchChange = useCallback((_query: string) => {
       // Search query is handled by SearchDialog component
     }, [])
@@ -330,6 +351,7 @@ export const CaseWorkspace = memo(
           items={items}
           onClose={onCloseCase}
           onAddFiles={handleAddFilesClick}
+          onAddFolders={handleAddFoldersClick}
           viewMode={preferences.view_mode}
           viewingFile={viewingFile}
           reportMode={preferences.report_mode}
@@ -345,7 +367,6 @@ export const CaseWorkspace = memo(
           onNoteSelect={handleNoteSelect}
           onFindingSelect={handleFindingSelect}
           onTimelineSelect={handleTimelineSelect}
-          onGenerateReport={handleGenerateReport}
           onSyncFiles={handleSyncFiles}
           isSyncing={isSyncing}
           autoSyncEnabled={preferences.auto_sync_enabled ?? true}

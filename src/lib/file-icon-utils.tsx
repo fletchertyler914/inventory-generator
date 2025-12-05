@@ -24,7 +24,7 @@ const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'];
 /**
  * Extract file extension from a file name or file type string
  */
-function getFileExtension(fileTypeOrName: string): string {
+export function getFileExtension(fileTypeOrName: string): string {
   if (!fileTypeOrName || fileTypeOrName.trim().length === 0) {
     return '';
   }

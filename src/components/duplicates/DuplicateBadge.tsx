@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { getDuplicateGroupColor } from '@/lib/duplicate-color-palette';
+import { getDuplicateGroupColor, type DuplicateShape } from '@/lib/duplicate-color-palette';
 import { useTheme } from '@/hooks/useTheme';
 
 interface DuplicateBadgeProps {
@@ -14,6 +14,13 @@ interface DuplicateBadgeProps {
    * - 'ring': Hollow circle with colored border (more visible)
    */
   variant?: 'dot' | 'ring';
+  /**
+   * Shape variant for distinguishing groups with same color
+   * - 'dot': Circle (default)
+   * - 'square': Slightly rounded square
+   * - 'diamond': Rotated square (45 degrees)
+   */
+  shape?: DuplicateShape;
 }
 
 /**
@@ -37,6 +44,7 @@ export function DuplicateBadge({
   onClick, 
   className,
   variant = 'dot',
+  shape = 'dot',
 }: DuplicateBadgeProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -49,6 +57,7 @@ export function DuplicateBadge({
 
   if (variant === 'ring') {
     // Ring variant: hollow circle with colored border (more visible, better accessibility)
+    // Shape only applies to dot variant, ring is always circular
     return (
       <div
         className={cn(
@@ -69,11 +78,18 @@ export function DuplicateBadge({
     );
   }
 
-  // Dot variant: small filled circle (default, minimal space)
+  // Dot variant: shape can be dot, square, or diamond
+  const shapeClasses = {
+    dot: 'rounded-full',
+    square: 'rounded-sm',
+    diamond: 'rounded-sm rotate-45',
+  };
+
   return (
     <div
       className={cn(
-        'h-2 w-2 rounded-full flex-shrink-0 transition-all',
+        'h-2 w-2 flex-shrink-0 transition-all',
+        shapeClasses[shape],
         resolved ? 'opacity-50' : 'opacity-100',
         color.bg,
         onClick && 'cursor-pointer hover:opacity-80 hover:scale-125',
