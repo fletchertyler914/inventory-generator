@@ -73,17 +73,40 @@ export function CsvViewer({ data }: CsvViewerProps) {
     );
   }
   
-  const rows = parsedData.slice(1);
+  // Find the maximum number of columns across all rows to ensure uniform grid
+  const maxColumns = Math.max(
+    headers.length,
+    ...parsedData.slice(1).map(row => row.length)
+  );
+  
+  // Normalize headers to max columns
+  const normalizedHeaders = (() => {
+    const normalized = [...headers];
+    while (normalized.length < maxColumns) {
+      normalized.push('');
+    }
+    return normalized.slice(0, maxColumns);
+  })();
+  
+  // Normalize rows to have the same number of columns
+  const rows = parsedData.slice(1).map(row => {
+    const normalized = [...row];
+    while (normalized.length < maxColumns) {
+      normalized.push('');
+    }
+    return normalized.slice(0, maxColumns);
+  });
 
   return (
-    <div className="w-full overflow-auto">
-      <table className="min-w-full border-collapse border border-border/40 dark:border-border/50">
+    <div className="w-full h-full overflow-auto">
+      <table className="border-collapse border border-border/40 dark:border-border/50" style={{ tableLayout: 'auto', width: 'max-content' }}>
         <thead>
           <tr className="bg-muted">
-            {headers.map((header, index) => (
+            {normalizedHeaders.map((header, index) => (
               <th
                 key={index}
-                className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10"
+                className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10 whitespace-nowrap"
+                style={{ minWidth: '150px', maxWidth: 'none' }}
               >
                 {header || `Column ${index + 1}`}
               </th>
@@ -93,12 +116,13 @@ export function CsvViewer({ data }: CsvViewerProps) {
         <tbody>
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex} className="hover:bg-muted/50">
-              {headers.map((_, cellIndex) => (
+              {row.map((cellValue, cellIndex) => (
                 <td
                   key={cellIndex}
-                  className="border border-border/40 dark:border-border/50 p-2 text-sm"
+                  className="border border-border/40 dark:border-border/50 p-2 text-sm whitespace-nowrap"
+                  style={{ minWidth: '150px', maxWidth: 'none', overflow: 'visible' }}
                 >
-                  {row[cellIndex] || ''}
+                  <span style={{ display: 'inline-block', maxWidth: 'none' }}>{cellValue || '\u00A0'}</span>
                 </td>
               ))}
             </tr>

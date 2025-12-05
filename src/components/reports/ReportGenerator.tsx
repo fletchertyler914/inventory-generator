@@ -45,8 +45,8 @@ export function ReportGenerator({ items, case_, open, onOpenChange }: ReportGene
   const handleGenerate = async () => {
     if (!items.length) {
       toast({
-        title: "No items to export",
-        description: "Please add items to the inventory first.",
+        title: "No files to export",
+        description: "Please add files to the case first.",
         variant: "destructive",
       })
       return
@@ -54,7 +54,7 @@ export function ReportGenerator({ items, case_, open, onOpenChange }: ReportGene
 
     setGenerating(true)
     try {
-      // For now, use the existing export functionality
+      // Generate report using export functionality
       // In the future, we can enhance this with Word/PDF generation
       if (format === "xlsx") {
         const { save } = await import("@tauri-apps/plugin-dialog")

@@ -59,7 +59,7 @@ export const CaseListCard = memo(function CaseListCard({
               {case_.name}
             </h3>
             {isRecent && (
-              <Badge variant="default" className="text-xs">
+              <Badge variant="default" className="text-xs pointer-events-none">
                 Recent
               </Badge>
             )}
@@ -138,7 +138,7 @@ export const CaseListCard = memo(function CaseListCard({
                 {case_.name}
               </CardTitle>
               {isRecent && (
-                <Badge variant="default" className="text-xs ml-auto">
+                <Badge variant="default" className="text-xs ml-auto pointer-events-none">
                   Recent
                 </Badge>
               )}
@@ -157,23 +157,23 @@ export const CaseListCard = memo(function CaseListCard({
       <CardContent className="pt-0 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           {case_.case_id && (
-            <Badge variant="outline" className="text-xs font-medium px-2 py-0.5">
+            <Badge variant="outline" className="text-xs font-medium px-2 py-0.5 pointer-events-none">
               {case_.case_id}
             </Badge>
           )}
           {case_.department && (
-            <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5">
+            <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5 pointer-events-none">
               {case_.department}
             </Badge>
           )}
           {case_.client && (
-            <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5">
+            <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5 pointer-events-none">
               {case_.client}
             </Badge>
           )}
           <Badge
             variant={case_.deployment_mode === 'cloud' ? 'default' : 'outline'}
-            className="text-xs font-medium px-2 py-0.5"
+            className="text-xs font-medium px-2 py-0.5 pointer-events-none"
           >
             {case_.deployment_mode}
           </Badge>

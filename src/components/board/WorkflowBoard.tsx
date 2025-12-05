@@ -1,11 +1,17 @@
 import { useMemo, useCallback, useState, useEffect } from "react"
 import { ScrollArea } from "../ui/scroll-area"
 import { Badge } from "../ui/badge"
-import { FileText } from "lucide-react"
+import { Input } from "../ui/input"
+import { Button } from "../ui/button"
+import { FileText, Search, X } from "lucide-react"
 import { WorkflowCard } from "./WorkflowCard"
 import { cn } from "@/lib/utils"
 import { updateInventoryItemField, type InventoryItem, type FileStatus } from "@/types/inventory"
 import { fileService } from "@/services/fileService"
+import { useFileNoteCounts } from "@/hooks/useFileNoteCounts"
+import { useFileDuplicateCounts } from "@/hooks/useFileDuplicateCounts"
+import { useWorkflowSelection } from "@/hooks/useWorkflowSelection"
+import { useSwimlaneFilter } from "@/hooks/useSwimlaneFilter"
 import {
   DndContext,
   DragOverlay,
@@ -18,6 +24,8 @@ import {
   useSensors,
 } from "@dnd-kit/core"
 import { useDroppable } from "@dnd-kit/core"
+import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 type TableFilter = "unreviewed" | "in_progress" | "reviewed" | "flagged" | "finalized" | "all"
 
@@ -62,6 +70,66 @@ const workflowStates: { value: FileStatus; label: string; color: string }[] = [
   },
 ]
 
+// Sortable WorkflowCard wrapper component
+function SortableWorkflowCard({
+  item,
+  index,
+  isSelected,
+  onSelect,
+  onFileOpen,
+  fileChanged,
+  isDragging,
+  caseId,
+  noteCount,
+  duplicateCount,
+}: {
+  item: InventoryItem
+  index: number
+  isSelected: boolean
+  onSelect: (event: React.MouseEvent) => void
+  onFileOpen?: (filePath: string) => void
+  fileChanged: boolean
+  isDragging: boolean
+  caseId?: string
+  noteCount?: number
+  duplicateCount?: number
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isSortableDragging,
+  } = useSortable({
+    id: `file-${item.absolute_path}`,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isSortableDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <WorkflowCard
+        item={item}
+        isSelected={isSelected}
+        onSelect={onSelect}
+        onFileOpen={onFileOpen}
+        fileChanged={fileChanged}
+        isDragging={isDragging || isSortableDragging}
+        caseId={caseId}
+        noteCount={noteCount}
+        duplicateCount={duplicateCount}
+        dragListeners={listeners}
+        dragAttributes={attributes}
+      />
+    </div>
+  )
+}
+
 // Droppable column component
 function DroppableColumn({
   status,
@@ -70,6 +138,12 @@ function DroppableColumn({
   count,
   children,
   isOver,
+  itemIds,
+  filterQuery,
+  filterVisible,
+  onFilterToggle,
+  onFilterChange,
+  onFilterClear,
 }: {
   status: FileStatus
   label: string
@@ -77,6 +151,12 @@ function DroppableColumn({
   count: number
   children: React.ReactNode
   isOver: boolean
+  itemIds: string[]
+  filterQuery: string
+  filterVisible: boolean
+  onFilterToggle: () => void
+  onFilterChange: (query: string) => void
+  onFilterClear: () => void
 }) {
   const { setNodeRef, isOver: isDroppableOver } = useDroppable({
     id: `column-${status}`,
@@ -86,7 +166,7 @@ function DroppableColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex flex-col min-h-[240px] max-h-full min-w-[280px] w-[280px] rounded-lg border transition-all duration-200 bg-card shadow-sm flex-shrink-0",
+        "flex flex-col min-h-[240px] max-h-full min-w-[340px] w-[340px] rounded-lg border transition-all duration-200 bg-card shadow-sm flex-shrink-0",
         "border-border/40 dark:border-border/50",
         isOver || isDroppableOver
           ? "border-primary border-2 dark:border-primary bg-primary/5 shadow-lg scale-[1.01]"
@@ -103,33 +183,92 @@ function DroppableColumn({
         )}
       >
         <h3 className={cn("text-sm font-semibold truncate", color)}>{label}</h3>
-        <Badge
-          variant="secondary"
-          className={cn(
-            "text-[10px] px-1.5 py-0 font-medium flex-shrink-0",
-            count === 0 && "opacity-50"
-          )}
-        >
-          {count}
-        </Badge>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* ELITE: Search icon button - right justified */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 p-0 hover:bg-muted"
+            onClick={onFilterToggle}
+            title="Filter files"
+          >
+            <Search className="h-3.5 w-3.5" />
+          </Button>
+          <Badge
+            variant="secondary"
+            className={cn(
+              "text-[10px] px-1.5 py-0 font-medium flex-shrink-0",
+              count === 0 && "opacity-50"
+            )}
+          >
+            {count}
+          </Badge>
+        </div>
       </div>
+
+      {/* ELITE: Filter input row - appears between header and card list */}
+      {filterVisible && (
+        <div className="px-3 py-2 border-b border-border/40 dark:border-border/50 bg-muted/20 flex-shrink-0 transition-all duration-200">
+          <div className="relative flex items-center gap-2">
+            <Input
+              type="text"
+              placeholder="Filter files..."
+              value={filterQuery}
+              onChange={(e) => onFilterChange(e.target.value)}
+              className="h-8 text-sm pr-8"
+              autoFocus
+            />
+            {filterQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 h-6 w-6 p-0 hover:bg-muted"
+                onClick={onFilterClear}
+                title="Clear filter"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Column Content - fits content with scrolling when needed */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <ScrollArea className="h-full max-h-full">
-          <div className="p-2 space-y-2">{children}</div>
+        <ScrollArea className="h-full">
+          <div className="p-2 space-y-2">
+            <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+              {children}
+            </SortableContext>
+          </div>
         </ScrollArea>
       </div>
     </div>
   )
 }
 
+// Platform detection for modifier key display
+const isMacOS = (): boolean => {
+  if (typeof navigator === "undefined") return false
+  const nav = navigator as Navigator & { userAgentData?: { platform: string } }
+  if (nav.userAgentData?.platform) {
+    return nav.userAgentData.platform.toLowerCase() === "macos"
+  }
+  const userAgent = navigator.userAgent.toLowerCase()
+  if (userAgent.includes("mac os x") || userAgent.includes("macintosh")) {
+    return true
+  }
+  const platform = navigator.platform?.toUpperCase() || ""
+  return platform.indexOf("MAC") >= 0
+}
+
 export function WorkflowBoard({
   items,
   onItemsChange,
-  onSelectionChange: _onSelectionChange,
+  onSelectionChange,
   selectedIndices,
   onFileOpen,
+  onFileRemove,
   statusFilter: _statusFilter = "all",
   onStatusFilterChange: _onStatusFilterChange,
   totalFiles: _totalFiles,
@@ -140,6 +279,61 @@ export function WorkflowBoard({
   // Track active drag
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  // Track selected items being dragged (for multi-drag)
+  const [draggingSelectedItems, setDraggingSelectedItems] = useState<InventoryItem[]>([])
+
+  // Use optimized selection hook
+  const { isSelected, handleSelect, selectedCount } = useWorkflowSelection({
+    selectedIndices,
+    onSelectionChange,
+    totalItems: items.length,
+  })
+
+  // Memoize platform detection for modifier key hint
+  const modifierKey = useMemo(() => (isMacOS() ? "⌘" : "⌃"), [])
+
+  // Fetch note counts for all files in the case
+  const { noteCounts } = useFileNoteCounts(caseId)
+  // Fetch duplicate counts and group IDs for all files in the case
+  const { duplicateCounts, duplicateGroupIds } = useFileDuplicateCounts(caseId ?? undefined)
+
+  // ELITE: Swimlane filter hook - independent filtering per swimlane
+  const {
+    filterQueries,
+    filterVisible,
+    filteredItems: filteredItemsByStatusMap,
+    setFilterQuery,
+    toggleFilter,
+    clearFilter,
+  } = useSwimlaneFilter({ items })
+
+  // Memoize note count lookups for each item
+  const itemNoteCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    items.forEach((item) => {
+      if (item.id) {
+        const count = noteCounts.get(item.id)
+        if (count !== undefined && count > 0) {
+          counts.set(item.absolute_path, count)
+        }
+      }
+    })
+    return counts
+  }, [items, noteCounts])
+
+  // Memoize duplicate count lookups for each item
+  const itemDuplicateCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    items.forEach((item) => {
+      if (item.id) {
+        const count = duplicateCounts.get(item.id)
+        if (count !== undefined && count > 0) {
+          counts.set(item.absolute_path, count)
+        }
+      }
+    })
+    return counts
+  }, [items, duplicateCounts])
 
   // Check file changes for visible items (debounced)
   useEffect(() => {
@@ -185,7 +379,7 @@ export function WorkflowBoard({
     return () => clearTimeout(timeoutId)
   }, [items, caseId])
 
-  // Group items by status
+  // Group items by status (for drag operations)
   const itemsByStatus = useMemo(() => {
     const grouped: Record<FileStatus | "unreviewed", InventoryItem[]> = {
       unreviewed: [],
@@ -207,87 +401,226 @@ export function WorkflowBoard({
     return grouped
   }, [items])
 
-  // Always show all columns - swimlanes are the primary interface
-  const filteredItemsByStatus = itemsByStatus
+  // ELITE: Use filtered items from hook for display (memoized per swimlane)
+  const filteredItemsByStatus = useMemo(() => {
+    const grouped: Record<FileStatus | "unreviewed", InventoryItem[]> = {
+      unreviewed: [],
+      in_progress: [],
+      reviewed: [],
+      flagged: [],
+      finalized: [],
+    }
+
+    // Get filtered items from hook for each status
+    const statuses: FileStatus[] = [
+      'unreviewed',
+      'in_progress',
+      'reviewed',
+      'flagged',
+      'finalized',
+    ]
+
+    for (const status of statuses) {
+      const filtered = filteredItemsByStatusMap.get(status) || []
+      grouped[status] = filtered
+    }
+
+    return grouped
+  }, [filteredItemsByStatusMap])
 
   const handleStatusChange = useCallback(
-    async (itemPath: string, newStatus: FileStatus) => {
-      const item = items.find((i) => i.absolute_path === itemPath)
-      if (!item) {
-        console.warn("[WorkflowBoard] Item not found for path:", itemPath)
-        return
-      }
+    async (itemPaths: string | string[], newStatus: FileStatus) => {
+      const paths = Array.isArray(itemPaths) ? itemPaths : [itemPaths]
+      const itemsToUpdate = paths
+        .map((path) => {
+          const item = items.find((i) => i.absolute_path === path)
+          if (!item) return null
+          const currentStatus = item.status || "unreviewed"
+          if (currentStatus === newStatus) return null
+          return { item, index: items.findIndex((i) => i.absolute_path === path) }
+        })
+        .filter((entry): entry is { item: InventoryItem; index: number } => entry !== null)
 
-      const index = items.findIndex((i) => i.absolute_path === itemPath)
-      if (index === -1) {
-        console.warn("[WorkflowBoard] Item index not found for path:", itemPath)
-        return
-      }
-
-      // Check if status is actually changing
-      const currentStatus = item.status || "unreviewed"
-      if (currentStatus === newStatus) {
-        return
-      }
+      if (itemsToUpdate.length === 0) return
 
       // Update local state immediately for responsive UI
       const updatedItems = [...items]
-      updatedItems[index] = updateInventoryItemField(item, "status", newStatus)
+      itemsToUpdate.forEach(({ item, index }) => {
+        updatedItems[index] = updateInventoryItemField(item, "status", newStatus)
+      })
       onItemsChange(updatedItems)
 
-      // Persist to database
-      if (item.id) {
-        fileService
-          .updateFileStatus(item.id, newStatus)
-          .then(() => {
-            console.log("[WorkflowBoard] Successfully updated file status in database")
-          })
-          .catch((error) => {
-            console.error("[WorkflowBoard] Failed to update file status in database:", error)
-            // Revert local state on error
-            const revertedItems = [...items]
-            revertedItems[index] = item
-            onItemsChange(revertedItems)
-          })
-      } else {
-        console.warn("[WorkflowBoard] Item has no ID, cannot persist to database", item)
-      }
+      // Persist to database (batch updates in parallel)
+      const updatePromises = itemsToUpdate
+        .filter(({ item }) => item.id)
+        .map(({ item }) =>
+          fileService
+            .updateFileStatus(item.id!, newStatus)
+            .then(() => {
+              console.log("[WorkflowBoard] Successfully updated file status in database:", item.id)
+            })
+            .catch((error) => {
+              console.error(
+                "[WorkflowBoard] Failed to update file status in database:",
+                error,
+                item.id
+              )
+              // Revert this item on error
+              const revertedItems = [...updatedItems]
+              const revertIndex = revertedItems.findIndex(
+                (i) => i.absolute_path === item.absolute_path
+              )
+              if (revertIndex !== -1) {
+                revertedItems[revertIndex] = item
+                onItemsChange(revertedItems)
+              }
+            })
+        )
+
+      await Promise.all(updatePromises)
     },
     [items, onItemsChange]
   )
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
-  }, [])
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const activeId = event.active.id as string
+      setActiveId(activeId)
+
+      // Check if multiple items are selected
+      if (selectedIndices && selectedIndices.length > 1) {
+        // Extract the dragged item path
+        if (activeId.startsWith("file-")) {
+          const draggedPath = activeId.replace("file-", "")
+          const draggedItem = items.find((i) => i.absolute_path === draggedPath)
+
+          // If the dragged item is in the selection, drag all selected items
+          if (draggedItem) {
+            const draggedIndex = items.findIndex((i) => i.absolute_path === draggedPath)
+            if (selectedIndices.includes(draggedIndex)) {
+              const selectedItems = selectedIndices
+                .map((idx) => items[idx])
+                .filter((item): item is InventoryItem => item !== undefined)
+              setDraggingSelectedItems(selectedItems)
+              return
+            }
+          }
+        }
+      }
+
+      // Single item drag
+      setDraggingSelectedItems([])
+    },
+    [selectedIndices, items]
+  )
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { over } = event
     setOverId(over ? (over.id as string) : null)
   }, [])
 
+  const handleSortOrderChange = useCallback(
+    async (activePath: string, overPath: string, status: FileStatus) => {
+      const statusItems = itemsByStatus[status] || []
+      const activeIndex = statusItems.findIndex((i) => i.absolute_path === activePath)
+      const overIndex = statusItems.findIndex((i) => i.absolute_path === overPath)
+      
+      if (activeIndex === -1 || overIndex === -1 || activeIndex === overIndex) return
+
+      // Reorder items in the status column
+      const reorderedStatusItems = [...statusItems]
+      const [movedItem] = reorderedStatusItems.splice(activeIndex, 1)
+      reorderedStatusItems.splice(overIndex, 0, movedItem)
+
+      // Create a map of all items by absolute_path for quick lookup
+      const itemsMap = new Map(items.map((item) => [item.absolute_path, item]))
+      
+      // Update items in the map with reordered status items
+      reorderedStatusItems.forEach((item) => {
+        itemsMap.set(item.absolute_path, item)
+      })
+
+      // Reconstruct items array maintaining the original order but with updated status items
+      // Group items by status to maintain status-based grouping
+      const itemsByStatusMap = new Map<FileStatus, InventoryItem[]>()
+      items.forEach((item) => {
+        const itemStatus = (item.status || "unreviewed") as FileStatus
+        if (!itemsByStatusMap.has(itemStatus)) {
+          itemsByStatusMap.set(itemStatus, [])
+        }
+        // Use reordered items for the target status, original order for others
+        if (itemStatus === status) {
+          const reorderedItem = reorderedStatusItems.find(
+            (i) => i.absolute_path === item.absolute_path
+          )
+          if (reorderedItem) {
+            itemsByStatusMap.get(itemStatus)!.push(reorderedItem)
+          }
+        } else {
+          itemsByStatusMap.get(itemStatus)!.push(item)
+        }
+      })
+
+      // Reconstruct items array maintaining status order and new sort order within each status
+      const newItems: InventoryItem[] = []
+      workflowStates.forEach((state) => {
+        const statusItems = itemsByStatusMap.get(state.value) || []
+        newItems.push(...statusItems)
+      })
+
+      onItemsChange(newItems)
+
+      // TODO: Persist sort order to database when backend support is added
+      // For now, sort order is maintained in memory
+      console.log(
+        "[WorkflowBoard] Sort order changed for:",
+        activePath,
+        "to position of:",
+        overPath
+      )
+    },
+    [items, itemsByStatus, onItemsChange]
+  )
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
+
+      const activeId = active.id as string
+      const overId = over?.id as string
 
       setActiveId(null)
       setOverId(null)
 
       if (!over) {
+        setDraggingSelectedItems([])
         return
       }
 
-      const activeId = active.id as string
-      const overId = over.id as string
-
-      // Extract file path from active ID (format: "file-{path}")
-      if (!activeId.startsWith("file-")) {
-        return
+      // Check if dragging within the same column (reordering)
+      if (overId.startsWith("file-")) {
+        const activePath = activeId.replace("file-", "")
+        const overPath = overId.replace("file-", "")
+        
+        const activeItem = items.find((i) => i.absolute_path === activePath)
+        const overItem = items.find((i) => i.absolute_path === overPath)
+        
+        if (activeItem && overItem) {
+          const activeStatus = activeItem.status || "unreviewed"
+          const overStatus = overItem.status || "unreviewed"
+          
+          // Same status = reordering within column
+          if (activeStatus === overStatus) {
+            handleSortOrderChange(activePath, overPath, activeStatus)
+            setDraggingSelectedItems([])
+            return
+          }
+        }
       }
-
-      const itemPath = activeId.replace("file-", "")
 
       // Extract status from over ID (format: "column-{status}")
       if (!overId.startsWith("column-")) {
+        setDraggingSelectedItems([])
         return
       }
 
@@ -295,24 +628,42 @@ export function WorkflowBoard({
 
       // Validate status
       if (!workflowStates.some((state) => state.value === newStatus)) {
+        setDraggingSelectedItems([])
         return
       }
 
+      // Handle multi-drag: update all selected items
+      if (draggingSelectedItems.length > 0) {
+        const itemPaths = draggingSelectedItems.map((item) => item.absolute_path)
+        handleStatusChange(itemPaths, newStatus)
+        setDraggingSelectedItems([])
+        return
+      }
+
+      // Single item drag between columns
+      if (!activeId.startsWith("file-")) {
+        setDraggingSelectedItems([])
+        return
+      }
+
+      const itemPath = activeId.replace("file-", "")
       handleStatusChange(itemPath, newStatus)
+      setDraggingSelectedItems([])
     },
-    [handleStatusChange]
+    [handleStatusChange, handleSortOrderChange, draggingSelectedItems, items, itemsByStatus]
   )
 
-  const getStatusCount = (status: FileStatus) => {
-    return itemsByStatus[status].length
-  }
 
   const activeItem = activeId
     ? items.find((item) => `file-${item.absolute_path}` === activeId)
     : null
 
+  // Determine if we're dragging multiple items
+  const isMultiDrag = draggingSelectedItems.length > 1
+
   // Configure sensors with activation constraints to prevent accidental drags on clicks
   // Require 10px of movement before drag starts - this allows clicks to work normally
+  // This ensures selection clicks (with modifier keys) don't trigger drags
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -330,13 +681,27 @@ export function WorkflowBoard({
       onDragEnd={handleDragEnd}
     >
       <div className="h-full flex flex-col overflow-hidden">
+        {/* Modifier Key Hint - Clean and intuitive */}
+        <div className="px-4 pt-2 pb-1 flex-shrink-0 border-b border-border/20">
+          <p className="text-xs text-muted-foreground/60">
+            {selectedCount > 0 ? (
+              <>
+                <span className="font-medium text-muted-foreground">{selectedCount} selected</span>
+                {" • "}
+              </>
+            ) : null}
+            {modifierKey}+Click to multiselect, Shift+Click for range
+          </p>
+        </div>
         {/* Board Columns - Swimlanes replace filters */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
-          <div className="flex items-start gap-3 p-4 pb-6">
+        <div className="flex-1 overflow-x-auto overflow-y-hidden min-h-0">
+          <div className="flex items-start gap-3 p-4 pb-6 h-full">
             {workflowStates.map((state) => {
               const stateItems = filteredItemsByStatus[state.value] || []
-              const count = getStatusCount(state.value)
+              const count = stateItems.length
               const isOver = overId === `column-${state.value}`
+              const filterQuery = filterQueries.get(state.value) || ''
+              const filterVisibleForStatus = filterVisible.get(state.value) || false
 
               return (
                 <DroppableColumn
@@ -346,6 +711,12 @@ export function WorkflowBoard({
                   color={state.color}
                   count={count}
                   isOver={isOver}
+                  itemIds={stateItems.map((item) => `file-${item.absolute_path}`)}
+                  filterQuery={filterQuery}
+                  filterVisible={filterVisibleForStatus}
+                  onFilterToggle={() => toggleFilter(state.value)}
+                  onFilterChange={(query) => setFilterQuery(state.value, query)}
+                  onFilterClear={() => clearFilter(state.value)}
                 >
                   {stateItems.length === 0 ? (
                     <div
@@ -364,21 +735,27 @@ export function WorkflowBoard({
                       </div>
                     </div>
                   ) : (
-                    stateItems.map((item, idx) => (
-                      <WorkflowCard
-                        key={item.absolute_path || idx}
-                        item={item}
-                        isSelected={
-                          selectedIndices?.includes(
-                            items.findIndex((i) => i.absolute_path === item.absolute_path)
-                          ) ?? false
-                        }
-                        {...(onFileOpen && { onFileOpen })}
-                        fileChanged={changedFiles.has(item.id || item.absolute_path)}
-                        isDragging={activeId === `file-${item.absolute_path}`}
-                        {...(caseId !== undefined && { caseId })}
-                      />
-                    ))
+                    stateItems.map((item, idx) => {
+                      const itemIndex = items.findIndex(
+                        (i) => i.absolute_path === item.absolute_path
+                      )
+                      return (
+                        <SortableWorkflowCard
+                          key={item.absolute_path || idx}
+                          item={item}
+                          index={idx}
+                          isSelected={isSelected(itemIndex)}
+                          onSelect={(e) => handleSelect(itemIndex, e)}
+                          {...(onFileOpen && { onFileOpen })}
+                          fileChanged={changedFiles.has(item.id || item.absolute_path)}
+                          isDragging={activeId === `file-${item.absolute_path}`}
+                          caseId={caseId}
+                          noteCount={itemNoteCounts.get(item.absolute_path)}
+                          duplicateCount={itemDuplicateCounts.get(item.absolute_path) ?? undefined}
+                          duplicateGroupId={duplicateGroupIds.get(item.id)}
+                        />
+                      )
+                    })
                   )}
                 </DroppableColumn>
               )
@@ -387,11 +764,54 @@ export function WorkflowBoard({
         </div>
       </div>
 
-      {/* Drag Overlay - shows the card being dragged */}
+      {/* Drag Overlay - shows the card(s) being dragged */}
       <DragOverlay>
-        {activeItem ? (
+        {isMultiDrag ? (
+          <div className="relative" style={{ minWidth: "340px", minHeight: "120px" }}>
+            {/* Stack of multiple card previews with offset/rotation for visual depth */}
+            {draggingSelectedItems.slice(0, 3).map((item, idx) => (
+              <div
+                key={item.absolute_path}
+                className="absolute"
+                style={{
+                  transform: `translate(${idx * 8}px, ${idx * 8}px) rotate(${idx * 2}deg)`,
+                  zIndex: draggingSelectedItems.length - idx,
+                }}
+              >
+                <div className="opacity-90">
+                  <WorkflowCard
+                    item={item}
+                    isDragging={true}
+                    caseId={caseId}
+                    noteCount={itemNoteCounts.get(item.absolute_path)}
+                    duplicateCount={itemDuplicateCounts.get(item.absolute_path) ?? undefined}
+                    duplicateGroupId={duplicateGroupIds.get(item.id)}
+                  />
+                </div>
+              </div>
+            ))}
+            {/* Show count badge if more than 3 items */}
+            {draggingSelectedItems.length > 3 && (
+              <div
+                className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs font-semibold px-2 py-1 rounded-md shadow-lg z-50"
+                style={{
+                  transform: `translate(${3 * 8}px, ${3 * 8}px)`,
+                }}
+              >
+                +{draggingSelectedItems.length - 3}
+              </div>
+            )}
+          </div>
+        ) : activeItem ? (
           <div className="opacity-90 rotate-2">
-            <WorkflowCard item={activeItem} isDragging={true} {...(caseId !== undefined && { caseId })} />
+            <WorkflowCard
+              item={activeItem}
+              isDragging={true}
+              caseId={caseId}
+              noteCount={itemNoteCounts.get(activeItem.absolute_path)}
+                duplicateCount={itemDuplicateCounts.get(activeItem.absolute_path) ?? undefined}
+                duplicateGroupId={duplicateGroupIds.get(activeItem.id)}
+            />
           </div>
         ) : null}
       </DragOverlay>

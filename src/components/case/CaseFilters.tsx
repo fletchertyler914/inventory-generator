@@ -56,7 +56,7 @@ export function CaseFilters({
         // If it's rgba/rgb, ensure it's fully opaque
         if (computedColor.startsWith('rgba')) {
           const rgbaMatch = computedColor.match(/rgba?\(([^)]+)\)/);
-          if (rgbaMatch && rgbaMatch[1]) {
+          if (rgbaMatch) {
             const parts = rgbaMatch[1].split(',').map(s => s.trim());
             if (parts.length >= 3) {
               return `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})`;
@@ -255,12 +255,14 @@ export function CaseFilters({
               className="text-xs"
             >
               {mode}
-              <button
+              <Button
                 onClick={() => toggleDeploymentMode(mode)}
-                className="ml-1.5 hover:text-destructive transition-colors"
+                variant="ghost"
+                size="icon-sm"
+                className="ml-1.5 h-auto w-auto p-0 hover:text-destructive"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </Badge>
           ))}
           {filters.departments.map(dept => (
@@ -270,12 +272,14 @@ export function CaseFilters({
               className="text-xs"
             >
               {dept}
-              <button
+              <Button
                 onClick={() => toggleDepartment(dept)}
-                className="ml-1.5 hover:text-destructive transition-colors"
+                variant="ghost"
+                size="icon-sm"
+                className="ml-1.5 h-auto w-auto p-0 hover:text-destructive"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </Badge>
           ))}
           {filters.clients.map(client => (
@@ -285,12 +289,14 @@ export function CaseFilters({
               className="text-xs"
             >
               {client}
-              <button
+              <Button
                 onClick={() => toggleClient(client)}
-                className="ml-1.5 hover:text-destructive transition-colors"
+                variant="ghost"
+                size="icon-sm"
+                className="ml-1.5 h-auto w-auto p-0 hover:text-destructive"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </Badge>
           ))}
         </div>

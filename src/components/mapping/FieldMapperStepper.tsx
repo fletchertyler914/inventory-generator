@@ -156,54 +156,66 @@ export function FieldMapperStepper({
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setSourceType('file_name')}
+                    variant="outline"
                     className={cn(
-                      "p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "p-4 h-auto border-2 justify-start text-left",
                       sourceType === 'file_name' && "border-primary bg-primary/5"
                     )}
                   >
-                    <FileText className="h-6 w-6 mb-2" />
-                    <div className="font-semibold">File Name</div>
-                    <div className="text-sm text-muted-foreground">Extract from file names</div>
-                  </button>
-                  <button
+                    <div className="w-full">
+                      <FileText className="h-6 w-6 mb-2" />
+                      <div className="font-semibold">File Name</div>
+                      <div className="text-sm text-muted-foreground">Extract from file names</div>
+                    </div>
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setSourceType('folder_name')}
+                    variant="outline"
                     className={cn(
-                      "p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "p-4 h-auto border-2 justify-start text-left",
                       sourceType === 'folder_name' && "border-primary bg-primary/5"
                     )}
                   >
-                    <Folder className="h-6 w-6 mb-2" />
-                    <div className="font-semibold">Folder Name</div>
-                    <div className="text-sm text-muted-foreground">Extract from folder names</div>
-                  </button>
-                  <button
+                    <div className="w-full">
+                      <Folder className="h-6 w-6 mb-2" />
+                      <div className="font-semibold">Folder Name</div>
+                      <div className="text-sm text-muted-foreground">Extract from folder names</div>
+                    </div>
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setSourceType('folder_path')}
+                    variant="outline"
                     className={cn(
-                      "p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "p-4 h-auto border-2 justify-start text-left",
                       sourceType === 'folder_path' && "border-primary bg-primary/5"
                     )}
                   >
-                    <FolderTree className="h-6 w-6 mb-2" />
-                    <div className="font-semibold">Folder Path</div>
-                    <div className="text-sm text-muted-foreground">Extract from full folder path</div>
-                  </button>
-                  <button
+                    <div className="w-full">
+                      <FolderTree className="h-6 w-6 mb-2" />
+                      <div className="font-semibold">Folder Path</div>
+                      <div className="text-sm text-muted-foreground">Extract from full folder path</div>
+                    </div>
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setSourceType('file_metadata')}
+                    variant="outline"
                     className={cn(
-                      "p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "p-4 h-auto border-2 justify-start text-left",
                       sourceType === 'file_metadata' && "border-primary bg-primary/5"
                     )}
                   >
-                    <Database className="h-6 w-6 mb-2" />
-                    <div className="font-semibold">File Metadata</div>
-                    <div className="text-sm text-muted-foreground">Extract from file properties</div>
-                  </button>
+                    <div className="w-full">
+                      <Database className="h-6 w-6 mb-2" />
+                      <div className="font-semibold">File Metadata</div>
+                      <div className="text-sm text-muted-foreground">Extract from file properties</div>
+                    </div>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -218,50 +230,62 @@ export function FieldMapperStepper({
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setExtractionMethod('direct')}
+                    variant="outline"
                     className={cn(
-                      "w-full p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "w-full p-4 h-auto border-2 justify-start text-left",
                       extractionMethod === 'direct' && "border-primary bg-primary/5"
                     )}
                   >
-                    <div className="font-semibold">Use as-is</div>
-                    <div className="text-sm text-muted-foreground">Use the entire value without changes</div>
-                  </button>
-                  <button
+                    <div className="w-full">
+                      <div className="font-semibold">Use as-is</div>
+                      <div className="text-sm text-muted-foreground">Use the entire value without changes</div>
+                    </div>
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setExtractionMethod('date')}
+                    variant="outline"
                     className={cn(
-                      "w-full p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "w-full p-4 h-auto border-2 justify-start text-left",
                       extractionMethod === 'date' && "border-primary bg-primary/5"
                     )}
                   >
-                    <div className="font-semibold">Extract Date</div>
-                    <div className="text-sm text-muted-foreground">Find and extract dates automatically</div>
-                  </button>
-                  <button
+                    <div className="w-full">
+                      <div className="font-semibold">Extract Date</div>
+                      <div className="text-sm text-muted-foreground">Find and extract dates automatically</div>
+                    </div>
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setExtractionMethod('number')}
+                    variant="outline"
                     className={cn(
-                      "w-full p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "w-full p-4 h-auto border-2 justify-start text-left",
                       extractionMethod === 'number' && "border-primary bg-primary/5"
                     )}
                   >
-                    <div className="font-semibold">Extract Number</div>
-                    <div className="text-sm text-muted-foreground">Find and extract numbers automatically</div>
-                  </button>
-                  <button
+                    <div className="w-full">
+                      <div className="font-semibold">Extract Number</div>
+                      <div className="text-sm text-muted-foreground">Find and extract numbers automatically</div>
+                    </div>
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setExtractionMethod('pattern')}
+                    variant="outline"
                     className={cn(
-                      "w-full p-4 border-2 rounded-lg text-left transition-all hover:bg-muted",
+                      "w-full p-4 h-auto border-2 justify-start text-left",
                       extractionMethod === 'pattern' && "border-primary bg-primary/5"
                     )}
                   >
-                    <div className="font-semibold">Extract with Pattern</div>
-                    <div className="text-sm text-muted-foreground">Use a pattern to find specific text</div>
-                  </button>
+                    <div className="w-full">
+                      <div className="font-semibold">Extract with Pattern</div>
+                      <div className="text-sm text-muted-foreground">Use a pattern to find specific text</div>
+                    </div>
+                  </Button>
                 </div>
               </CardContent>
             </Card>

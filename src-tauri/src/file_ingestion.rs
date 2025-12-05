@@ -453,3 +453,120 @@ pub async fn batch_update_files(
     Ok(())
 }
 
+/// ELITE: Batch create duplicate groups for newly inserted files
+/// Only processes local files (filters by case_sources.source_location = 'local')
+/// Groups files with the same hash into duplicate_groups
+pub async fn batch_create_duplicate_groups(
+    pool: &SqlitePool,
+    case_id: &str,
+    files: &[ProcessedFile],
+    now: i64,
+) -> Result<usize, String> {
+    if files.is_empty() {
+        return Ok(0);
+    }
+    
+    // Only process files with hashes
+    let files_with_hash: Vec<_> = files.iter()
+        .filter(|f| f.file_hash.is_some())
+        .collect();
+    
+    if files_with_hash.is_empty() {
+        return Ok(0);
+    }
+    
+    let mut transaction = pool.begin()
+        .await
+        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+    
+    let mut duplicate_groups_created = 0;
+    
+    // For each file with a hash, check for existing duplicates (local files only)
+    for file in files_with_hash {
+        if let Some(ref hash) = file.file_hash {
+            // Find existing files with same hash in this case (local files only)
+            // JOIN with case_sources to ensure we only check local files
+            let existing_duplicates = sqlx::query(
+                r#"
+                SELECT DISTINCT f.id, f.file_hash
+                FROM files f
+                INNER JOIN case_sources cs ON f.case_id = cs.case_id
+                WHERE f.case_id = ?
+                  AND f.file_hash = ?
+                  AND f.id != ?
+                  AND f.deleted_at IS NULL
+                  AND cs.source_location = 'local'
+                  AND f.source_directory = cs.source_path
+                LIMIT 100
+                "#
+            )
+            .bind(case_id)
+            .bind(hash)
+            .bind(&file.file_id)
+            .fetch_all(&mut *transaction)
+            .await
+            .map_err(|e| format!("Failed to find duplicates: {}", e))?;
+            
+            if !existing_duplicates.is_empty() {
+                // Create or get duplicate group
+                // Use hash as group_id for simplicity (ensures same hash = same group)
+                let group_id = hash.clone();
+                
+                // Check if group already exists and if it has a primary
+                let group_info = sqlx::query(
+                    "SELECT COUNT(*) as count, MAX(is_primary) as has_primary FROM duplicate_groups WHERE group_id = ?"
+                )
+                .bind(&group_id)
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(|e| format!("Failed to check group existence: {}", e))?;
+                
+                let group_count: i64 = group_info.get("count");
+                let _has_primary: Option<i64> = group_info.get("has_primary");
+                let group_exists = group_count > 0;
+                
+                // If group doesn't exist, add all existing duplicates to it
+                // First existing duplicate becomes primary
+                if !group_exists {
+                    let mut first = true;
+                    for row in &existing_duplicates {
+                        let existing_file_id: String = row.get("id");
+                        let is_primary = first; // First file becomes primary
+                        first = false;
+                        
+                        sqlx::query(
+                            "INSERT INTO duplicate_groups (group_id, file_id, is_primary, created_at) VALUES (?, ?, ?, ?)"
+                        )
+                        .bind(&group_id)
+                        .bind(&existing_file_id)
+                        .bind(if is_primary { 1 } else { 0 })
+                        .bind(now)
+                        .execute(&mut *transaction)
+                        .await
+                        .map_err(|e| format!("Failed to insert duplicate group: {}", e))?;
+                    }
+                }
+                
+                // Add current file to the group (not primary - existing files take precedence)
+                sqlx::query(
+                    "INSERT OR IGNORE INTO duplicate_groups (group_id, file_id, is_primary, created_at) VALUES (?, ?, 0, ?)"
+                )
+                .bind(&group_id)
+                .bind(&file.file_id)
+                .bind(now)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|e| format!("Failed to insert duplicate group: {}", e))?;
+                
+                duplicate_groups_created += 1;
+            }
+        }
+    }
+    
+    transaction.commit()
+        .await
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+    
+    Ok(duplicate_groups_created)
+}
+

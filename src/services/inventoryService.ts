@@ -44,19 +44,20 @@ export async function scanDirectory(path: string): Promise<InventoryItem[]> {
 }
 
 /**
- * Exports inventory to a file
+ * Exports case files to a file for report generation
  * 
- * @param items - Array of inventory items to export
+ * @param items - Array of case files to export
  * @param format - Export format: "xlsx", "csv", or "json"
  * @param outputPath - Full path where the file should be saved
  * @param caseNumber - Optional case number to include in metadata
  * @param folderPath - Optional folder path to include in metadata
+ * @param columnConfig - Optional column configuration for dynamic export
  * @returns Promise that resolves when export is complete
  * @throws Error if export fails
  * 
  * @example
  * ```ts
- * await exportInventory(items, "xlsx", "/path/to/output.xlsx", "CASE-001", "/source/folder")
+ * await exportInventory(items, "xlsx", "/path/to/output.xlsx", "CASE-001", "/source/folder", columnConfig)
  * ```
  */
 export async function exportInventory(

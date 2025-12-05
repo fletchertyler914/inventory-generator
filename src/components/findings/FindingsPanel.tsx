@@ -13,6 +13,7 @@ import { PanelCard } from "../panel/PanelCard"
 interface FindingsPanelProps {
   caseId: string
   onClose?: () => void
+  initialFindingId?: string | null
 }
 
 const severityConfig: Record<
@@ -36,11 +37,22 @@ const severityConfig: Record<
  * - Memoized to prevent unnecessary re-renders
  * - Optimized event handlers with useCallback
  */
-export const FindingsPanel = memo(function FindingsPanel({ caseId, onClose }: FindingsPanelProps) {
+export const FindingsPanel = memo(function FindingsPanel({ caseId, onClose, initialFindingId }: FindingsPanelProps) {
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editingFinding, setEditingFinding] = useState<Finding | null>(null)
+  
+  // Open finding dialog when initialFindingId is provided
+  useEffect(() => {
+    if (initialFindingId && findings.length > 0 && !createDialogOpen) {
+      const finding = findings.find((f) => f.id === initialFindingId)
+      if (finding) {
+        setEditingFinding(finding)
+        setCreateDialogOpen(true)
+      }
+    }
+  }, [initialFindingId, findings, createDialogOpen])
 
   const loadFindings = useCallback(async () => {
     try {
@@ -178,6 +190,7 @@ export const FindingsPanel = memo(function FindingsPanel({ caseId, onClose }: Fi
 }, (prevProps, nextProps) => {
   return (
     prevProps.caseId === nextProps.caseId &&
-    prevProps.onClose === nextProps.onClose
+    prevProps.onClose === nextProps.onClose &&
+    prevProps.initialFindingId === nextProps.initialFindingId
   )
 })

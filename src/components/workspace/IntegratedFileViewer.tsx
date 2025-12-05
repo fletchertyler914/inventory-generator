@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef, memo } from 'react';
-import { X, FileText, Image as ImageIcon, File, ChevronLeft, ChevronRight, Maximize2, Hash, Trash2, ExternalLink, MoreVertical } from 'lucide-react';
+import { X, FileText, Image as ImageIcon, File, ChevronLeft, ChevronRight, Maximize2, Hash, Trash2, ExternalLink, MoreVertical, Copy } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import {
@@ -37,6 +37,7 @@ interface IntegratedFileViewerProps {
   caseId?: string;
   onFileRefresh?: () => void;
   onFileRemove?: (file: InventoryItem) => void;
+  onToggleDuplicates?: () => void;
 }
 
 // File type categories
@@ -46,8 +47,8 @@ const TEXT_EXTENSIONS = ['txt', 'log', 'md', 'markdown', 'readme'];
 const CODE_EXTENSIONS = ['js', 'jsx', 'ts', 'tsx', 'json', 'html', 'css', 'scss', 'sass', 'less', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf', 'sh', 'bash', 'zsh', 'py', 'java', 'cpp', 'c', 'h', 'hpp', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'dart', 'sql', 'r', 'm', 'pl', 'lua', 'vim', 'ps1', 'bat', 'cmd'];
 const OFFICE_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'];
 const CSV_EXTENSIONS = ['csv'];
-const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogg', 'ogv', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'm4v'];
-const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'oga', 'aac', 'flac', 'm4a', 'wma'];
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogg', 'ogv', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'm4v', '3gp', 'asf', 'rm', 'rmvb', 'vob', 'ts', 'mts', 'm2ts'];
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'oga', 'aac', 'flac', 'm4a', 'wma', 'opus', '3gp', 'amr', 'ra', 'au'];
 const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'];
 
 function getFileType(fileName: string): string {
@@ -160,6 +161,7 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
   caseId,
   onFileRefresh,
   onFileRemove,
+  onToggleDuplicates,
 }: IntegratedFileViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +175,7 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
   const [shouldLoadContent, setShouldLoadContent] = useState(false); // ELITE: Lazy load content
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(false);
   const metadataJustOpenedRef = useRef(false);
+  const metadataOpenTimeRef = useRef<number>(0);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const popoverTriggerRef = useRef<HTMLButtonElement>(null);
   
@@ -199,7 +202,6 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
         window.removeEventListener('scroll', updatePosition, true);
       };
     }
-    return undefined;
   }, [metadataPanelOpen]);
   const [vscDarkPlusStyle, setVscDarkPlusStyle] = useState<any>(null);
   const [syntaxHighlighterModule, setSyntaxHighlighterModule] = useState<any>(null);
@@ -714,26 +716,170 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
             </div>
           );
         } else if (fileType === 'xlsx' || fileType === 'xls') {
+          // Detect header rows: look for rows that are likely headers vs data
+          // Strategy: Find the row with the most non-empty cells that looks like column headers
+          // (usually has text in most cells, not numbers)
+          const detectHeaderRow = (data: Array<Array<string | number | null | undefined>>): number => {
+            if (data.length === 0) return -1;
+            
+            // Look for the first row that has multiple non-empty cells
+            // and appears to be column headers (mostly text, not numbers)
+            for (let i = 0; i < Math.min(data.length, 10); i++) {
+              const row = data[i];
+              if (!row || row.length === 0) continue;
+              
+              const nonEmptyCells = row.filter(cell => 
+                cell !== null && cell !== undefined && String(cell).trim() !== ''
+              );
+              
+              // If this row has at least 2 non-empty cells, it's likely a header row
+              if (nonEmptyCells.length >= 2) {
+                // Check if it looks like headers (mostly text, not numbers)
+                const textCells = nonEmptyCells.filter(cell => {
+                  const str = String(cell).trim();
+                  // If it's a number, it's probably not a header
+                  if (!isNaN(Number(str)) && str !== '') return false;
+                  return true;
+                });
+                
+                // If at least half are text, this is likely the header row
+                if (textCells.length >= nonEmptyCells.length * 0.5) {
+                  return i;
+                }
+              }
+            }
+            
+            // Fallback: use first row if it has any content
+            if (data[0] && data[0].some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')) {
+              return 0;
+            }
+            
+            return -1;
+          };
+          
+          const headerRowIndex = detectHeaderRow(excelData);
+          const hasHeaders = headerRowIndex >= 0;
+          
+          // Split data into title rows (above headers) and data rows (below headers)
+          const titleRows = hasHeaders ? excelData.slice(0, headerRowIndex) : [];
+          const headers = hasHeaders ? excelData[headerRowIndex] : [];
+          const dataRows = hasHeaders ? excelData.slice(headerRowIndex + 1) : excelData;
+          
+          // Find the maximum number of columns across all rows to ensure uniform grid
+          const maxColumns = Math.max(
+            ...titleRows.map(row => row.length),
+            headers.length,
+            ...dataRows.map(row => row.length),
+            1 // At least 1 column
+          );
+          
+          // Normalize title rows
+          const normalizedTitleRows = titleRows.map(row => {
+            const normalized = [...row];
+            while (normalized.length < maxColumns) {
+              normalized.push(null);
+            }
+            return normalized.slice(0, maxColumns);
+          });
+          
+          // Normalize headers
+          const normalizedHeaders = hasHeaders ? (() => {
+            const normalized = [...headers];
+            while (normalized.length < maxColumns) {
+              normalized.push(null);
+            }
+            return normalized.slice(0, maxColumns);
+          })() : [];
+          
+          // Normalize data rows
+          const normalizedRows = dataRows.map(row => {
+            const normalized = [...row];
+            while (normalized.length < maxColumns) {
+              normalized.push(null);
+            }
+            return normalized.slice(0, maxColumns);
+          });
+          
           return (
             <div className="w-full h-full overflow-auto p-4">
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-border/40 dark:border-border/50">
-                  <tbody>
-                    {excelData.map((row, rowIndex) => (
-                      <tr key={rowIndex}>
-                        {row.map((cell, cellIndex) => (
-                          <td
-                            key={cellIndex}
-                            className="border border-border/40 dark:border-border/50 p-2 text-sm"
-                          >
-                            {cell !== null && cell !== undefined ? String(cell) : ''}
-                          </td>
-                        ))}
+              <table className="border-collapse border border-border/40 dark:border-border/50" style={{ tableLayout: 'auto', width: 'max-content' }}>
+                {/* Title rows above headers */}
+                {normalizedTitleRows.length > 0 && (
+                  <thead>
+                    {normalizedTitleRows.map((titleRow, titleRowIndex) => (
+                      <tr key={`title-${titleRowIndex}`} className="bg-muted/30">
+                        {titleRow.map((cell, cellIndex) => {
+                          // Merge cells if the row has mostly empty cells (likely a title row)
+                          const hasContent = cell !== null && cell !== undefined && String(cell).trim() !== '';
+                          const isEmpty = !hasContent;
+                          const isFirstCell = cellIndex === 0;
+                          const isLastCell = cellIndex === titleRow.length - 1;
+                          
+                          // If this is a title row with content in first cell, span across all columns
+                          if (isFirstCell && hasContent && titleRow.filter(c => c !== null && c !== undefined && String(c).trim() !== '').length <= 2) {
+                            return (
+                              <th
+                                key={cellIndex}
+                                colSpan={maxColumns}
+                                className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold bg-muted/30"
+                                style={{ textAlign: 'left' }}
+                              >
+                                {String(cell)}
+                              </th>
+                            );
+                          }
+                          
+                          // Regular cell
+                          return (
+                            <th
+                              key={cellIndex}
+                              className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-medium bg-muted/30"
+                            >
+                              {cell !== null && cell !== undefined ? String(cell) : '\u00A0'}
+                            </th>
+                          );
+                        })}
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </thead>
+                )}
+                
+                {/* Column headers */}
+                {hasHeaders && normalizedHeaders.length > 0 && (
+                  <thead>
+                    <tr className="bg-muted">
+                      {normalizedHeaders.map((header, index) => (
+                        <th
+                          key={index}
+                          className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10 whitespace-nowrap"
+                          style={{ minWidth: '150px', maxWidth: 'none' }}
+                        >
+                          {header !== null && header !== undefined ? String(header) : `Column ${index + 1}`}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                
+                {/* Data rows */}
+                <tbody>
+                  {normalizedRows.map((row, rowIndex) => (
+                    <tr key={rowIndex} className="hover:bg-muted/50">
+                      {row.map((cell, cellIndex) => (
+                        <td
+                          key={cellIndex}
+                          className="border border-border/40 dark:border-border/50 p-2 text-sm whitespace-nowrap"
+                          style={{ minWidth: '150px', maxWidth: 'none', overflow: 'visible' }}
+                        >
+                          <span style={{ display: 'inline-block', maxWidth: 'none' }}>
+                            {cell !== null && cell !== undefined ? String(cell) : '\u00A0'}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           );
         }
@@ -871,6 +1017,20 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
               <ChevronRight className="h-4 w-4" />
             </Button>
           )}
+
+          {/* Duplicate Button - Only show when file has duplicates */}
+          {duplicates.length > 0 && onToggleDuplicates && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleDuplicates}
+              title={`View duplicates (${duplicates.length} found)`}
+              className="relative"
+            >
+              <Copy className="h-4 w-4" />
+              <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
+            </Button>
+          )}
           
           {/* Overflow Menu */}
           <DropdownMenu>
@@ -895,15 +1055,17 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
                   // Toggle metadata panel - if already open, close it; otherwise open it
                   if (metadataPanelOpen) {
                     setMetadataPanelOpen(false);
+                    metadataJustOpenedRef.current = false;
                   } else {
                     // Mark that we're programmatically opening, then delay to allow dropdown to close
                     metadataJustOpenedRef.current = true;
+                    metadataOpenTimeRef.current = Date.now();
                     setTimeout(() => {
                       setMetadataPanelOpen(true);
-                      // Clear the flag after a short delay
+                      // Clear the flag after a longer delay to prevent accidental dismissal
                       setTimeout(() => {
                         metadataJustOpenedRef.current = false;
-                      }, 200);
+                      }, 500);
                     }, 150);
                   }
                 }}
@@ -955,8 +1117,9 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
         modal={false}
       >
         <PopoverTrigger asChild>
-          <button 
+          <Button 
             ref={popoverTriggerRef}
+            variant="ghost"
             className="opacity-0 pointer-events-none fixed" 
             aria-hidden="true" 
           />
@@ -966,13 +1129,71 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
           align="end"
           side="bottom"
           sideOffset={8}
+          onInteractOutside={(e) => {
+            // Prevent dismissal during the initial opening period
+            const timeSinceOpen = Date.now() - metadataOpenTimeRef.current;
+            if (metadataJustOpenedRef.current || timeSinceOpen < 500) {
+              e.preventDefault();
+              return;
+            }
+            
+            // Check if clicking near the menu button area - prevent dismissal
+            const target = e.target as HTMLElement;
+            if (menuButtonRef.current && target) {
+              const menuRect = menuButtonRef.current.getBoundingClientRect();
+              const targetRect = target.getBoundingClientRect();
+              const targetCenterX = targetRect.left + targetRect.width / 2;
+              const targetCenterY = targetRect.top + targetRect.height / 2;
+              
+              // Expand the protected area around the menu button
+              const padding = 50;
+              if (
+                targetCenterX >= menuRect.left - padding &&
+                targetCenterX <= menuRect.right + padding &&
+                targetCenterY >= menuRect.top - padding &&
+                targetCenterY <= menuRect.bottom + padding
+              ) {
+                e.preventDefault();
+                return;
+              }
+            }
+          }}
+          onPointerDownOutside={(e) => {
+            // Prevent dismissal during the initial opening period
+            const timeSinceOpen = Date.now() - metadataOpenTimeRef.current;
+            if (metadataJustOpenedRef.current || timeSinceOpen < 500) {
+              e.preventDefault();
+              return;
+            }
+            
+            // Check if clicking near the menu button area - prevent dismissal
+            const target = e.target as HTMLElement;
+            if (menuButtonRef.current && target) {
+              const menuRect = menuButtonRef.current.getBoundingClientRect();
+              const targetRect = target.getBoundingClientRect();
+              const targetCenterX = targetRect.left + targetRect.width / 2;
+              const targetCenterY = targetRect.top + targetRect.height / 2;
+              
+              // Expand the protected area around the menu button
+              const padding = 50;
+              if (
+                targetCenterX >= menuRect.left - padding &&
+                targetCenterX <= menuRect.right + padding &&
+                targetCenterY >= menuRect.top - padding &&
+                targetCenterY <= menuRect.bottom + padding
+              ) {
+                e.preventDefault();
+                return;
+              }
+            }
+          }}
         >
           <div className="flex flex-col h-full max-h-[80vh]">
             <div className="p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
               <h3 className="text-sm font-semibold">Metadata</h3>
             </div>
             <div className="flex-1 overflow-hidden min-h-0">
-              <MetadataPanel filePath={file.absolute_path} fileType={fileType} item={file} {...(caseId !== undefined && { caseId })} />
+              <MetadataPanel filePath={file.absolute_path} fileType={fileType} item={file} caseId={caseId} />
             </div>
           </div>
         </PopoverContent>
@@ -1010,6 +1231,10 @@ export const IntegratedFileViewer = memo(function IntegratedFileViewer({
                 onFileSelect={(_fileId) => {
                   // Navigate to selected duplicate file
                   // This would trigger file navigation in the parent component
+                }}
+                onManageAll={() => {
+                  // This would open the DuplicateManagementPanel
+                  // Implementation depends on parent component structure
                 }}
               />
             )}

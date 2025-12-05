@@ -455,7 +455,7 @@ pub async fn save_app_setting(
 /// Workspace preferences structure
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspacePreferences {
-    pub view_mode: String, // "split" or "table"
+    pub view_mode: String, // "split" or "board"
     pub report_mode: bool,
     pub notes_visible: bool,
     pub findings_visible: bool,
@@ -700,11 +700,12 @@ pub fn get_migrations() -> Vec<Migration> {
                 CREATE TABLE IF NOT EXISTS workspace_preferences (
                     id TEXT PRIMARY KEY,
                     case_id TEXT NOT NULL UNIQUE,
-                    view_mode TEXT DEFAULT 'table', -- 'split' or 'table'
+                    view_mode TEXT DEFAULT 'board', -- 'split' or 'board'
                     report_mode INTEGER DEFAULT 0, -- 0 = false, 1 = true
                     notes_visible INTEGER DEFAULT 0,
                     findings_visible INTEGER DEFAULT 0,
                     timeline_visible INTEGER DEFAULT 0,
+                    duplicates_visible INTEGER DEFAULT 0,
                     navigator_open INTEGER DEFAULT 1,
                     auto_sync_enabled INTEGER DEFAULT 1, -- 0 = false, 1 = true (enabled by default)
                     auto_sync_interval_minutes INTEGER DEFAULT 5, -- Default 5 minutes
@@ -839,6 +840,22 @@ pub fn get_migrations() -> Vec<Migration> {
                     INSERT INTO timeline_events_fts(timeline_events_fts, rowid, description) VALUES('delete', old.rowid, old.description);
                     INSERT INTO timeline_events_fts(rowid, description) VALUES (new.rowid, new.description);
                 END;
+
+                -- ELITE: Duplicate groups table for tracking duplicate file relationships (local files only)
+                CREATE TABLE IF NOT EXISTS duplicate_groups (
+                    group_id TEXT NOT NULL,
+                    file_id TEXT NOT NULL,
+                    is_primary INTEGER DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    PRIMARY KEY (group_id, file_id),
+                    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+                );
+
+                -- ELITE: Performance indexes for duplicate detection
+                CREATE INDEX IF NOT EXISTS idx_duplicate_groups_group_id ON duplicate_groups(group_id);
+                CREATE INDEX IF NOT EXISTS idx_duplicate_groups_file_id ON duplicate_groups(file_id);
+                CREATE INDEX IF NOT EXISTS idx_duplicate_groups_primary ON duplicate_groups(group_id, is_primary) WHERE is_primary = 1;
+                CREATE INDEX IF NOT EXISTS idx_files_case_hash_deleted ON files(case_id, file_hash, deleted_at) WHERE file_hash IS NOT NULL AND deleted_at IS NULL;
             "#,
         },
     ]

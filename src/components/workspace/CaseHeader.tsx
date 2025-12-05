@@ -1,8 +1,9 @@
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
-import { X, MoreVertical, FileText, StickyNote, AlertTriangle, Calendar, Plus, FileSearch, FileBarChart, RefreshCw } from 'lucide-react';
+import { X, MoreVertical, FileText, StickyNote, AlertTriangle, Calendar, Plus, FileSearch, FileBarChart, RefreshCw, Search, Copy } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
-import { SearchBar } from '../search/SearchBar';
+import { SearchDialog } from '../search/SearchDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +19,7 @@ interface CaseHeaderProps {
   items: InventoryItem[];
   onClose: () => void;
   onAddFiles: () => void;
-  viewMode: 'split' | 'table';
+  viewMode: 'split' | 'board';
   viewingFile: InventoryItem | null;
   reportMode?: boolean;
   onToggleReportMode?: () => void;
@@ -31,8 +32,8 @@ interface CaseHeaderProps {
   onFileOpen?: (filePath: string) => void;
   onSearchChange?: (query: string) => void;
   onNoteSelect?: (noteId: string) => void;
-  onFindingSelect?: () => void;
-  onTimelineSelect?: () => void;
+  onFindingSelect?: (filePath?: string, findingId?: string) => void;
+  onTimelineSelect?: (filePath?: string, timelineEventId?: string) => void;
   onGenerateReport?: () => void;
   onSyncFiles?: () => void;
   isSyncing?: boolean;
@@ -42,6 +43,7 @@ interface CaseHeaderProps {
 
 export function CaseHeader({
   case: case_,
+  fileCount,
   items,
   onClose,
   onAddFiles,
@@ -66,10 +68,52 @@ export function CaseHeader({
   autoSyncEnabled = false,
   onToggleAutoSync,
 }: CaseHeaderProps) {
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false)
+
+  // Detect platform for keybinding display
+  const isMacOS = () => {
+    if (typeof navigator === "undefined") return false
+    const nav = navigator as Navigator & { userAgentData?: { platform: string } }
+    if (nav.userAgentData?.platform) {
+      return nav.userAgentData.platform.toLowerCase() === "macos"
+    }
+    const userAgent = navigator.userAgent.toLowerCase()
+    if (userAgent.includes("mac os x") || userAgent.includes("macintosh")) {
+      return true
+    }
+    const platform = navigator.platform?.toUpperCase() || ""
+    return platform.indexOf("MAC") >= 0
+  }
+
+  const modifierKey = isMacOS() ? "⌘" : "⌃"
+
+  // Cmd/Ctrl + F: Open search dialog
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      const isInput =
+        target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
+
+      // Don't intercept if user is typing in an input (unless it's the search dialog input)
+      if (isInput && !target.closest('[cmdk-input]')) return
+
+      const modifier =
+        navigator.platform.toUpperCase().indexOf("MAC") >= 0 ? e.metaKey : e.ctrlKey
+
+      if (modifier && e.key.toLowerCase() === "f") {
+        e.preventDefault()
+        setSearchDialogOpen(true)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
+
   return (
     <div className="h-16 border-b border-border/40 dark:border-border/50 bg-card flex-shrink-0 relative px-3 shadow-sm">
-      {/* Left Section - Case Info */}
-      <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-3 min-w-0 max-w-[calc(50%-320px)]">
+      {/* Left Section - Case Info and Search */}
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-3 min-w-0">
         <h1 className="text-lg font-semibold truncate">{case_.name}</h1>
         {case_.case_id && (
           <>
@@ -79,77 +123,85 @@ export function CaseHeader({
             </Badge>
           </>
         )}
-      </div>
-
-      {/* Center: Search Bar - Absolutely centered */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <SearchBar
-          caseId={case_.id}
-          items={items}
-          {...(onFileOpen !== undefined && { onFileSelect: onFileOpen })}
-          {...(onNoteSelect !== undefined && { onNoteSelect })}
-          {...(onSearchChange !== undefined && { onSearchChange })}
-          {...(onFindingSelect !== undefined && { onFindingSelect })}
-          {...(onTimelineSelect !== undefined && { onTimelineSelect })}
-        />
+        <span className="h-4 w-px bg-border flex-shrink-0" aria-hidden="true" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setSearchDialogOpen(true)}
+          title={`Search files, notes, findings, timeline (${modifierKey}F)`}
+          className="h-8 px-3 gap-2 transition-all duration-200 flex-shrink-0"
+        >
+          <Search className="h-4 w-4" />
+          <span className="text-xs text-muted-foreground font-mono">{modifierKey}F</span>
+        </Button>
       </div>
 
       {/* Right Section - Actions */}
       <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
         {/* Reports/Review button - toggle between report mode and review mode */}
         {onToggleReportMode && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleReportMode}
-            title={reportMode ? 'Switch to Review Mode' : 'Switch to Report Mode'}
-            className="h-8 w-8 p-0 transition-all duration-200"
-          >
-            {reportMode ? (
-              <FileSearch className="h-4 w-4" />
-            ) : (
-              <FileBarChart className="h-4 w-4" />
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleReportMode}
+              title={reportMode ? 'Switch to Review Mode' : 'Switch to Report Mode'}
+              className="h-8 w-8 p-0 transition-all duration-200"
+            >
+              {reportMode ? (
+                <FileSearch className="h-4 w-4" />
+              ) : (
+                <FileBarChart className="h-4 w-4" />
+              )}
+            </Button>
+            {/* Divider after Report/Review toggle if pane toggles are visible */}
+            {viewMode === 'split' && !reportMode && (
+              <span className="h-4 w-px bg-border flex-shrink-0" aria-hidden="true" />
             )}
-          </Button>
+          </>
         )}
 
         {/* Pane toggles - only show in review mode, compact icon-only buttons */}
         {viewMode === 'split' && !reportMode && (
-          <div className="flex items-center gap-1 border border-border/40 dark:border-border/50 rounded-md p-0.5">
-            {onToggleNotes && (
-              <Button
-                variant={notesVisible ? 'default' : 'ghost'}
-                size="sm"
-                onClick={onToggleNotes}
-                title="Toggle notes panel (Cmd/Ctrl+N)"
-                className="h-8 w-8 p-0 transition-all duration-200"
-              >
-                <StickyNote className="h-4 w-4" />
-              </Button>
-            )}
-            {onToggleFindings && (
-              <Button
-                variant={findingsVisible ? 'default' : 'ghost'}
-                size="sm"
-                onClick={onToggleFindings}
-                title="Toggle findings panel"
-                className="h-8 w-8 p-0 transition-all duration-200"
-              >
-                <AlertTriangle className="h-4 w-4" />
-              </Button>
-            )}
-            {onToggleTimeline && (
-              <Button
-                variant={timelineVisible ? 'default' : 'ghost'}
-                size="sm"
-                onClick={onToggleTimeline}
-                title="Toggle timeline panel"
-                className="h-8 w-8 p-0 transition-all duration-200"
-              >
-                <Calendar className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+          <>
+            <div className="flex items-center gap-1 border border-border/40 dark:border-border/50 rounded-md p-0.5">
+              {onToggleNotes && (
+                <Button
+                  variant={notesVisible ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={onToggleNotes}
+                  title="Toggle notes panel (Cmd/Ctrl+N)"
+                  className="h-8 w-8 p-0 transition-all duration-200"
+                >
+                  <StickyNote className="h-4 w-4" />
+                </Button>
+              )}
+              {onToggleFindings && (
+                <Button
+                  variant={findingsVisible ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={onToggleFindings}
+                  title="Toggle findings panel"
+                  className="h-8 w-8 p-0 transition-all duration-200"
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                </Button>
+              )}
+              {onToggleTimeline && (
+                <Button
+                  variant={timelineVisible ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={onToggleTimeline}
+                  title="Toggle timeline panel"
+                  className="h-8 w-8 p-0 transition-all duration-200"
+                >
+                  <Calendar className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            {/* Divider after pane toggles */}
+            <span className="h-4 w-px bg-border flex-shrink-0" aria-hidden="true" />
+          </>
         )}
 
         {/* More menu - contains Add Files and Theme toggle */}
@@ -205,6 +257,9 @@ export function CaseHeader({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Divider before Close button */}
+        <span className="h-4 w-px bg-border flex-shrink-0" aria-hidden="true" />
+
         <Button
           variant="ghost"
           size="sm"
@@ -215,6 +270,19 @@ export function CaseHeader({
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Search Dialog */}
+      <SearchDialog
+        open={searchDialogOpen}
+        onOpenChange={setSearchDialogOpen}
+        caseId={case_.id}
+        items={items}
+        onFileSelect={onFileOpen}
+        onNoteSelect={onNoteSelect}
+        onSearchChange={onSearchChange}
+        onFindingSelect={onFindingSelect}
+        onTimelineSelect={onTimelineSelect}
+      />
     </div>
   );
 }

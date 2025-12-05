@@ -109,6 +109,12 @@ export function ColumnManager({
     return getMappingsForColumn(columnId, caseId);
   }, [caseId]);
 
+  const handleColumnCreated = useCallback((newColumn: TableColumn) => {
+    setLocalConfig(prev => ({
+      ...prev,
+      columns: [...prev.columns, newColumn],
+    }));
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,7 +168,7 @@ export function ColumnManager({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                        className="h-6 w-6 p-0 text-destructive hover:!text-destructive hover:!bg-transparent"
                         onClick={() => handleDeleteCustomColumn(column.id)}
                       >
                         <Trash2 className="h-3 w-3" />

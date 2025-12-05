@@ -90,8 +90,9 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
     try {
       await noteService.deleteNote(noteId)
       setNotes((prev) => prev.filter((n) => n.id !== noteId))
-      if (editingNote?.id === noteId) {
-        setEditingNote(null)
+      if (editingNoteId === noteId) {
+        setEditingNoteId(null)
+        setEditingContent("")
       }
     } catch (error) {
       console.error("Failed to delete note:", error)
@@ -142,6 +143,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
             icon={Plus}
             title="No notes yet"
             description="Click the + button above to create your first note"
+            onAction={handleCreate}
           />
         ) : (
           <div className="space-y-2.5">
@@ -188,7 +190,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-5 w-5 p-0 hover:bg-muted"
+                          className="h-5 w-5 p-0 hover:!bg-muted/60 dark:hover:!bg-muted/60"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleEdit(note)
@@ -200,7 +202,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-5 w-5 p-0 hover:bg-muted"
+                          className="h-5 w-5 p-0 hover:!bg-muted/60 dark:hover:!bg-muted/60"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleTogglePinned(note.id)
@@ -216,7 +218,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-5 w-5 p-0 hover:bg-muted"
+                          className="h-5 w-5 p-0 hover:!bg-muted/60 dark:hover:!bg-muted/60"
                           onClick={async (e) => {
                             e.stopPropagation()
                             try {
@@ -258,7 +260,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          className="h-5 w-5 p-0 text-muted-foreground hover:!text-destructive hover:!bg-destructive/10"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleDeleteNote(note.id)
@@ -412,7 +414,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
           }
         }}
         caseId={caseId}
-        {...(fileId !== undefined && { fileId })}
+        fileId={fileId}
         note={editingNote}
         onSave={handleDialogClose}
       />

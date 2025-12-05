@@ -21,7 +21,7 @@ import type { Case } from "./types/case"
  *
  * ELITE ARCHITECTURE:
  * - Case-first workflow: Start with case list, not folder selection
- * - Integrated multi-pane layout: File viewer + Notes + Table
+ * - Integrated multi-pane layout: File viewer + Notes + Workflow Board
  * - Zero friction: Everything 1-2 clicks away
  * - Blazing fast: Database-backed, instant case switching
  * - Native desktop only: Built with Tauri for Windows, macOS, Linux

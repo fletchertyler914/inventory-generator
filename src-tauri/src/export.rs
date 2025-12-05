@@ -830,7 +830,7 @@ pub fn generate_csv_dynamic(
     columns: &[ExportColumn],
     _absolute_paths: &[String], // Reserved for future use
     _case_number: Option<&str>, // CSV doesn't support metadata rows like XLSX
-    folder_path: Option<&str>,
+    _folder_path: Option<&str>,
     output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(output_path)?;

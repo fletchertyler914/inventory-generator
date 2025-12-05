@@ -130,7 +130,7 @@ export async function cachedInvoke<T>(
   
   // Create new request
   const { invoke } = await import('@tauri-apps/api/core');
-  const promise = invoke<T>(command, args as Record<string, unknown> | undefined);
+  const promise = invoke<T>(command, args);
   
   // Store pending request
   pendingRequests.set(cacheKey, {

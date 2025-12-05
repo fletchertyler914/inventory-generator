@@ -16,7 +16,7 @@ export interface File {
   source_directory?: string;
 }
 
-// Extended file with inventory metadata (for table display)
+// Extended file with additional metadata fields
 export interface FileWithInventory extends File {
   date_rcvd?: string;
   doc_year?: number;

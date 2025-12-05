@@ -9,8 +9,7 @@ A production-grade Tauri application for comprehensive case and document managem
 - **Schema-Driven Inventory**: Flexible, customizable inventory structure with global and case-specific schemas
 - **Fast Folder Scanning**: Recursively scan directories and extract file metadata with parallel processing
 - **Smart Document Classification**: Automatically categorize documents by type and date ranges
-- **Dynamic Export**: Export to XLSX, CSV, or JSON formats based on current column configuration
-- **Import/Export**: Save and restore inventory states
+- **Report Generation**: Generate reports with case data in XLSX format
 - **Bulk Operations**: Efficiently update multiple items at once
 - **Virtual Scrolling**: Handles large datasets (10,000+ items) with smooth performance
 
@@ -62,7 +61,7 @@ All inventory data is stored in a flexible JSON structure (`inventory_data`) tha
 - **Framework**: Tauri 2.0
 - **Error Handling**: Custom error types with `thiserror`
 - **File Processing**: Efficient recursive directory scanning with parallel processing
-- **Export Formats**: Dynamic XLSX, CSV, JSON support based on schema
+- **Report Generation**: Export case data for reports
 - **Database**: SQLite with FTS5 full-text search
 - **Performance**: Async I/O, batch operations, optimized queries
 

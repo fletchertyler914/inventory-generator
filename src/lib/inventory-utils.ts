@@ -8,6 +8,17 @@ import { getMappings } from '@/services/mappingService'
 import type { FieldMapping } from '@/types/mapping'
 
 /**
+ * Format bytes to human-readable string
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+/**
  * Parse inventory_data JSON string into object
  * Uses caching for performance
  */
@@ -93,7 +104,8 @@ export function getKeyMappingFields(
  * Format a mapping field value for display
  */
 export function formatMappingValue(
-  value: any
+  value: any,
+  extractionMethod?: string
 ): string {
   if (value === null || value === undefined) return ''
   

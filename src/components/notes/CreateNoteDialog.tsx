@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
+import { Label } from '../ui/label';
 import { TiptapEditor } from './TiptapEditor';
 import { noteService } from '@/services/noteService';
 import type { Note } from '@/types/note';
@@ -72,7 +73,7 @@ export function CreateNoteDialog({
         </DialogHeader>
 
         <div className="flex-1 min-h-0 flex flex-col space-y-4">
-          <div className="flex-1 min-h-0 flex flex-col border border-border/30 dark:border-border/40 rounded-md overflow-hidden">
+          <div className="flex-1 min-h-[300px] flex flex-col border border-border/30 dark:border-border/40 rounded-md overflow-hidden">
             <TiptapEditor
               content={content}
               onChange={setContent}

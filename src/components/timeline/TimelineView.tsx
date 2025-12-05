@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect, useCallback, memo } from 'react';
-import { Calendar, Edit2, Save, Trash2, Sparkles } from 'lucide-react';
+import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
+import { Calendar, Edit2, Save, Plus, Trash2, Sparkles } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
@@ -16,6 +16,8 @@ import { PanelEmptyState } from '../panel/PanelEmptyState';
 interface TimelineViewProps {
   caseId: string;
   currentFileId?: string;
+  onClose?: () => void;
+  initialEventId?: string | null;
 }
 
 /**
@@ -26,12 +28,34 @@ interface TimelineViewProps {
  * - Optimized event handlers with useCallback
  * - Memoized grouped events computation
  */
-export const TimelineView = memo(function TimelineView({ caseId, currentFileId }: TimelineViewProps) {
+export const TimelineView = memo(function TimelineView({ caseId, currentFileId, onClose, initialEventId }: TimelineViewProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingDescription, setEditingDescription] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const eventRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  
+  // Scroll to event when initialEventId is provided
+  useEffect(() => {
+    if (initialEventId && events.length > 0 && !loading) {
+      const event = events.find((e) => e.id === initialEventId);
+      if (event) {
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+          const ref = eventRefs.current.get(event.id);
+          if (ref) {
+            ref.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Highlight the event briefly
+            ref.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+            setTimeout(() => {
+              ref.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
+            }, 2000);
+          }
+        }, 100);
+      }
+    }
+  }, [initialEventId, events, loading]);
 
   const loadEvents = useCallback(async () => {
     try {
@@ -125,6 +149,7 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId }
         count={events.length}
         onCreate={() => setCreateDialogOpen(true)}
         createButtonLabel=""
+        {...(onClose && { onClose })}
       />
 
       <PanelContent>
@@ -136,7 +161,7 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId }
           />
         ) : (
           <div className="space-y-4">
-            {groupedEvents.map((group) => (
+            {groupedEvents.map((group, groupIndex) => (
               <div key={group.dateKey} className="space-y-2.5">
                 {/* Date Header */}
                 <div className="flex items-center gap-2 px-1">
@@ -152,11 +177,23 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId }
                 {/* Events */}
                 {group.events.map((event) => {
                   const isEditing = editingEventId === event.id;
-                  const isActive = currentFileId && event.source_file_id === currentFileId;
+                  // Mark event as active if it belongs to the currently viewed file
+                  const isActive = Boolean(
+                    currentFileId && 
+                    event.source_file_id && 
+                    currentFileId === event.source_file_id
+                  );
                   
                   return (
                     <PanelCard
                       key={event.id}
+                      ref={(el) => {
+                        if (el) {
+                          eventRefs.current.set(event.id, el);
+                        } else {
+                          eventRefs.current.delete(event.id);
+                        }
+                      }}
                       className={isActive ? 'bg-primary/5 border-l-2 border-l-primary/30 dark:bg-primary/10' : ''}
                     >
                       {isEditing ? (
@@ -213,7 +250,7 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId }
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-5 w-5 p-0 hover:bg-muted"
+                                className="h-5 w-5 p-0 hover:!bg-muted/60 dark:hover:!bg-muted/60"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleStartEdit(event);
@@ -225,7 +262,7 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId }
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                className="h-5 w-5 p-0 text-muted-foreground hover:!text-destructive hover:!bg-destructive/10"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleDeleteEvent(event.id);
@@ -266,7 +303,9 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId }
 }, (prevProps, nextProps) => {
   return (
     prevProps.caseId === nextProps.caseId &&
-    prevProps.currentFileId === nextProps.currentFileId
+    prevProps.currentFileId === nextProps.currentFileId &&
+    prevProps.onClose === nextProps.onClose &&
+    prevProps.initialEventId === nextProps.initialEventId
   )
 })
 

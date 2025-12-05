@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { searchService, type SearchResult } from '@/services/searchService';
 import { useDebounce } from './useDebounce';
+import { getStoreValue, setStoreValue } from '@/lib/store-utils';
 import type { InventoryItem } from '@/types/inventory';
 
 interface UseSearchOptions {
@@ -40,7 +41,71 @@ export function useSearch({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [queryLoaded, setQueryLoaded] = useState(false);
   const debouncedQuery = useDebounce(query, debounceMs);
+
+  // Load saved search query from store on mount
+  useEffect(() => {
+    if (!caseId) {
+      setQueryLoaded(true);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadSavedQuery = async () => {
+      try {
+        const savedQuery = await getStoreValue<string>(
+          `casespace-search-query-${caseId}`,
+          '',
+          'settings'
+        );
+        if (mounted) {
+          setQuery(savedQuery);
+          setQueryLoaded(true);
+        }
+      } catch (error) {
+        console.error('Failed to load saved search query:', error);
+        if (mounted) {
+          setQueryLoaded(true);
+        }
+      }
+    };
+
+    loadSavedQuery();
+
+    return () => {
+      mounted = false;
+    };
+  }, [caseId]);
+
+  // Save search query to store (debounced)
+  useEffect(() => {
+    if (!caseId || !queryLoaded) return; // Don't save during initial load
+
+    const saveQuery = async () => {
+      try {
+        await setStoreValue(
+          `casespace-search-query-${caseId}`,
+          query,
+          'settings'
+        );
+      } catch (error) {
+        console.error('Failed to save search query:', error);
+      }
+    };
+
+    // Debounce the save operation
+    const timeoutId = setTimeout(saveQuery, 500);
+    return () => clearTimeout(timeoutId);
+  }, [query, caseId, queryLoaded]);
+
+  // Clear query when case changes
+  useEffect(() => {
+    if (queryLoaded) {
+      setQuery('');
+    }
+  }, [caseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Memoize inventory field parser to avoid repeated JSON parsing
   const parseInventoryData = useCallback((inventoryData: string | null | undefined): Record<string, unknown> | null => {
@@ -79,9 +144,9 @@ export function useSearch({
           
           if (inventoryData) {
             // Check standard fields
-            const docDesc = String(inventoryData['document_description'] || '').toLowerCase();
-            const docType = String(inventoryData['document_type'] || '').toLowerCase();
-            const notes = String(inventoryData['notes'] || '').toLowerCase();
+            const docDesc = String(inventoryData.document_description || '').toLowerCase();
+            const docType = String(inventoryData.document_type || '').toLowerCase();
+            const notes = String(inventoryData.notes || '').toLowerCase();
             
             if (docDesc.includes(lowerQuery)) score += 5;
             if (docType.includes(lowerQuery)) score += 3;

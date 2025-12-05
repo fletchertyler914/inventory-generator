@@ -386,12 +386,14 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
                 className="pl-9 pr-9 h-10"
               />
               {searchQuery && (
-                <button
+                <Button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </Button>
               )}
             </div>
 

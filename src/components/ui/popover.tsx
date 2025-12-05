@@ -6,15 +6,11 @@ import { useMemo } from "react"
 
 import { cn } from "@/lib/utils"
 
-function Popover({
-  ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Root>) {
+function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />
 }
 
-function PopoverTrigger({
-  ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
+function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
 }
 
@@ -27,59 +23,62 @@ function PopoverContent({
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   // Get computed popover background color
   const popoverBgColor = useMemo(() => {
-    if (typeof window === 'undefined') return '#1a1a1a';
+    if (typeof window === "undefined") return "#1a1a1a"
     try {
       // Create a temporary element to get the computed color
-      const testEl = document.createElement('div');
-      testEl.className = 'bg-popover';
-      testEl.style.display = 'none';
-      document.body.appendChild(testEl);
-      const computedColor = getComputedStyle(testEl).backgroundColor;
-      document.body.removeChild(testEl);
+      const testEl = document.createElement("div")
+      testEl.className = "bg-popover"
+      testEl.style.display = "none"
+      document.body.appendChild(testEl)
+      const computedColor = getComputedStyle(testEl).backgroundColor
+      document.body.removeChild(testEl)
       // If we got a valid color (not transparent), use it
-      if (computedColor && computedColor !== 'rgba(0, 0, 0, 0)' && computedColor !== 'transparent') {
-        return computedColor;
+      if (
+        computedColor &&
+        computedColor !== "rgba(0, 0, 0, 0)" &&
+        computedColor !== "transparent"
+      ) {
+        return computedColor
       }
     } catch (e) {
-      console.warn('Failed to compute popover color:', e);
+      console.warn("Failed to compute popover color:", e)
     }
     // Fallback: use the oklch value directly
-    const root = document.documentElement;
-    const popoverValue = getComputedStyle(root).getPropertyValue('--popover').trim();
+    const root = document.documentElement
+    const popoverValue = getComputedStyle(root).getPropertyValue("--popover").trim()
     if (popoverValue) {
-      return popoverValue;
+      return popoverValue
     }
     // Final fallback for dark mode
-    return '#1a1a1a';
-  }, []);
+    return "#1a1a1a"
+  }, [])
 
   return (
-  <PopoverPrimitive.Portal>
-    <PopoverPrimitive.Content
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
         data-slot="popover-content"
-      align={align}
-      sideOffset={sideOffset}
-      className={cn(
+        align={align}
+        sideOffset={sideOffset}
+        className={cn(
           "bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-[9999] w-72 origin-(--radix-popover-content-transform-origin) rounded-md border p-4 shadow-md outline-hidden",
           "border-border/50 dark:border-border/60",
-        className
-      )}
+          className
+        )}
         style={{
           backgroundColor: popoverBgColor,
           opacity: 1,
           zIndex: 9999,
-          backdropFilter: 'none',
+          backdropFilter: "none",
+          pointerEvents: "auto",
           ...style,
         }}
-      {...props}
-    />
-  </PopoverPrimitive.Portal>
+        {...props}
+      />
+    </PopoverPrimitive.Portal>
   )
 }
 
-function PopoverAnchor({
-  ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
+function PopoverAnchor({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
   return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
 }
 

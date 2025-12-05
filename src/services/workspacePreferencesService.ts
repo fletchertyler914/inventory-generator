@@ -1,11 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export interface WorkspacePreferences {
-  view_mode: 'split' | 'table';
+  view_mode: 'split' | 'board';
   report_mode: boolean;
   notes_visible: boolean;
   findings_visible: boolean;
   timeline_visible: boolean;
+  duplicates_visible?: boolean;
   navigator_open: boolean;
   auto_sync_enabled?: boolean;
   auto_sync_interval_minutes?: number;
@@ -39,11 +40,12 @@ export const workspacePreferencesService = {
    */
   getDefaultPreferences(): WorkspacePreferences {
     return {
-      view_mode: 'table',
+      view_mode: 'board',
       report_mode: false,
       notes_visible: false,
       findings_visible: false,
       timeline_visible: false,
+      duplicates_visible: false,
       navigator_open: true,
       auto_sync_enabled: true, // Enabled by default
       auto_sync_interval_minutes: 5, // Default 5 minutes

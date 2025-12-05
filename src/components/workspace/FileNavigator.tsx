@@ -3,8 +3,9 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
-import { Search, FileText, Image, File, Folder, ChevronRight, ChevronDown, ChevronUp, PanelLeftClose, PanelLeft, Trash2 } from 'lucide-react';
+import { Search, Folder, ChevronRight, ChevronDown, ChevronUp, PanelLeftClose, PanelLeft, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getFileIcon } from '@/lib/file-icon-utils';
 import type { InventoryItem } from '@/types/inventory';
 import {
   ContextMenu,
@@ -13,6 +14,9 @@ import {
   ContextMenuTrigger,
 } from '../ui/context-menu';
 import { DeleteFileDialog } from '../ui/delete-file-dialog';
+import { useFileDuplicateCounts } from '@/hooks/useFileDuplicateCounts';
+import { buildFolderTree, type FolderNode } from '@/lib/file-tree-utils';
+import { DuplicateBadge } from '../duplicates/DuplicateBadge';
 
 interface FileNavigatorProps {
   items: InventoryItem[];
@@ -24,13 +28,6 @@ interface FileNavigatorProps {
   onToggleNavigator?: () => void;
   onFileRemove?: (file: InventoryItem) => void;
   caseId?: string;
-}
-
-interface FolderNode {
-  name: string;
-  path: string;
-  files: InventoryItem[];
-  subfolders: Map<string, FolderNode>;
 }
 
 /**
@@ -57,9 +54,10 @@ export const FileNavigator = memo(function FileNavigator({
   navigatorOpen = true,
   onToggleNavigator,
   onFileRemove,
+  caseId,
 }: FileNavigatorProps) {
   // Feature flag for bulk delete
-  const bulkDeleteEnabled = import.meta.env['VITE_BULK_DELETE_ENABLED'] === 'true' || import.meta.env['BULK_DELETE_ENABLED'] === 'true';
+  const bulkDeleteEnabled = import.meta.env.VITE_BULK_DELETE_ENABLED === 'true' || import.meta.env.BULK_DELETE_ENABLED === 'true';
   
   const [searchQuery, setSearchQuery] = React.useState('');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -67,49 +65,12 @@ export const FileNavigator = memo(function FileNavigator({
   const [fileToDelete, setFileToDelete] = useState<InventoryItem | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
-  // Build folder tree structure
+  // Fetch duplicate counts and group IDs for all files in the case
+  const { duplicateCounts, duplicateGroupIds } = useFileDuplicateCounts(caseId);
+
+  // Build folder tree structure using shared utility
   const folderTree = useMemo(() => {
-    const root: FolderNode = {
-      name: '',
-      path: '',
-      files: [],
-      subfolders: new Map(),
-    };
-
-    items.forEach(item => {
-      // Handle empty or root folder paths
-      const folderPath = item.folder_path || '';
-      
-      // Parse folder path into segments
-      const pathParts = folderPath.split('/').filter(p => p.trim());
-      
-      // If no folder path, add file to root
-      if (pathParts.length === 0) {
-        root.files.push(item);
-        return;
-      }
-
-      let current = root;
-
-      // Navigate/create folder structure
-      pathParts.forEach((part, index) => {
-        if (!current.subfolders.has(part)) {
-          const fullPath = pathParts.slice(0, index + 1).join('/');
-          current.subfolders.set(part, {
-            name: part,
-            path: fullPath,
-            files: [],
-            subfolders: new Map(),
-          });
-        }
-        current = current.subfolders.get(part)!;
-      });
-
-      // Add file to current folder
-      current.files.push(item);
-    });
-
-    return root;
+    return buildFolderTree(items);
   }, [items]);
 
   // Filter tree based on search query
@@ -231,12 +192,6 @@ export const FileNavigator = memo(function FileNavigator({
     setExpandedFolders(new Set());
   }, []);
 
-  const getFileIcon = useCallback((fileType: string) => {
-    const ext = fileType.toLowerCase();
-    if (['pdf'].includes(ext)) return <FileText className="h-4 w-4 flex-shrink-0" />;
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return <Image className="h-4 w-4 flex-shrink-0" />;
-    return <File className="h-4 w-4 flex-shrink-0" />;
-  }, []);
 
   const handleDeleteClick = useCallback((e: React.MouseEvent, item: InventoryItem) => {
     e.stopPropagation();
@@ -336,50 +291,52 @@ export const FileNavigator = memo(function FileNavigator({
       <div key={node.path || 'root'}>
         {/* Render folder button (skip for root) */}
         {!isRoot && (
-          <button
-            onClick={(e) => {
-              if (e.detail === 1) {
-                // Single click: toggle expand/collapse
+          <div className="flex items-center w-full min-w-0" style={{ paddingLeft: `${8 + level * 12}px` }}>
+            {/* Chevron button for expand/collapse */}
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
                 toggleFolder(node.path);
-              } else if (e.detail === 2) {
-                // Double click: select folder (filter table)
-                e.preventDefault();
+              }}
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 p-0 flex-shrink-0"
+              title={isExpanded ? "Collapse folder" : "Expand folder"}
+            >
+              {hasContent ? (
+                isExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                )
+              ) : (
+                <div className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            {/* Folder name button for selection/filtering */}
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
                 if (onFolderSelect) {
+                  // Toggle: if already selected, deselect (show all); otherwise select this folder
                   onFolderSelect(selectedFolderPath === node.path ? null : node.path);
                 }
-              }
-            }}
-            onDoubleClick={(e) => {
-              // Double click: select folder (filter table)
-              e.preventDefault();
-              if (onFolderSelect) {
-                onFolderSelect(selectedFolderPath === node.path ? null : node.path);
-              }
-            }}
-            className={cn(
-              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 overflow-hidden min-w-0",
-              "hover:bg-muted/50",
-              level === 0 && "font-medium",
-              selectedFolderPath === node.path && "bg-primary/10 border border-primary/20"
-            )}
-            style={{ paddingLeft: `${12 + level * 16}px` }}
-            title="Double-click to filter table by this folder"
-          >
-            {hasContent ? (
-              isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              )
-            ) : (
-              <div className="h-3.5 w-3.5 flex-shrink-0" />
-            )}
-            <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <span className="truncate flex-1">{node.name}</span>
-            <span className="text-xs text-muted-foreground flex-shrink-0">
-              {node.files.length + Array.from(node.subfolders.values()).reduce((sum, sub) => sum + sub.files.length, 0)}
-            </span>
-          </button>
+              }}
+              variant="ghost"
+              className={cn(
+                "flex-1 justify-start px-1 sm:px-2 py-2 h-auto text-sm gap-1 sm:gap-2 overflow-hidden min-w-0 items-center max-w-full",
+                level === 0 && "font-medium",
+                selectedFolderPath === node.path && "bg-primary/10 border border-primary/20"
+              )}
+              title={selectedFolderPath === node.path ? "Click to show all files" : "Click to filter board to this folder"}
+            >
+              <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="truncate flex-1 text-left min-w-0">{node.name}</span>
+              <span className="text-xs text-muted-foreground flex-shrink-0 hidden sm:inline">
+                {node.files.length + Array.from(node.subfolders.values()).reduce((sum, sub) => sum + sub.files.length, 0)}
+              </span>
+            </Button>
+          </div>
         )}
 
         {/* Render children (always render for root, conditionally for others) */}
@@ -398,11 +355,11 @@ export const FileNavigator = memo(function FileNavigator({
                   <ContextMenuTrigger asChild>
                     <div
                   className={cn(
-                        "w-full text-left px-3 py-2 rounded-md text-sm transition-colors relative",
-                        "hover:bg-muted/50 flex items-center gap-2 overflow-hidden min-w-0 group",
+                        "w-full text-left px-2 sm:px-3 py-2 rounded-md text-sm transition-colors relative",
+                        "hover:bg-muted/50 flex items-center gap-1 sm:gap-2 overflow-hidden min-w-0 group",
                         currentFile?.absolute_path === item.absolute_path && "bg-primary/10 text-primary font-medium"
                   )}
-                  style={{ paddingLeft: `${isRoot ? 12 : 40 + level * 16}px` }}
+                  style={{ paddingLeft: `${isRoot ? 8 : 32 + level * 12}px` }}
                     >
                       {bulkDeleteEnabled && (
                         <Checkbox
@@ -414,23 +371,22 @@ export const FileNavigator = memo(function FileNavigator({
                       )}
                       <button
                         onClick={() => onFileSelect(item)}
-                        className="flex items-center gap-2 overflow-hidden min-w-0 flex-1 text-left"
-                >
-                  {getFileIcon(item.file_type)}
-                  <span className="truncate flex-1">{item.file_name}</span>
-                </button>
-                      {onFileRemove && (
-                        <button
-                          onClick={(e) => handleDeleteClick(e, item)}
-                          className={cn(
-                            "opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-1 rounded hover:bg-destructive/10 text-destructive hover:text-destructive",
-                            "focus:opacity-100 focus:outline-none cursor-pointer"
-                          )}
-                          title="Remove file from case"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                        className="flex items-center gap-1 sm:gap-2 overflow-hidden min-w-0 flex-1 justify-start h-auto py-0 px-0 text-left font-inherit text-sm max-w-full group/file-item cursor-pointer [&_*]:pointer-events-none"
+                      >
+                        <span className="flex-shrink-0 flex items-center">{getFileIcon(item.file_type)}</span>
+                        <span className="truncate flex-1 text-sm leading-normal min-w-0">{item.file_name}</span>
+                        {item.id && duplicateCounts.has(item.id) && (
+                          <DuplicateBadge
+                            groupId={duplicateGroupIds.get(item.id)}
+                            count={duplicateCounts.get(item.id) || 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Open duplicate management - would need parent handler
+                            }}
+                            className="flex-shrink-0 ml-1.5 pointer-events-auto"
+                          />
+                        )}
+                      </button>
                     </div>
                   </ContextMenuTrigger>
                   {onFileRemove && (
@@ -455,17 +411,17 @@ export const FileNavigator = memo(function FileNavigator({
     );
   }
 
-  return (
-    <div className="h-full flex flex-col">
-      <div className="p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0">
-        <div className="relative flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    return (
+      <div className="h-full flex flex-col min-w-0 overflow-hidden" style={{ minWidth: '240px' }}>
+      <div className="p-2 sm:p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0 min-w-0">
+        <div className="relative flex items-center gap-1 sm:gap-2 min-w-0">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search folders..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-8 text-sm"
+              className="pl-7 sm:pl-9 h-8 text-sm min-w-0"
             />
           </div>
           {onToggleNavigator && (
@@ -510,44 +466,48 @@ export const FileNavigator = memo(function FileNavigator({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-3 space-y-1">
+        <div className="p-2 sm:p-3 space-y-1 min-w-0">
           {/* "All Files" option to clear folder filter */}
           {onFolderSelect && (
-            <button
+            <Button
               onClick={() => onFolderSelect(null)}
+              variant="ghost"
               className={cn(
-                "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 overflow-hidden min-w-0",
-                "hover:bg-muted/50 font-medium",
+                "w-full justify-start px-2 sm:px-3 py-2 h-auto text-sm flex items-center gap-1 sm:gap-2 overflow-hidden min-w-0 font-medium max-w-full",
                 !selectedFolderPath && "bg-primary/10 border border-primary/20"
               )}
               title="Show all files in table"
             >
               <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="truncate flex-1">All Files</span>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
+              <span className="truncate flex-1 text-left min-w-0">All Files</span>
+              <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     collapseAll();
                   }}
-                  className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="p-0.5 h-auto w-auto flex-shrink-0"
                   title="Collapse all folders"
                 >
                   <ChevronUp className="h-3.5 w-3.5" />
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     expandAll();
                   }}
-                  className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="p-0.5 h-auto w-auto flex-shrink-0"
                   title="Expand all folders"
                 >
                   <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-                <span className="text-xs text-muted-foreground">{items.length}</span>
+                </Button>
+                <span className="text-xs text-muted-foreground hidden sm:inline">{items.length}</span>
               </div>
-            </button>
+            </Button>
           )}
           {filteredTree.subfolders.size === 0 && filteredTree.files.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground">

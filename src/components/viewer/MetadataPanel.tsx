@@ -28,10 +28,12 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
     const loadMetadata = async () => {
       try {
         setLoading(true);
+        setMetadata(null); // Reset metadata to prevent showing stale data
         const extracted = await metadataService.extractMetadata(filePath);
         setMetadata(extracted);
       } catch (error) {
         console.error('Failed to extract metadata:', error);
+        setMetadata(null); // Ensure metadata is null on error
       } finally {
         setLoading(false);
       }
@@ -39,6 +41,9 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
 
     if (filePath) {
       loadMetadata();
+    } else {
+      setMetadata(null);
+      setLoading(false);
     }
   }, [filePath]);
 
@@ -93,7 +98,7 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
             <div className="flex items-center justify-between gap-4 px-2">
               <span className="text-muted-foreground font-medium">Type:</span>
               <Badge variant="outline" className="text-[10px]">
-                {metadata.file_type.toUpperCase()}
+                {metadata.file_type ? metadata.file_type.toUpperCase() : '—'}
               </Badge>
             </div>
             <div className="flex items-center justify-between gap-4 px-2">
@@ -316,6 +321,32 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
                     <span className="text-right font-mono">{Math.round(metadata.media_info.bitrate / 1000)} kbps</span>
                   </div>
                 )}
+                {metadata.media_info.sample_rate && (
+                  <div className="flex items-center justify-between gap-4 px-2">
+                    <span className="text-muted-foreground font-medium">Sample Rate:</span>
+                    <span className="text-right font-mono">{metadata.media_info.sample_rate} Hz</span>
+                  </div>
+                )}
+                {metadata.media_info.channels && (
+                  <div className="flex items-center justify-between gap-4 px-2">
+                    <span className="text-muted-foreground font-medium">Channels:</span>
+                    <span className="text-right font-mono">{metadata.media_info.channels}</span>
+                  </div>
+                )}
+                {(metadata.media_info.width || metadata.media_info.height) && (
+                  <div className="flex items-center justify-between gap-4 px-2">
+                    <span className="text-muted-foreground font-medium">Resolution:</span>
+                    <span className="text-right font-mono">
+                      {metadata.media_info.width ?? '—'} × {metadata.media_info.height ?? '—'}
+                    </span>
+                  </div>
+                )}
+                {metadata.media_info.frame_rate && (
+                  <div className="flex items-center justify-between gap-4 px-2">
+                    <span className="text-muted-foreground font-medium">Frame Rate:</span>
+                    <span className="text-right font-mono">{metadata.media_info.frame_rate.toFixed(2)} fps</span>
+                  </div>
+                )}
               </div>
             </div>
           </>
@@ -336,7 +367,7 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
                   return (
                     <div key={columnId} className="flex items-start justify-between gap-4 px-2">
                       <span className="text-muted-foreground font-medium">{label}:</span>
-                      <span className="text-right break-words flex-1">{formatMappingValue(value)}</span>
+                      <span className="text-right break-words flex-1">{formatMappingValue(value, mapping.extractionMethod)}</span>
                     </div>
                   )
                 })}

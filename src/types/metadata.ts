@@ -58,5 +58,9 @@ export interface MediaMetadata {
   bitrate?: number;
   sample_rate?: number;
   channels?: number;
+  // Video-specific fields
+  width?: number;
+  height?: number;
+  frame_rate?: number;
 }
 

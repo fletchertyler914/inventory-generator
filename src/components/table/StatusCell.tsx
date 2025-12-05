@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
+import { Button } from "../ui/button"
 import { cn } from "@/lib/utils"
 import type { FileStatus } from "@/types/inventory"
 
@@ -44,18 +45,18 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           className={cn(
-            "inline-flex items-center justify-center gap-1.5 h-7 px-2.5 text-xs font-normal rounded-md transition-all",
-            "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            "bg-muted/50 hover:bg-muted border border-border/50 flex-shrink-0",
+            "h-7 px-2.5 text-xs font-normal gap-1.5 flex-shrink-0",
             "min-w-[100px] max-w-[140px]",
             currentStatus?.color
           )}
         >
           <span className="truncate">{currentStatus?.label || "Unreviewed"}</span>
           <ChevronDown className="h-3 w-3 opacity-50 dark:opacity-70 flex-shrink-0" />
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent 
         className="w-48 p-1 dark:bg-popover dark:border-border/60 dark:text-popover-foreground border-border/50" 
@@ -63,15 +64,15 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
       >
         <div className="space-y-0.5">
           {statusOptions.map((option) => (
-            <button
+            <Button
               key={option.value}
               onClick={() => {
                 onStatusChange(option.value)
                 setOpen(false)
               }}
+              variant="ghost"
               className={cn(
-                "w-full flex items-center justify-between rounded-sm px-2 py-1.5 text-xs cursor-pointer transition-colors",
-                "hover:bg-muted/50",
+                "w-full justify-between h-auto px-2 py-1.5 text-xs",
                 status === option.value && "bg-muted/30"
               )}
             >
@@ -81,7 +82,7 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
               {status === option.value && (
                 <Check className="h-3.5 w-3.5 text-foreground dark:text-accent-foreground" />
               )}
-            </button>
+            </Button>
           ))}
         </div>
       </PopoverContent>

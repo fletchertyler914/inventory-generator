@@ -197,6 +197,7 @@ async fn scan_directory(path: String, app: tauri::AppHandle) -> Result<Vec<Inven
     Ok(items)
 }
 
+/// Export case files for report generation
 #[tauri::command]
 fn export_inventory(
     items: Vec<InventoryItem>,
@@ -1045,6 +1046,34 @@ async fn toggle_note_pinned(note_id: String, app: tauri::AppHandle) -> Result<()
         .map_err(|e| format!("Failed to toggle note pinned status: {}", e))?;
     
     Ok(())
+}
+
+/// Get note counts for all files in a case
+/// ELITE: Efficient batch query using existing index idx_notes_case_file
+#[tauri::command]
+async fn get_file_note_counts(
+    case_id: String,
+    app: tauri::AppHandle,
+) -> Result<std::collections::HashMap<String, i64>, String> {
+    let pool = database::get_db_pool(&app).await?;
+    
+    // ELITE: Single efficient query with GROUP BY, leverages idx_notes_case_file index
+    let rows = sqlx::query(
+        "SELECT file_id, COUNT(*) as count FROM notes WHERE case_id = ? AND file_id IS NOT NULL GROUP BY file_id"
+    )
+    .bind(&case_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Database query error: {}", e))?;
+    
+    let mut counts = std::collections::HashMap::new();
+    for row in rows {
+        let file_id: String = row.get("file_id");
+        let count: i64 = row.get("count");
+        counts.insert(file_id, count);
+    }
+    
+    Ok(counts)
 }
 
 // Findings management commands
@@ -1964,15 +1993,14 @@ async fn search_all(
     }
     
     // ELITE: Search findings using FTS5
+    // Include finding_id and first linked file's absolute_path if available
     let finding_rows = sqlx::query(
         r#"
         SELECT 
-            NULL as file_id,
+            f.id as finding_id,
             f.title as file_name,
-            NULL as folder_path,
-            NULL as absolute_path,
-            NULL as note_id,
             f.description as note_content,
+            f.linked_files,
             'finding' as match_type,
             rank as rank
         FROM findings_fts
@@ -1989,12 +2017,36 @@ async fn search_all(
     .map_err(|e| format!("Finding search error: {}", e))?;
     
     for row in finding_rows {
+        let finding_id: String = row.get("finding_id");
+        
+        // Try to get first linked file's absolute_path
+        let linked_files_json: Option<String> = row.get("linked_files");
+        let mut absolute_path: Option<String> = None;
+        
+        if let Some(ref linked_files_str) = linked_files_json {
+            if let Ok(linked_files) = serde_json::from_str::<Vec<String>>(linked_files_str) {
+                if let Some(first_file_id) = linked_files.first() {
+                    // Get file's absolute_path
+                    if let Ok(file_row) = sqlx::query("SELECT absolute_path FROM files WHERE id = ? AND case_id = ?")
+                        .bind(first_file_id)
+                        .bind(&case_id)
+                        .fetch_optional(&pool)
+                        .await
+                    {
+                        if let Some(file_row) = file_row {
+                            absolute_path = file_row.try_get("absolute_path").ok();
+                        }
+                    }
+                }
+            }
+        }
+        
         results.push(SearchResult {
             file_id: None,
             file_name: row.get("file_name"),
             folder_path: None,
-            absolute_path: None,
-            note_id: None,
+            absolute_path,
+            note_id: Some(finding_id), // Reuse note_id field to pass finding_id
             note_content: row.get("note_content"),
             match_type: "finding".to_string(),
             rank: row.get::<Option<f64>, _>("rank").unwrap_or(0.0),
@@ -2002,15 +2054,13 @@ async fn search_all(
     }
     
     // ELITE: Search timeline events using FTS5
+    // Include timeline_event_id and source file's absolute_path if available
     let timeline_rows = sqlx::query(
         r#"
         SELECT 
-            NULL as file_id,
-            NULL as file_name,
-            NULL as folder_path,
-            NULL as absolute_path,
-            NULL as note_id,
+            te.id as timeline_event_id,
             te.description as note_content,
+            te.source_file_id,
             'timeline' as match_type,
             rank as rank
         FROM timeline_events_fts
@@ -2027,12 +2077,31 @@ async fn search_all(
     .map_err(|e| format!("Timeline search error: {}", e))?;
     
     for row in timeline_rows {
+        let timeline_event_id: String = row.get("timeline_event_id");
+        
+        // Try to get source file's absolute_path
+        let source_file_id: Option<String> = row.get("source_file_id");
+        let mut absolute_path: Option<String> = None;
+        
+        if let Some(ref file_id) = source_file_id {
+            if let Ok(file_row) = sqlx::query("SELECT absolute_path FROM files WHERE id = ? AND case_id = ?")
+                .bind(file_id)
+                .bind(&case_id)
+                .fetch_optional(&pool)
+                .await
+            {
+                if let Some(file_row) = file_row {
+                    absolute_path = file_row.try_get("absolute_path").ok();
+                }
+            }
+        }
+        
         results.push(SearchResult {
             file_id: None,
             file_name: None,
             folder_path: None,
-            absolute_path: None,
-            note_id: None,
+            absolute_path,
+            note_id: Some(timeline_event_id), // Reuse note_id field to pass timeline_event_id
             note_content: row.get("note_content"),
             match_type: "timeline".to_string(),
             rank: row.get::<Option<f64>, _>("rank").unwrap_or(0.0),
@@ -2057,6 +2126,7 @@ async fn ingest_files_to_case(
 ) -> Result<IngestResult, String> {
     use file_ingestion::{process_file_async, batch_insert_files, batch_update_files, FileAction};
     use tokio::task;
+    use crate::scanner::FileMetadata;
     
     let incremental_mode = incremental.unwrap_or(true);
     log::info!("Ingesting files to case {} from {} (incremental: {})", case_id, folder_path, incremental_mode);
@@ -2078,24 +2148,68 @@ async fn ingest_files_to_case(
         })?;
     
     // SECURITY: Validate and canonicalize path (prevents path traversal)
-    let root_path = path_validation::validate_directory_path(&PathBuf::from(&folder_path)).await
+    let canonical_path = path_validation::validate_and_canonicalize_path(&PathBuf::from(&folder_path))
         .map_err(|e| {
-            log::error!("Invalid folder path {}: {}", folder_path, e);
-            format!("Invalid folder path: {}", e)
+            log::error!("Invalid path {}: {}", folder_path, e);
+            format!("Invalid path: {}", e)
         })?;
     
-    // Load filter config from database
-    let filter_config = load_system_file_filter(&app).await;
-    
-    // ELITE: Use async scanning for non-blocking performance
-    let file_metadatas = scanner::scan_folder_async(&root_path, Some(&filter_config)).await
+    // Check if path exists and determine if it's a file or directory
+    let metadata = tokio::fs::metadata(&canonical_path).await
         .map_err(|e| {
-            log::error!("Failed to scan folder {}: {}", folder_path, e);
-            format!("Failed to scan folder: {}", e)
+            log::error!("Failed to access path {}: {}", folder_path, e);
+            format!("Path does not exist or cannot be accessed: {}", e)
         })?;
+    
+    let is_directory = metadata.is_dir();
+    let now = chrono::Utc::now().timestamp();
+    
+    // Determine the folder_path to use for processing
+    // For directories: use the directory path itself
+    // For files: use the parent directory path
+    let processing_folder_path = if is_directory {
+        canonical_path.to_string_lossy().to_string()
+    } else {
+        canonical_path.parent()
+            .ok_or_else(|| {
+                log::error!("File path has no parent directory: {}", folder_path);
+                "File path has no parent directory".to_string()
+            })?
+            .to_string_lossy()
+            .to_string()
+    };
+    
+    // Handle single file vs directory
+    let file_metadatas = if is_directory {
+        // Directory: scan folder for all files
+        let filter_config = load_system_file_filter(&app).await;
+        
+        // ELITE: Use async scanning for non-blocking performance
+        scanner::scan_folder_async(&canonical_path, Some(&filter_config)).await
+            .map_err(|e| {
+                log::error!("Failed to scan folder {}: {}", folder_path, e);
+                format!("Failed to scan folder: {}", e)
+            })?
+    } else {
+        // File: process as single file
+        // Use parent directory as root_path for FileMetadata
+        let root_path = canonical_path.parent()
+            .ok_or_else(|| {
+                log::error!("File path has no parent directory: {}", folder_path);
+                "File path has no parent directory".to_string()
+            })?;
+        
+        // Create FileMetadata for the single file
+        let file_metadata = FileMetadata::from_path_async(root_path, &canonical_path).await
+            .map_err(|e| {
+                log::error!("Failed to create file metadata for {}: {}", folder_path, e);
+                format!("Failed to create file metadata: {}", e)
+            })?;
+        
+        vec![file_metadata]
+    };
     
     log::info!("Found {} files to process", file_metadatas.len());
-    let now = chrono::Utc::now().timestamp();
     
     // ELITE: Process files in parallel batches
     // Optimal batch size: 2x CPU cores for I/O-bound work
@@ -2111,14 +2225,14 @@ async fn ingest_files_to_case(
             .map(|file_meta| {
                 let pool_clone = Arc::clone(&pool);
                 let case_id_clone = case_id.clone();
-                let folder_path_clone = folder_path.clone();
+                let processing_folder_path_clone = processing_folder_path.clone();
                 let file_meta_clone = file_meta.clone();
                 
                 task::spawn(async move {
                     process_file_async(
                         &file_meta_clone,
                         &case_id_clone,
-                        &folder_path_clone,
+                        &processing_folder_path_clone,
                         &pool_clone,
                         incremental_mode,
                     ).await
@@ -2164,6 +2278,19 @@ async fn ingest_files_to_case(
             log::error!("Batch update failed: {}", e);
             format!("Batch update failed: {}", e)
         })?;
+    
+    // ELITE: Detect and create duplicate groups for newly inserted/updated files (local files only)
+    let all_processed_files: Vec<_> = to_insert.iter().chain(to_update.iter()).cloned().collect();
+    let duplicate_groups_created = file_ingestion::batch_create_duplicate_groups(
+        &pool,
+        &case_id,
+        &all_processed_files,
+        now,
+    ).await.unwrap_or(0);
+    
+    if duplicate_groups_created > 0 {
+        log::info!("Created {} duplicate groups during ingestion", duplicate_groups_created);
+    }
     
     // Update case timestamp
     sqlx::query("UPDATE cases SET updated_at = ? WHERE id = ?")
@@ -2905,6 +3032,263 @@ async fn find_duplicate_files(
     Ok(duplicates)
 }
 
+/// ELITE: Find all duplicate groups in a case (local files only)
+#[tauri::command]
+async fn find_all_duplicate_groups(
+    case_id: String,
+    app: tauri::AppHandle,
+) -> Result<Vec<serde_json::Value>, String> {
+    let pool = database::get_db_pool(&app).await?;
+    
+    // Find all duplicate groups with file details (local files only)
+    let rows = sqlx::query(
+        r#"
+        SELECT 
+            dg.group_id,
+            dg.file_id,
+            dg.is_primary,
+            f.file_name,
+            f.absolute_path,
+            f.folder_path,
+            f.status,
+            f.file_size,
+            f.created_at,
+            f.modified_at,
+            f.source_directory
+        FROM duplicate_groups dg
+        INNER JOIN files f ON dg.file_id = f.id
+        INNER JOIN case_sources cs ON f.case_id = cs.case_id AND f.source_directory = cs.source_path
+        WHERE f.case_id = ?
+          AND f.deleted_at IS NULL
+          AND cs.source_location = 'local'
+        ORDER BY dg.group_id, dg.is_primary DESC, f.file_name
+        "#
+    )
+    .bind(&case_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Failed to find duplicate groups: {}", e))?;
+    
+    // Group by group_id
+    use std::collections::HashMap;
+    let mut groups: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+    
+    for row in rows {
+        let group_id: String = row.get("group_id");
+        let file_data = serde_json::json!({
+            "file_id": row.get::<String, _>("file_id"),
+            "file_name": row.get::<String, _>("file_name"),
+            "absolute_path": row.get::<String, _>("absolute_path"),
+            "folder_path": row.get::<String, _>("folder_path"),
+            "status": row.get::<String, _>("status"),
+            "file_size": row.get::<i64, _>("file_size"),
+            "created_at": row.get::<i64, _>("created_at"),
+            "modified_at": row.get::<i64, _>("modified_at"),
+            "source_directory": row.get::<Option<String>, _>("source_directory"),
+            "is_primary": row.get::<i64, _>("is_primary") == 1,
+        });
+        
+        groups.entry(group_id).or_insert_with(Vec::new).push(file_data);
+    }
+    
+    // Convert to array of group objects
+    let mut result = Vec::new();
+    for (group_id, files) in groups {
+        if files.len() > 1 {
+            result.push(serde_json::json!({
+                "group_id": group_id,
+                "files": files,
+                "count": files.len(),
+            }));
+        }
+    }
+    
+    Ok(result)
+}
+
+/// ELITE: Get duplicate group for a specific file
+#[tauri::command]
+async fn get_duplicate_group(
+    case_id: String,
+    file_id: String,
+    app: tauri::AppHandle,
+) -> Result<Option<serde_json::Value>, String> {
+    let pool = database::get_db_pool(&app).await?;
+    
+    // Get group_id for this file
+    let group_row = sqlx::query(
+        "SELECT group_id FROM duplicate_groups WHERE file_id = ?"
+    )
+    .bind(&file_id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("Failed to find duplicate group: {}", e))?;
+    
+    let group_id: String = match group_row {
+        Some(row) => row.get("group_id"),
+        None => return Ok(None),
+    };
+    
+    // Get all files in this group (local files only)
+    let rows = sqlx::query(
+        r#"
+        SELECT 
+            dg.file_id,
+            dg.is_primary,
+            f.file_name,
+            f.absolute_path,
+            f.folder_path,
+            f.status,
+            f.file_size,
+            f.created_at,
+            f.modified_at,
+            f.source_directory
+        FROM duplicate_groups dg
+        INNER JOIN files f ON dg.file_id = f.id
+        INNER JOIN case_sources cs ON f.case_id = cs.case_id AND f.source_directory = cs.source_path
+        WHERE dg.group_id = ?
+          AND f.case_id = ?
+          AND f.deleted_at IS NULL
+          AND cs.source_location = 'local'
+        ORDER BY dg.is_primary DESC, f.file_name
+        "#
+    )
+    .bind(&group_id)
+    .bind(&case_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Failed to get duplicate group files: {}", e))?;
+    
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    
+    let files: Vec<serde_json::Value> = rows.iter().map(|row| {
+        serde_json::json!({
+            "file_id": row.get::<String, _>("file_id"),
+            "file_name": row.get::<String, _>("file_name"),
+            "absolute_path": row.get::<String, _>("absolute_path"),
+            "folder_path": row.get::<String, _>("folder_path"),
+            "status": row.get::<String, _>("status"),
+            "file_size": row.get::<i64, _>("file_size"),
+            "created_at": row.get::<i64, _>("created_at"),
+            "modified_at": row.get::<i64, _>("modified_at"),
+            "source_directory": row.get::<Option<String>, _>("source_directory"),
+            "is_primary": row.get::<i64, _>("is_primary") == 1,
+        })
+    }).collect();
+    
+    Ok(Some(serde_json::json!({
+        "group_id": group_id,
+        "files": files,
+        "count": files.len(),
+    })))
+}
+
+/// ELITE: Mark a file as primary in a duplicate group
+#[tauri::command]
+async fn mark_duplicate_primary(
+    file_id: String,
+    group_id: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let pool = database::get_db_pool(&app).await?;
+    
+    let mut transaction = pool.begin()
+        .await
+        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+    
+    // First, unset all primaries in this group
+    sqlx::query("UPDATE duplicate_groups SET is_primary = 0 WHERE group_id = ?")
+        .bind(&group_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|e| format!("Failed to unset primaries: {}", e))?;
+    
+    // Then set this file as primary
+    sqlx::query("UPDATE duplicate_groups SET is_primary = 1 WHERE group_id = ? AND file_id = ?")
+        .bind(&group_id)
+        .bind(&file_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|e| format!("Failed to set primary: {}", e))?;
+    
+    transaction.commit()
+        .await
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+    
+    Ok(())
+}
+
+/// ELITE: Merge metadata from source file to target file, then remove source
+#[tauri::command]
+async fn merge_duplicate_metadata(
+    source_file_id: String,
+    target_file_id: String,
+    case_id: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let pool = database::get_db_pool(&app).await?;
+    
+    let mut transaction = pool.begin()
+        .await
+        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+    
+    // Merge notes: Move notes from source to target
+    sqlx::query("UPDATE notes SET file_id = ? WHERE file_id = ? AND case_id = ?")
+        .bind(&target_file_id)
+        .bind(&source_file_id)
+        .bind(&case_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|e| format!("Failed to merge notes: {}", e))?;
+    
+    // Merge findings: Update linked_files JSON to replace source_file_id with target_file_id
+    let findings_rows = sqlx::query("SELECT id, linked_files FROM findings WHERE case_id = ? AND linked_files IS NOT NULL")
+        .bind(&case_id)
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(|e| format!("Failed to get findings: {}", e))?;
+    
+    for row in findings_rows {
+        let finding_id: String = row.get("id");
+        if let Some(linked_files_json) = row.get::<Option<String>, _>("linked_files") {
+            if let Ok(mut linked_files) = serde_json::from_str::<Vec<String>>(&linked_files_json) {
+                // Replace source_file_id with target_file_id if present
+                if linked_files.contains(&source_file_id) {
+                    linked_files.retain(|id| id != &source_file_id);
+                    if !linked_files.contains(&target_file_id) {
+                        linked_files.push(target_file_id.clone());
+                    }
+                    let updated_json = serde_json::to_string(&linked_files)
+                        .map_err(|e| format!("Failed to serialize linked_files: {}", e))?;
+                    sqlx::query("UPDATE findings SET linked_files = ? WHERE id = ?")
+                        .bind(&updated_json)
+                        .bind(&finding_id)
+                        .execute(&mut *transaction)
+                        .await
+                        .map_err(|e| format!("Failed to update finding: {}", e))?;
+                }
+            }
+        }
+    }
+    
+    // Merge timeline events: Update source_file_id references
+    sqlx::query("UPDATE timeline_events SET source_file_id = ? WHERE source_file_id = ? AND case_id = ?")
+        .bind(&target_file_id)
+        .bind(&source_file_id)
+        .bind(&case_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|e| format!("Failed to merge timeline events: {}", e))?;
+    
+    transaction.commit()
+        .await
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+    
+    Ok(())
+}
+
 /// Get column configuration from database
 #[tauri::command]
 async fn get_column_config_db(
@@ -3280,6 +3664,7 @@ pub fn run() {
             extract_file_metadata,
             extract_dates_from_file,
             toggle_note_pinned,
+            get_file_note_counts,
             search_files,
             search_notes,
             search_all,
@@ -3294,6 +3679,10 @@ pub fn run() {
             refresh_single_file,
             refresh_files_bulk,
             find_duplicate_files,
+            find_all_duplicate_groups,
+            get_duplicate_group,
+            mark_duplicate_primary,
+            merge_duplicate_metadata,
             update_file_status,
             remove_file_from_case,
             get_column_config_db,
