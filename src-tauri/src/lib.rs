@@ -11,6 +11,7 @@ mod date_extraction;
 mod field_extraction;
 mod path_validation;
 mod file_operations;
+mod file_cleanup;
 
 use mappings::process_file_metadata;
 use export::{read_xlsx, read_csv, read_json};
@@ -2231,6 +2232,12 @@ async fn ingest_files_to_case(
     
     log::info!("Found {} files to process", file_metadatas.len());
     
+    // ELITE: Collect scanned file paths for cleanup detection
+    use std::collections::HashSet;
+    let scanned_file_paths: HashSet<String> = file_metadatas.iter()
+        .map(|fm| fm.absolute_path.clone())
+        .collect();
+    
     // ELITE: Process files in parallel batches
     // Optimal batch size: 2x CPU cores for I/O-bound work
     let num_workers = std::cmp::max(4, num_cpus::get() * 2);
@@ -2320,10 +2327,31 @@ async fn ingest_files_to_case(
         .await
         .ok();
     
+    // ELITE: Cleanup orphaned files (missing from source, no user data)
+    let cleanup_result = file_cleanup::cleanup_orphaned_files(
+        &pool,
+        &case_id,
+        &processing_folder_path,
+        &scanned_file_paths,
+        now,
+    ).await.unwrap_or(file_cleanup::CleanupResult {
+        files_deleted: 0,
+        files_protected: 0,
+    });
+    
+    if cleanup_result.files_deleted > 0 {
+        log::info!("Auto-deleted {} orphaned files from source {}", cleanup_result.files_deleted, processing_folder_path);
+    }
+    if cleanup_result.files_protected > 0 {
+        log::info!("Protected {} files with user data from deletion", cleanup_result.files_protected);
+    }
+    
     let result = IngestResult {
         files_inserted: to_insert.len(),
         files_updated: to_update.len(),
         files_skipped: skipped_count,
+        files_deleted: cleanup_result.files_deleted,
+        files_protected: cleanup_result.files_protected,
         total_files: to_insert.len() + to_update.len(),
         errors: if errors.is_empty() { None } else { Some(errors) },
     };
@@ -2347,7 +2375,7 @@ async fn ingest_files_to_case(
 #[allow(dead_code)] // May be useful for future features
 async fn load_file_from_db(pool: &sqlx::sqlite::SqlitePool, file_id: &str) -> Result<File, String> {
     let row = sqlx::query(
-        "SELECT id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, status, tags, source_directory FROM files WHERE id = ?"
+        "SELECT id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, updated_at, status, tags, source_directory FROM files WHERE id = ?"
     )
     .bind(file_id)
     .fetch_optional(pool)
@@ -2366,6 +2394,7 @@ async fn load_file_from_db(pool: &sqlx::sqlite::SqlitePool, file_id: &str) -> Re
         file_size: row.get("file_size"),
         created_at: row.get("created_at"),
         modified_at: row.get("modified_at"),
+        updated_at: row.get("updated_at"),
         status: row.get("status"),
         tags: row.get("tags"),
         source_directory: row.get("source_directory"),
@@ -2389,7 +2418,7 @@ async fn load_case_files(
         .ok_or_else(|| "Case not found".to_string())?;
     
     let rows = sqlx::query(
-        "SELECT id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, status, tags, source_directory FROM files WHERE case_id = ? AND deleted_at IS NULL ORDER BY file_name"
+        "SELECT id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, updated_at, status, tags, source_directory FROM files WHERE case_id = ? AND deleted_at IS NULL ORDER BY file_name"
     )
     .bind(&case_id)
     .fetch_all(&pool)
@@ -2409,6 +2438,7 @@ async fn load_case_files(
             file_size: row.get("file_size"),
             created_at: row.get("created_at"),
             modified_at: row.get("modified_at"),
+            updated_at: row.get("updated_at"),
             status: row.get("status"),
             tags: row.get("tags"),
             source_directory: row.get("source_directory"),
@@ -2440,7 +2470,7 @@ async fn load_case_files_with_inventory(
     // For 10k+ files, this query should complete in < 100ms with proper indexing
     // Filter out soft-deleted files (deleted_at IS NULL)
     let rows = sqlx::query(
-        "SELECT f.id, f.case_id, f.file_name, f.folder_path, f.absolute_path, f.file_hash, f.file_type, f.file_size, f.created_at, f.modified_at, f.status, f.tags, f.source_directory, fm.inventory_data 
+        "SELECT f.id, f.case_id, f.file_name, f.folder_path, f.absolute_path, f.file_hash, f.file_type, f.file_size, f.created_at, f.modified_at, f.updated_at, f.status, f.tags, f.source_directory, fm.inventory_data 
          FROM files f 
          LEFT JOIN file_metadata fm ON f.id = fm.file_id 
          WHERE f.case_id = ? AND f.deleted_at IS NULL
@@ -2468,6 +2498,7 @@ async fn load_case_files_with_inventory(
             file_size: row.get("file_size"),
             created_at: row.get("created_at"),
             modified_at: row.get("modified_at"),
+            updated_at: row.get("updated_at"),
             status: row.get("status"),
             tags: row.get("tags"),
             source_directory: row.get("source_directory"),
@@ -2505,6 +2536,8 @@ pub struct IngestResult {
     pub files_inserted: usize,
     pub files_updated: usize,
     pub files_skipped: usize,
+    pub files_deleted: usize,  // Auto-deleted files (orphaned, no user data)
+    pub files_protected: usize, // Files with user data that need review
     pub total_files: usize,
     pub errors: Option<Vec<String>>,
 }
@@ -2742,6 +2775,8 @@ async fn sync_case_all_sources(
             files_inserted: 0,
             files_updated: 0,
             files_skipped: 0,
+            files_deleted: 0,
+            files_protected: 0,
             total_files: 0,
             errors: Some(vec!["No sources configured for this case".to_string()]),
         });
@@ -2751,6 +2786,8 @@ async fn sync_case_all_sources(
     let mut total_inserted = 0;
     let mut total_updated = 0;
     let mut total_skipped = 0;
+    let mut total_deleted = 0;
+    let mut total_protected = 0;
     let mut all_errors = Vec::new();
     
     // Sync each source
@@ -2760,6 +2797,8 @@ async fn sync_case_all_sources(
                 total_inserted += result.files_inserted;
                 total_updated += result.files_updated;
                 total_skipped += result.files_skipped;
+                total_deleted += result.files_deleted;
+                total_protected += result.files_protected;
                 if let Some(errors) = result.errors {
                     all_errors.extend(errors);
                 }
@@ -2774,6 +2813,8 @@ async fn sync_case_all_sources(
         files_inserted: total_inserted,
         files_updated: total_updated,
         files_skipped: total_skipped,
+        files_deleted: total_deleted,
+        files_protected: total_protected,
         total_files: total_inserted + total_updated + total_skipped,
         errors: if all_errors.is_empty() { None } else { Some(all_errors) },
     })
@@ -2913,7 +2954,7 @@ async fn rename_file(
     
     // Get current file path from database (within transaction)
     let file_row = sqlx::query(
-        "SELECT case_id, absolute_path, folder_path, file_name, source_directory FROM files WHERE id = ? AND deleted_at IS NULL"
+        "SELECT case_id, absolute_path, folder_path, file_name, file_type, source_directory FROM files WHERE id = ? AND deleted_at IS NULL"
     )
         .bind(&file_id)
         .fetch_optional(&mut *transaction)
@@ -2921,18 +2962,45 @@ async fn rename_file(
         .map_err(|e| format!("Database error: {}", e))?
         .ok_or_else(|| "File not found or has been deleted".to_string())?;
     
-    let case_id: String = file_row.get("case_id");
+    let _case_id: String = file_row.get("case_id");
     let current_path: String = file_row.get("absolute_path");
     let folder_path: String = file_row.get("folder_path");
     let source_directory: String = file_row.get("source_directory");
+    let file_type: Option<String> = file_row.get("file_type");
+    
+    // ELITE: Ensure extension is preserved using actual file path extension
+    // This handles complex filenames where parsing might fail
+    let current_path_buf = PathBuf::from(&current_path);
+    let actual_extension = current_path_buf.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|s| s.to_lowercase());
+    
+    // Get extension from file_type (database) or actual file path
+    let extension = if let Some(ref ft) = file_type {
+        // file_type is stored as uppercase (e.g., "PNG"), convert to lowercase
+        Some(ft.to_lowercase())
+    } else {
+        actual_extension
+    };
+    
+    // Ensure new filename has the correct extension
+    let new_name_with_ext = if let Some(ref ext) = extension {
+        let ext_with_dot = format!(".{}", ext);
+        if !new_name.ends_with(&ext_with_dot) && !new_name.ends_with(&ext.to_uppercase()) {
+            format!("{}{}", new_name, ext_with_dot)
+        } else {
+            new_name.clone()
+        }
+    } else {
+        new_name.clone()
+    };
     
     // Validate new filename
-    validate_filename(&new_name)
+    validate_filename(&new_name_with_ext)
         .map_err(|e| format!("Invalid filename: {}", e))?;
     
     // Construct new path
-    let current_path_buf = PathBuf::from(&current_path);
-    let new_path = construct_new_path(&current_path_buf, &new_name).await?;
+    let new_path = construct_new_path(&current_path_buf, &new_name_with_ext).await?;
     let new_path_str = new_path.to_string_lossy().to_string();
     
     // Check if target path already exists
@@ -2956,7 +3024,7 @@ async fn rename_file(
     let update_result = sqlx::query(
         "UPDATE files SET file_name = ?, folder_path = ?, absolute_path = ?, updated_at = ? WHERE id = ?"
     )
-        .bind(&new_name)
+        .bind(&new_name_with_ext)
         .bind(&new_folder_path)
         .bind(&new_path_str)
         .bind(chrono::Utc::now().timestamp())

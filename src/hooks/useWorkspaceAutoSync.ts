@@ -64,10 +64,15 @@ export function useWorkspaceAutoSync({
         lastAutoSyncTimeRef.current = now
 
         // Show subtle notification only if files were actually changed
-        if (result.files_inserted > 0 || result.files_updated > 0) {
+        if (result.files_inserted > 0 || result.files_updated > 0 || (result.files_deleted ?? 0) > 0) {
+          const parts: string[] = []
+          if (result.files_inserted > 0) parts.push(`${result.files_inserted} new`)
+          if (result.files_updated > 0) parts.push(`${result.files_updated} updated`)
+          if ((result.files_deleted ?? 0) > 0) parts.push(`${result.files_deleted} deleted (auto)`)
+          
           toast({
             title: "Files synced",
-            description: `${result.files_inserted} new, ${result.files_updated} updated`,
+            description: parts.join(", "),
             variant: "default",
             duration: 3000, // Shorter duration for auto-sync
           })
@@ -116,11 +121,27 @@ export function useWorkspaceAutoSync({
       // Update last sync time to prevent immediate auto-sync
       lastAutoSyncTimeRef.current = Date.now()
 
+      const parts: string[] = []
+      if (result.files_inserted > 0) parts.push(`${result.files_inserted} new`)
+      if (result.files_updated > 0) parts.push(`${result.files_updated} updated`)
+      if (result.files_skipped > 0) parts.push(`${result.files_skipped} skipped`)
+      if ((result.files_deleted ?? 0) > 0) parts.push(`${result.files_deleted} deleted (auto)`)
+      
       toast({
         title: "Files synced",
-        description: `${result.files_inserted} new, ${result.files_updated} updated, ${result.files_skipped} skipped`,
+        description: parts.length > 0 ? parts.join(", ") : "No changes",
         variant: "success",
       })
+      
+      // Show warning if files were protected (have user data)
+      if ((result.files_protected ?? 0) > 0) {
+        toast({
+          title: "Files protected",
+          description: `${result.files_protected} file(s) with notes or findings were not auto-deleted`,
+          variant: "default",
+          duration: 4000,
+        })
+      }
 
       if (result.errors && result.errors.length > 0) {
         toast({

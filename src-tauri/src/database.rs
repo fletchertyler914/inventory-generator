@@ -231,6 +231,7 @@ pub struct File {
     pub file_size: i64,
     pub created_at: i64,
     pub modified_at: i64,
+    pub updated_at: i64,
     pub status: String, // "unreviewed", "in_progress", "reviewed", "flagged", "finalized"
     pub tags: Option<String>, // JSON array
     pub source_directory: Option<String>, // Track which directory file came from
@@ -601,6 +602,7 @@ pub fn get_migrations() -> Vec<Migration> {
                     file_size INTEGER,
                     created_at INTEGER,
                     modified_at INTEGER,
+                    updated_at INTEGER,
                     status TEXT DEFAULT 'unreviewed',
                     tags TEXT,
                     source_directory TEXT,

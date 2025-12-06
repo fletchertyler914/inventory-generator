@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from './button';
 import {
   Dialog,
@@ -10,7 +10,7 @@ import {
 } from './dialog';
 import { Input } from './input';
 import { Label } from './label';
-import { validateFilename, extractFilename } from '@/lib/file-validation';
+import { validateFilename, extractFilename, extractExtension, getFilenameWithoutExtension } from '@/lib/file-validation';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from './alert';
 
@@ -19,6 +19,7 @@ interface RenameFileDialogProps {
   onOpenChange: (open: boolean) => void;
   currentPath: string;
   currentFileName: string;
+  fileType?: string; // File extension/type from database (e.g., "PNG", "PDF")
   onConfirm: (newName: string) => Promise<void>;
   onSyncFirst?: () => Promise<void>;
 }
@@ -28,17 +29,32 @@ export function RenameFileDialog({
   onOpenChange,
   currentPath,
   currentFileName,
+  fileType,
   onConfirm,
   onSyncFirst,
 }: RenameFileDialogProps) {
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Get extension from file_type property (from database) or fallback to parsing filename
+  // ELITE: Use file_type directly to avoid parsing issues with complex filenames
+  const fileExtension = useMemo(() => {
+    if (fileType) {
+      // fileType is stored as uppercase (e.g., "PNG", "PDF")
+      const ext = fileType.toLowerCase().trim();
+      return ext ? `.${ext}` : '';
+    }
+    // Fallback: try to extract from filename (may fail for complex names)
+    return extractExtension(currentFileName);
+  }, [fileType, currentFileName]);
 
   // Reset state when dialog opens/closes
   useEffect(() => {
     if (open) {
-      setNewName(currentFileName);
+      // Initialize with just the name part (without extension) for better UX
+      const nameWithoutExt = getFilenameWithoutExtension(currentFileName);
+      setNewName(nameWithoutExt);
       setError(null);
       setLoading(false);
     } else {
@@ -54,27 +70,32 @@ export function RenameFileDialog({
       return;
     }
 
-    const validation = validateFilename(newName);
+    // Construct full filename with extension for validation
+    const fullName = newName.trim() + fileExtension;
+    const validation = validateFilename(fullName);
     if (!validation.valid) {
       setError(validation.error || 'Invalid filename');
-    } else if (newName === currentFileName) {
+    } else if (fullName === currentFileName) {
       setError('New name must be different from current name');
     } else {
       setError(null);
     }
-  }, [newName, currentFileName, open]);
+  }, [newName, currentFileName, open, fileExtension]);
 
   const handleConfirm = async () => {
     if (loading) return;
 
+    // Construct full filename with extension
+    const fullName = newName.trim() + fileExtension;
+    
     // Final validation
-    const validation = validateFilename(newName);
+    const validation = validateFilename(fullName);
     if (!validation.valid) {
       setError(validation.error || 'Invalid filename');
       return;
     }
 
-    if (newName === currentFileName) {
+    if (fullName === currentFileName) {
       setError('New name must be different from current name');
       return;
     }
@@ -83,7 +104,7 @@ export function RenameFileDialog({
     setError(null);
 
     try {
-      await onConfirm(newName);
+      await onConfirm(fullName);
       onOpenChange(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to rename file';
@@ -103,7 +124,8 @@ export function RenameFileDialog({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !error && newName !== currentFileName && !loading) {
+    const fullName = newName.trim() + fileExtension;
+    if (e.key === 'Enter' && !error && fullName !== currentFileName && !loading) {
       e.preventDefault();
       handleConfirm();
     } else if (e.key === 'Escape') {
@@ -124,15 +146,23 @@ export function RenameFileDialog({
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="filename">File Name</Label>
-            <Input
-              id="filename"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={loading}
-              autoFocus
-              className={error ? 'border-destructive' : ''}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="filename"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={loading}
+                autoFocus
+                className={error ? 'border-destructive' : ''}
+                placeholder="Enter new name"
+              />
+              {fileExtension && (
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                  {fileExtension}
+                </span>
+              )}
+            </div>
             {error && (
               <Alert variant="destructive" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
@@ -175,7 +205,7 @@ export function RenameFileDialog({
           )}
           <Button
             onClick={handleConfirm}
-            disabled={loading || !!error || newName === currentFileName || !newName.trim()}
+            disabled={loading || !!error || (newName.trim() + fileExtension) === currentFileName || !newName.trim()}
           >
             {loading ? 'Renaming...' : 'Rename'}
           </Button>

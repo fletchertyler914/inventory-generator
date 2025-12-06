@@ -23,19 +23,31 @@ const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'];
 
 /**
  * Extract file extension from a file name or file type string
+ * ELITE: Prefers direct file_type property over parsing filename
+ * 
+ * @param fileTypeOrName - File type (extension) from database, or filename to parse
+ * @returns File extension in lowercase (without leading dot)
  */
 export function getFileExtension(fileTypeOrName: string): string {
   if (!fileTypeOrName || fileTypeOrName.trim().length === 0) {
     return '';
   }
 
-  // If it's already just an extension (no dots, short string), return it
   const trimmed = fileTypeOrName.trim().toLowerCase();
-  if (!trimmed.includes('.') && trimmed.length <= 5 && /^[a-z0-9]+$/.test(trimmed)) {
+  
+  // ELITE: If it's already just an extension (no dots, short alphanumeric string), use it directly
+  // This handles file_type from database (e.g., "PNG", "PDF")
+  if (!trimmed.includes('.') && trimmed.length >= 1 && trimmed.length <= 5 && /^[a-z0-9]+$/.test(trimmed)) {
     return trimmed;
   }
+  
+  // Also handle if it has a leading dot (e.g., ".png")
+  if (trimmed.startsWith('.') && trimmed.length >= 2 && trimmed.length <= 6 && /^\.?[a-z0-9]+$/.test(trimmed)) {
+    return trimmed.slice(1); // Remove leading dot
+  }
 
-  // Handle files with multiple dots (e.g., "file.2_Sep 25.pdf" or "file.tar.gz")
+  // Fallback: Handle files with multiple dots (e.g., "file.2_Sep 25.pdf" or "file.tar.gz")
+  // This is less reliable but needed for backward compatibility
   const parts = fileTypeOrName.split('.');
   if (parts.length > 1) {
     // Get the last part that looks like an extension (1-5 chars, alphanumeric)

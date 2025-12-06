@@ -1537,6 +1537,7 @@ export const IntegratedFileViewer = memo(
           onOpenChange={setRenameDialogOpen}
           currentPath={file.absolute_path}
           currentFileName={file.file_name}
+          fileType={file.file_type}
           onConfirm={handleRename}
           onSyncFirst={
             file?.id

@@ -663,6 +663,7 @@ export const FileNavigator = memo(
             }}
             currentPath={fileToRename.absolute_path}
             currentFileName={fileToRename.file_name}
+            fileType={fileToRename.file_type}
             onConfirm={handleRename}
           />
         )}

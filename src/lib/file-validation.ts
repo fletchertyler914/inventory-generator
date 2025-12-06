@@ -157,3 +157,41 @@ export function extractDirectory(path: string): string {
   return path.substring(0, lastSeparator);
 }
 
+/**
+ * Extract file extension from filename
+ * 
+ * @param filename - Filename (with or without path)
+ * @returns Extension including the dot (e.g., ".pdf") or empty string if no extension
+ */
+export function extractExtension(filename: string): string {
+  if (!filename) return '';
+  
+  // Extract just the filename if a path is provided
+  const name = extractFilename(filename);
+  
+  const lastDot = name.lastIndexOf('.');
+  if (lastDot === -1 || lastDot === 0 || lastDot === name.length - 1) {
+    // No extension, or dot at start (hidden file), or dot at end
+    return '';
+  }
+  
+  return name.substring(lastDot);
+}
+
+/**
+ * Get filename without extension
+ * 
+ * @param filename - Filename (with or without path)
+ * @returns Filename without extension
+ */
+export function getFilenameWithoutExtension(filename: string): string {
+  if (!filename) return '';
+  
+  const name = extractFilename(filename);
+  const ext = extractExtension(name);
+  
+  if (!ext) return name;
+  
+  return name.substring(0, name.length - ext.length);
+}
+

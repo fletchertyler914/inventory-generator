@@ -8,6 +8,8 @@ export interface IngestResult {
   files_inserted: number;
   files_updated: number;
   files_skipped: number;
+  files_deleted?: number;  // Auto-deleted files (orphaned, no user data)
+  files_protected?: number; // Files with user data that need review
   total_files: number;
   errors?: string[] | null;
 }

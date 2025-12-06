@@ -363,7 +363,7 @@ pub async fn batch_insert_files(
     // Batch insert files
     for file in files {
         sqlx::query(
-            "INSERT INTO files (id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, status, source_directory) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unreviewed', ?)"
+            "INSERT INTO files (id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, updated_at, status, source_directory) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unreviewed', ?)"
         )
         .bind(&file.file_id)
         .bind(&file.case_id)
@@ -375,6 +375,7 @@ pub async fn batch_insert_files(
         .bind(file.file_size)
         .bind(file.created_at)
         .bind(file.modified_at)
+        .bind(file.modified_at) // updated_at set to modified_at for new files
         .bind(&file.source_directory)
         .execute(&mut *transaction)
         .await

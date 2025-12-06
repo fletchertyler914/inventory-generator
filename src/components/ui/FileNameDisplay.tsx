@@ -5,6 +5,7 @@ import { getFileExtension } from '@/lib/file-icon-utils';
 
 interface FileNameDisplayProps {
   fileName: string;
+  fileType?: string; // File extension/type from database (e.g., "PNG", "PDF") - preferred over parsing filename
   showExtension?: boolean;
   showFolderPath?: boolean;
   folderPath?: string;
@@ -47,6 +48,7 @@ const highlightMatch = (text: string, query: string): React.ReactNode => {
  */
 export const FileNameDisplay = memo(function FileNameDisplay({
   fileName,
+  fileType,
   showExtension = false,
   showFolderPath = false,
   folderPath,
@@ -57,9 +59,10 @@ export const FileNameDisplay = memo(function FileNameDisplay({
 }: FileNameDisplayProps) {
   const extension = useMemo(() => {
     if (!showExtension) return null;
-    const ext = getFileExtension(fileName);
+    // ELITE: Use file_type from database directly (preferred), fallback to parsing filename
+    const ext = fileType ? getFileExtension(fileType) : getFileExtension(fileName);
     return ext ? ext.toUpperCase() : null;
-  }, [fileName, showExtension]);
+  }, [fileName, fileType, showExtension]);
 
   const displayName = useMemo(() => {
     if (highlightQuery) {
