@@ -1,6 +1,6 @@
 /**
  * ELITE: Optimized filter utility for swimlane filtering
- * 
+ *
  * Performance optimizations:
  * - Uses WeakMap caching from getParsedInventoryData
  * - Early termination on first match
@@ -9,26 +9,26 @@
  * - Recursively searches nested inventory_data fields
  */
 
-import type { InventoryItem } from '@/types/inventory'
-import { getParsedInventoryData } from './inventory-utils'
+import type { InventoryItem } from "@/types/inventory"
+import { getParsedInventoryData } from "./inventory-utils"
 
 /**
  * Recursively search a value for the query string
  * Handles strings, numbers, arrays, and nested objects
  */
-function searchValue(value: any, query: string): boolean {
+function searchValue(value: unknown, query: string): boolean {
   if (value === null || value === undefined) {
     return false
   }
 
   // String or number - convert to string and search
-  if (typeof value === 'string' || typeof value === 'number') {
+  if (typeof value === "string" || typeof value === "number") {
     return String(value).toLowerCase().includes(query)
   }
 
   // Boolean - convert to string representation
-  if (typeof value === 'boolean') {
-    return (value ? 'yes' : 'no').includes(query)
+  if (typeof value === "boolean") {
+    return (value ? "yes" : "no").includes(query)
   }
 
   // Array - search each element
@@ -42,10 +42,11 @@ function searchValue(value: any, query: string): boolean {
   }
 
   // Object - recursively search all values
-  if (typeof value === 'object') {
-    for (const key in value) {
-      if (Object.prototype.hasOwnProperty.call(value, key)) {
-        if (searchValue(value[key], query)) {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const obj = value as Record<string, unknown>
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        if (searchValue(obj[key], query)) {
           return true // Early termination
         }
       }
@@ -58,27 +59,24 @@ function searchValue(value: any, query: string): boolean {
 
 /**
  * ELITE: Filter swimlane items by query string
- * 
+ *
  * Searches across:
  * - file_name (case-insensitive)
  * - folder_path (case-insensitive)
  * - tags array (case-insensitive)
  * - All inventory_data fields (recursively, case-insensitive)
- * 
+ *
  * Performance optimizations:
  * - Empty query returns all items without processing
  * - Early termination on first match
  * - Leverages WeakMap caching from getParsedInventoryData
  * - Optimized string operations (toLowerCase called once per item)
- * 
+ *
  * @param items - Array of inventory items to filter
  * @param query - Search query string (case-insensitive)
  * @returns Filtered array of items matching the query
  */
-export function filterSwimlaneItems(
-  items: InventoryItem[],
-  query: string
-): InventoryItem[] {
+export function filterSwimlaneItems(items: InventoryItem[], query: string): InventoryItem[] {
   // ELITE: Empty query handling - skip all processing
   if (!query || !query.trim()) {
     return items
@@ -119,4 +117,3 @@ export function filterSwimlaneItems(
     return false
   })
 }
-

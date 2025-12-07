@@ -4,6 +4,7 @@
  */
 
 import { setStoreValue } from '@/lib/store-utils';
+import { logWarn } from '@/lib/logger';
 
 /**
  * Data source types for field extraction
@@ -168,7 +169,7 @@ export async function saveMappingConfig(config: MappingConfig, caseId?: string):
       await saveGlobalMappingConfig(config);
     }
   } catch (error) {
-    console.warn('Failed to save mapping config to database, falling back to store:', error);
+    logWarn('Failed to save mapping config to database, falling back to store', { error });
     
     // Fallback to store only
     if (caseId) {
@@ -185,7 +186,7 @@ export async function saveMappingConfig(config: MappingConfig, caseId?: string):
     const { syncColumnsWithSchema } = await import('@/types/tableColumns');
     await syncColumnsWithSchema(config, caseId);
   } catch (error) {
-    console.warn('Failed to sync columns with schema:', error);
+    logWarn('Failed to sync columns with schema', { error });
     // Don't fail the save if column sync fails
   }
   
@@ -193,45 +194,7 @@ export async function saveMappingConfig(config: MappingConfig, caseId?: string):
   // This ensures all files get updated with new schema values
 }
 
-/**
- * Merge mapping configurations
- * ELITE: Case-specific mappings override global, new globals are added
- * @internal - Reserved for future use
- */
-export function _mergeMappingConfigs(global: MappingConfig, caseSpecific: MappingConfig): MappingConfig {
-  const globalMap = new Map(global.mappings.map(m => [m.id, m]))
-  const caseMap = new Map(caseSpecific.mappings.map(m => [m.id, m]))
-  const merged: FieldMapping[] = []
-
-  // Start with all global mappings
-  for (const globalMapping of global.mappings) {
-    const caseMapping = caseMap.get(globalMapping.id)
-    if (caseMapping) {
-      // Case-specific override exists
-      merged.push(caseMapping)
-      caseMap.delete(globalMapping.id)
-    } else {
-      // No case override, use global default
-      merged.push(globalMapping)
-    }
-  }
-
-  // Add any case-specific mappings that aren't in global
-  for (const caseMapping of caseSpecific.mappings) {
-    if (!globalMap.has(caseMapping.id)) {
-      merged.push(caseMapping)
-    }
-  }
-
-  // Sort by priority
-  merged.sort((a, b) => (a.priority || 999) - (b.priority || 999))
-
-  return {
-    mappings: merged,
-    version: Math.max(global.version, caseSpecific.version),
-    ...(caseSpecific.caseId !== undefined && { caseId: caseSpecific.caseId }),
-  }
-}
+// Removed unused _mergeMappingConfigs function
 
 /**
  * Validate pattern configuration

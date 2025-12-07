@@ -1,4 +1,4 @@
-import { Copy, AlertTriangle, Settings } from 'lucide-react';
+import { Copy, AlertTriangle, Settings } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -6,25 +6,29 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog';
-import { Button } from '../ui/button';
-import { Alert, AlertDescription } from '../ui/alert';
-import type { DuplicateFile as OldDuplicateFile } from '@/services/fileService';
-import { duplicateService } from '@/services/duplicateService';
-import { toast } from '@/hooks/useToast';
-import { DuplicateFileCard } from '../duplicates/DuplicateFileCard';
-import { useState, useEffect, useCallback } from 'react';
-import { recommendFileToKeep, getNotesCounts, getFindingsCounts } from '@/lib/duplicate-recommendations';
+} from "../ui/dialog"
+import { Button } from "../ui/button"
+import { Alert, AlertDescription } from "../ui/alert"
+import type { DuplicateFile as OldDuplicateFile } from "@/services/fileService"
+import { duplicateService, type DuplicateFile } from "@/services/duplicateService"
+import { toast } from "@/hooks/useToast"
+import { DuplicateFileCard } from "../duplicates/DuplicateFileCard"
+import { useState, useEffect, useCallback } from "react"
+import {
+  recommendFileToKeep,
+  getNotesCounts,
+  getFindingsCounts,
+} from "@/lib/duplicate-recommendations"
 
 interface DuplicateFileDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  caseId: string;
-  fileId: string;
-  fileName: string;
-  duplicates: OldDuplicateFile[];
-  onFileSelect?: (fileId: string) => void;
-  onManageAll?: () => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  caseId: string
+  fileId: string
+  fileName: string
+  duplicates: OldDuplicateFile[]
+  onFileSelect?: (fileId: string) => void
+  onManageAll?: () => void
 }
 
 export function DuplicateFileDialog({
@@ -36,21 +40,26 @@ export function DuplicateFileDialog({
   duplicates: oldDuplicates,
   onManageAll,
 }: DuplicateFileDialogProps) {
-  const [group, setGroup] = useState<{ files: any[]; group_id: string } | null>(null);
-  const [recommendation, setRecommendation] = useState<{ file_id: string; confidence: number; reasons: string[] } | null>(null);
+  const [group, setGroup] = useState<{ files: DuplicateFile[]; group_id: string } | null>(null)
+  const [recommendation, setRecommendation] = useState<{
+    file_id: string
+    confidence: number
+    reasons: string[]
+  } | null>(null)
 
   // Load duplicate group using new service
   useEffect(() => {
     if (open && fileId && caseId) {
-      duplicateService.getDuplicateGroup(caseId, fileId, true)
+      duplicateService
+        .getDuplicateGroup(caseId, fileId, true)
         .then((groupData) => {
           if (groupData) {
-            setGroup(groupData);
+            setGroup(groupData)
           } else {
             // Fallback to old format if new service doesn't return data
             setGroup({
-              group_id: 'legacy',
-              files: oldDuplicates.map(d => ({
+              group_id: "legacy",
+              files: oldDuplicates.map((d) => ({
                 file_id: d.file_id,
                 file_name: d.file_name,
                 absolute_path: d.absolute_path,
@@ -61,15 +70,16 @@ export function DuplicateFileDialog({
                 modified_at: 0,
                 is_primary: false,
               })),
-            });
+            })
           }
         })
         .catch((error) => {
-          console.error('Failed to load duplicate group:', error);
+          const { logError } = require("@/lib/logger")
+          logError("Failed to load duplicate group", error)
           // Fallback to old format
           setGroup({
-            group_id: 'legacy',
-            files: oldDuplicates.map(d => ({
+            group_id: "legacy",
+            files: oldDuplicates.map((d) => ({
               file_id: d.file_id,
               file_name: d.file_name,
               absolute_path: d.absolute_path,
@@ -80,71 +90,81 @@ export function DuplicateFileDialog({
               modified_at: 0,
               is_primary: false,
             })),
-          });
-        });
+          })
+        })
     }
-  }, [open, fileId, caseId, oldDuplicates]);
+  }, [open, fileId, caseId, oldDuplicates])
 
   // Load recommendation
   useEffect(() => {
     if (group && group.files.length > 0) {
-      getNotesCounts(group.files.map(f => f.file_id), caseId)
+      getNotesCounts(
+        group.files.map((f) => f.file_id),
+        caseId
+      )
         .then((notesCounts) => {
-          return getFindingsCounts(group.files.map(f => f.file_id), caseId)
-            .then((findingsCounts) => {
-              const rec = recommendFileToKeep(group.files, notesCounts, findingsCounts);
-              setRecommendation(rec);
-            });
+          return getFindingsCounts(
+            group.files.map((f) => f.file_id),
+            caseId
+          ).then((findingsCounts) => {
+            const rec = recommendFileToKeep(group.files, notesCounts, findingsCounts)
+            setRecommendation(rec)
+          })
         })
         .catch((error) => {
-          console.error('Failed to load recommendation:', error);
-        });
+          const { logError } = require("@/lib/logger")
+          logError("Failed to load recommendation", error)
+        })
     }
-  }, [group, caseId]);
+  }, [group, caseId])
 
   if (!open || (!group && oldDuplicates.length === 0)) {
-    return null;
+    return null
   }
 
-  const files = group?.files || [];
-  const currentFile = files.find(f => f.file_id === fileId) || {
+  const files = group?.files || []
+  const currentFile = files.find((f) => f.file_id === fileId) || {
     file_id: fileId,
     file_name: fileName,
-    absolute_path: '',
-    folder_path: '',
-    status: 'unreviewed',
+    absolute_path: "",
+    folder_path: "",
+    status: "unreviewed",
     file_size: 0,
     created_at: 0,
     modified_at: 0,
     is_primary: false,
-  };
-  const otherFiles = files.filter(f => f.file_id !== fileId);
+  }
+  const otherFiles = files.filter((f) => f.file_id !== fileId)
 
+  const handleKeepFile = useCallback(
+    async (fileIdToKeep: string) => {
+      if (!group) return
+      try {
+        await duplicateService.markAsPrimary(fileIdToKeep, group.group_id)
+        toast({
+          title: "File marked as primary",
+          description: "This file is now the primary file in the duplicate group",
+          variant: "default",
+        })
+        // Reload group
+        const updatedGroup = await duplicateService.getDuplicateGroup(caseId, fileId, true)
+        if (updatedGroup) {
+          setGroup(updatedGroup)
+        }
+      } catch (error) {
+        toast({
+          title: "Failed to mark as primary",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        })
+      }
+    },
+    [group, caseId, fileId]
+  )
 
-  const handleKeepFile = useCallback(async (fileIdToKeep: string) => {
-    if (!group) return;
-    try {
-      await duplicateService.markAsPrimary(fileIdToKeep, group.group_id);
-      toast({
-        title: 'File marked as primary',
-        description: 'This file is now the primary file in the duplicate group',
-        variant: 'default',
-      });
-      // Reload group
-      const updatedGroup = await duplicateService.getDuplicateGroup(caseId, fileId, true);
-      if (updatedGroup) {
-        setGroup(updatedGroup);
-    }
-    } catch (error) {
-      toast({
-        title: 'Failed to mark as primary',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
-    }
-  }, [group, caseId, fileId]);
-
-  const recommendedFile = recommendation ? files.find(f => f.file_id === recommendation.file_id) : null;
+  const recommendedFile = recommendation
+    ? files.find((f) => f.file_id === recommendation.file_id)
+    : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -155,7 +175,7 @@ export function DuplicateFileDialog({
             Duplicate Files Detected
           </DialogTitle>
           <DialogDescription>
-            Found {otherFiles.length} duplicate{otherFiles.length !== 1 ? 's' : ''} of "{fileName}"
+            Found {otherFiles.length} duplicate{otherFiles.length !== 1 ? "s" : ""} of "{fileName}"
             <br />
             These files have the same content (hash) but are located at different paths.
           </DialogDescription>
@@ -165,15 +185,16 @@ export function DuplicateFileDialog({
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between">
             <span>
-              Duplicate files share the same content. Review which version to keep or consolidate them.
+              Duplicate files share the same content. Review which version to keep or consolidate
+              them.
             </span>
             {onManageAll && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  onOpenChange(false);
-                  onManageAll();
+                  onOpenChange(false)
+                  onManageAll()
                 }}
                 className="ml-4"
               >
@@ -193,7 +214,7 @@ export function DuplicateFileDialog({
                     Recommended: Keep "{recommendedFile.file_name}"
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {recommendation.reasons.join(', ')}
+                    {recommendation.reasons.join(", ")}
                   </p>
                 </div>
                 <Button
@@ -215,14 +236,16 @@ export function DuplicateFileDialog({
             isPrimary={currentFile.is_primary}
             isRecommended={recommendation?.file_id === currentFile.file_id}
             isViewing={true}
-            {...(recommendation?.file_id === currentFile.file_id && recommendation ? { recommendationReasons: recommendation.reasons } : {})}
+            {...(recommendation?.file_id === currentFile.file_id && recommendation
+              ? { recommendationReasons: recommendation.reasons }
+              : {})}
             onKeep={() => handleKeepFile(currentFile.file_id)}
             onDelete={() => {
               toast({
-                title: 'Cannot delete current file',
-                description: 'Please select a different file to delete',
-                variant: 'default',
-              });
+                title: "Cannot delete current file",
+                description: "Please select a different file to delete",
+                variant: "default",
+              })
             }}
           />
 
@@ -233,15 +256,17 @@ export function DuplicateFileDialog({
               file={dup}
               isPrimary={dup.is_primary}
               isRecommended={recommendation?.file_id === dup.file_id}
-              {...(recommendation?.file_id === dup.file_id && recommendation ? { recommendationReasons: recommendation.reasons } : {})}
+              {...(recommendation?.file_id === dup.file_id && recommendation
+                ? { recommendationReasons: recommendation.reasons }
+                : {})}
               onKeep={() => handleKeepFile(dup.file_id)}
               onDelete={() => {
                 // Would open delete dialog - simplified for now
                 toast({
-                  title: 'Delete duplicate',
-                  description: 'Delete functionality would be implemented here',
-                  variant: 'default',
-                });
+                  title: "Delete duplicate",
+                  description: "Delete functionality would be implemented here",
+                  variant: "default",
+                })
               }}
             />
           ))}
@@ -254,6 +279,5 @@ export function DuplicateFileDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
-

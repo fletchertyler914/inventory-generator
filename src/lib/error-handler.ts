@@ -94,12 +94,16 @@ export function createAppError(error: unknown, defaultCode: ErrorCode = ErrorCod
 }
 
 /**
- * Logs error to console
- * In production, errors should be sent to a logging service
+ * Logs error using production logger
+ * Technical details are logged, user-friendly message is returned
  */
 export function logError(error: AppError, context?: string): void {
-  const prefix = context ? `[${context}]` : "[Error]"
-  console.error(`${prefix} ${error.code}: ${error.message}`, error.originalError)
+  const { logError: logAppError } = require("./logger");
+  logAppError(
+    `${error.code}: ${error.message}`,
+    error.originalError,
+    { context, code: error.code }
+  );
 }
 
 /**

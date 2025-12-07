@@ -60,7 +60,8 @@ export const FindingsPanel = memo(function FindingsPanel({ caseId, onClose, init
       const loadedFindings = await findingService.listFindings(caseId)
       setFindings(loadedFindings)
     } catch (error) {
-      console.error("Failed to load findings:", error)
+      const { logError } = require('@/lib/logger');
+      logError("Failed to load findings", error)
     } finally {
       setLoading(false)
     }

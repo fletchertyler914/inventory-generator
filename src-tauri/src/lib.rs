@@ -3806,76 +3806,41 @@ pub fn run() {
     
     // Initialize logger early - before any other operations
     // This ensures we can log even if something fails
-    eprintln!("[CaseSpace] Starting application initialization...");
-    
     log::info!("CaseSpace application starting");
     
-    eprintln!("[CaseSpace] Creating Tauri builder...");
-    eprintln!("[CaseSpace] Builder created, registering handlers...");
-    eprintln!("[CaseSpace] Starting Tauri application...");
-    eprintln!("[CaseSpace] About to call Builder::default()...");
     let mut builder = tauri::Builder::default();
-    eprintln!("[CaseSpace] Builder::default() returned");
     
     // Initialize and register CrabNebula DevTools early for advanced debugging
     // This provides better debugging than basic devtools, including asset inspection
     // Only enable in debug builds to avoid issues in production
     #[cfg(debug_assertions)]
     {
-        eprintln!("[CaseSpace] Registering devtools plugin (debug build)...");
+        log::debug!("Registering devtools plugin (debug build)");
         builder = builder.plugin(tauri_plugin_devtools::init());
-        eprintln!("[CaseSpace] Devtools plugin registered");
     }
     
-    eprintln!("[CaseSpace] Registering log plugin...");
     builder = builder.plugin(log_plugin);
-    eprintln!("[CaseSpace] Log plugin registered");
-    
-    eprintln!("[CaseSpace] Registering opener plugin...");
     builder = builder.plugin(tauri_plugin_opener::init());
-    eprintln!("[CaseSpace] Opener plugin registered");
-    
-    eprintln!("[CaseSpace] Registering dialog plugin...");
     builder = builder.plugin(tauri_plugin_dialog::init());
-    eprintln!("[CaseSpace] Dialog plugin registered");
-    
-    eprintln!("[CaseSpace] Registering store plugin...");
     builder = builder.plugin(tauri_plugin_store::Builder::default().build());
-    eprintln!("[CaseSpace] Store plugin registered");
     
-    eprintln!("[CaseSpace] Setting up setup callback...");
     builder = builder
         .setup(|app| {
-            eprintln!("[CaseSpace] ===== SETUP CALLBACK STARTED =====");
-            log::info!("[Setup] Setup callback called");
+            log::info!("Application setup started");
             
-            // Check main window URL (should be tauri://localhost/index.html by default)
+            // Check main window URL
             if let Some(window) = app.get_webview_window("main") {
                 if let Ok(url) = window.url() {
                     let url_str = url.to_string();
-                    eprintln!("[CaseSpace] Main window URL: {}", url_str);
-                    log::info!("[Setup] Main window URL: {}", url_str);
-                    
-                    // In Tauri v2, tauri://localhost should automatically serve index.html
-                    // If it's just tauri://localhost, that's actually correct - the asset protocol handles it
-                    if url_str == "tauri://localhost" {
-                        eprintln!("[CaseSpace] Window URL is tauri://localhost (this is correct for v2)");
-                        log::info!("[Setup] Window URL is tauri://localhost - asset protocol should serve index.html");
-                    } else if url_str.contains("index.html") {
-                        eprintln!("[CaseSpace] Window URL contains index.html path");
-                        log::info!("[Setup] Window URL contains index.html");
-                    }
+                    log::debug!("Main window URL: {}", url_str);
                 }
             } else {
-                eprintln!("[CaseSpace] WARNING: Main window not found!");
-                log::warn!("[Setup] Main window not found");
+                log::warn!("Main window not found during setup");
             }
             
-            eprintln!("[CaseSpace] ===== SETUP CALLBACK COMPLETE =====");
-            log::info!("[Setup] Application setup complete");
+            log::info!("Application setup complete");
             Ok(())
         });
-    eprintln!("[CaseSpace] Registering invoke handlers...");
     builder = builder
         .invoke_handler(tauri::generate_handler![
             get_database_path,
@@ -3940,23 +3905,13 @@ pub fn run() {
             get_workspace_preferences_db,
             save_workspace_preferences_db
         ]);
-    eprintln!("[CaseSpace] Invoke handlers registered");
     
-    eprintln!("[CaseSpace] Generating Tauri context...");
     let context = tauri::generate_context!();
-    eprintln!("[CaseSpace] Tauri context generated");
-    
-    eprintln!("[CaseSpace] Calling builder.run() - this will block until app exits...");
-    eprintln!("[CaseSpace] ===== ABOUT TO START TAURI EVENT LOOP =====");
     builder
         .run(context)
         .unwrap_or_else(|e| {
-            eprintln!("[CaseSpace] ===== FATAL ERROR ===== ");
-            eprintln!("[CaseSpace] FATAL ERROR: Failed to run Tauri application: {}", e);
-            eprintln!("[CaseSpace] Error details: {:?}", e);
             log::error!("Failed to run Tauri application: {}", e);
+            log::error!("Error details: {:?}", e);
             std::process::exit(1);
         });
-    
-    eprintln!("[CaseSpace] ===== APPLICATION EXITED =====");
 }

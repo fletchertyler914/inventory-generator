@@ -1,280 +1,280 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { FolderOpen, Plus, Briefcase, Search, X, ArrowUpDown, ChevronRight, TestTube, Trash2 } from 'lucide-react';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { ScrollArea } from '../ui/scroll-area';
-import { SettingsDialog } from '../SettingsDialog';
-import { Skeleton } from '../ui/skeleton';
-import { caseService } from '@/services/caseService';
-import { fileService } from '@/services/fileService';
-import type { Case } from '@/types/case';
-import { formatDistanceToNow } from 'date-fns';
-import { EditCaseDialog } from './EditCaseDialog';
-import { DeleteCaseConfirmationDialog } from './DeleteCaseConfirmationDialog';
-import { toast } from '@/hooks/useToast';
-import { useDebounce } from '@/hooks/useDebounce';
-import { CaseListCard } from './CaseListCard';
-import { CaseFilters, type CaseFilters as CaseFiltersType } from './CaseFilters';
-import { CaseListViewMode } from './CaseListViewMode';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
-import { generateDummyCases, clearDummyCases } from '@/scripts/generateDummyCases';
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from "react"
+import { FolderOpen, Plus, Briefcase, Search, X, ArrowUpDown, ChevronRight } from "lucide-react"
+import { Button } from "../ui/button"
+import { Input } from "../ui/input"
+import { ScrollArea } from "../ui/scroll-area"
+import { Skeleton } from "../ui/skeleton"
+import { caseService } from "@/services/caseService"
+import { fileService } from "@/services/fileService"
+import type { Case } from "@/types/case"
+import { formatDistanceToNow } from "date-fns"
+import { EditCaseDialog } from "./EditCaseDialog"
+import { DeleteCaseConfirmationDialog } from "./DeleteCaseConfirmationDialog"
+import { toast } from "@/hooks/useToast"
+import { useDebounce } from "@/hooks/useDebounce"
+import { logError } from "@/lib/logger"
+import { CaseListCard } from "./CaseListCard"
+import { CaseFilters, type CaseFilters as CaseFiltersType } from "./CaseFilters"
+import { CaseListViewMode } from "./CaseListViewMode"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
+
+// Lazy load SettingsDialog for better initial load performance
+const LazySettingsDialog = lazy(() =>
+  import("../SettingsDialog").then((m) => ({ default: m.SettingsDialog }))
+)
 
 interface CaseListViewProps {
-  onSelectCase: (case_: Case) => void;
-  onCreateCase?: () => void;
-  currentCaseId?: string;
+  onSelectCase: (case_: Case) => void
+  onCreateCase?: () => void
+  currentCaseId?: string
 }
 
 interface CaseWithFileCount extends Case {
-  fileCount?: number;
-  sources?: string[];
+  fileCount?: number
+  sources?: string[]
 }
 
-type SortOption = 'recent' | 'name' | 'created' | 'files';
+type SortOption = "recent" | "name" | "created" | "files"
 
-const ADAPTIVE_LIST_THRESHOLD = 20;
-const RECENT_CASES_DAYS = 7;
-const MAX_RECENT_CASES = 5;
+const ADAPTIVE_LIST_THRESHOLD = 20
+const RECENT_CASES_DAYS = 7
+const MAX_RECENT_CASES = 5
 
 export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: CaseListViewProps) {
-  const [cases, setCases] = useState<CaseWithFileCount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingFileCounts, setLoadingFileCounts] = useState<Set<string>>(new Set());
-  const [editingCase, setEditingCase] = useState<Case | null>(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [deletingCase, setDeletingCase] = useState<Case | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [cases, setCases] = useState<CaseWithFileCount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadingFileCounts, setLoadingFileCounts] = useState<Set<string>>(new Set())
+  const [editingCase, setEditingCase] = useState<Case | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deletingCase, setDeletingCase] = useState<Case | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Search and filter state
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearchQuery = useDebounce(searchQuery, 150);
+  const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 150)
   const [filters, setFilters] = useState<CaseFiltersType>({
     deploymentMode: [],
     departments: [],
     clients: [],
-  });
-  const [sortOption, setSortOption] = useState<SortOption>('recent');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const hasAutoSwitchedRef = useRef(false);
+  })
+  const [sortOption, setSortOption] = useState<SortOption>("recent")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const hasAutoSwitchedRef = useRef(false)
 
   // Auto-switch to list view for 20+ cases (only once on initial load)
   useEffect(() => {
     if (cases.length >= ADAPTIVE_LIST_THRESHOLD) {
-      if (!hasAutoSwitchedRef.current && viewMode === 'grid') {
-        setViewMode('list');
-        hasAutoSwitchedRef.current = true;
+      if (!hasAutoSwitchedRef.current && viewMode === "grid") {
+        setViewMode("list")
+        hasAutoSwitchedRef.current = true
       }
     } else {
       // Reset the ref when cases drop below threshold
-      hasAutoSwitchedRef.current = false;
+      hasAutoSwitchedRef.current = false
     }
-  }, [cases.length, viewMode]);
+  }, [cases.length, viewMode])
 
   // Keyboard shortcut: Cmd/Ctrl+F to focus search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || 
-                      target.tagName === 'TEXTAREA' || 
-                      target.isContentEditable;
-      
-      if (isInput && target !== searchInputRef.current) return;
-      
-      const modifier = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? e.metaKey : e.ctrlKey;
-      
-      if (modifier && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
+      const target = e.target as HTMLElement
+      const isInput =
+        target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
+
+      if (isInput && target !== searchInputRef.current) return
+
+      const modifier = navigator.platform.toUpperCase().indexOf("MAC") >= 0 ? e.metaKey : e.ctrlKey
+
+      if (modifier && e.key.toLowerCase() === "f") {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
       }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   const loadCases = async () => {
     try {
-      setLoading(true);
-      const loadedCases = await caseService.listCases();
-      setCases(loadedCases);
-      
+      setLoading(true)
+      const loadedCases = await caseService.listCases()
+      setCases(loadedCases)
+
       // Load file counts for each case
-      const counts = new Set<string>();
-      loadedCases.forEach(c => counts.add(c.id));
-      setLoadingFileCounts(counts);
-      
+      const counts = new Set<string>()
+      loadedCases.forEach((c) => counts.add(c.id))
+      setLoadingFileCounts(counts)
+
       // Load file counts and sources asynchronously
       loadedCases.forEach(async (case_) => {
         try {
           const [count, sources] = await Promise.all([
             fileService.getCaseFileCount(case_.id),
-            fileService.listCaseSources(case_.id).catch(() => [] as string[])
-          ]);
-          setCases(prev => prev.map(c => 
-            c.id === case_.id ? { ...c, fileCount: count, sources } : c
-          ));
+            fileService.listCaseSources(case_.id).catch(() => [] as string[]),
+          ])
+          setCases((prev) =>
+            prev.map((c) => (c.id === case_.id ? { ...c, fileCount: count, sources } : c))
+          )
         } catch (error) {
-          console.error(`Failed to load data for case ${case_.id}:`, error);
+          logError(`Failed to load data for case ${case_.id}`, error)
         } finally {
-          setLoadingFileCounts(prev => {
-            const next = new Set(prev);
-            next.delete(case_.id);
-            return next;
-          });
+          setLoadingFileCounts((prev) => {
+            const next = new Set(prev)
+            next.delete(case_.id)
+            return next
+          })
         }
-      });
+      })
     } catch (error) {
-      console.error('Failed to load cases:', error);
+      logError("Failed to load cases", error)
       toast({
-        title: 'Failed to load cases',
-        description: error instanceof Error ? error.message : 'An error occurred while loading cases.',
-        variant: 'destructive',
-      });
+        title: "Failed to load cases",
+        description:
+          error instanceof Error ? error.message : "An error occurred while loading cases.",
+        variant: "destructive",
+      })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    loadCases();
-  }, []);
+    loadCases()
+  }, [])
 
   // Extract unique departments and clients for filters
   const availableDepartments = useMemo(() => {
-    const depts = new Set<string>();
-    cases.forEach(c => {
-      if (c.department) depts.add(c.department);
-    });
-    return Array.from(depts).sort();
-  }, [cases]);
+    const depts = new Set<string>()
+    cases.forEach((c) => {
+      if (c.department) depts.add(c.department)
+    })
+    return Array.from(depts).sort()
+  }, [cases])
 
   const availableClients = useMemo(() => {
-    const clients = new Set<string>();
-    cases.forEach(c => {
-      if (c.client) clients.add(c.client);
-    });
-    return Array.from(clients).sort();
-  }, [cases]);
+    const clients = new Set<string>()
+    cases.forEach((c) => {
+      if (c.client) clients.add(c.client)
+    })
+    return Array.from(clients).sort()
+  }, [cases])
 
   // Filter cases based on search and filters
   const filteredCases = useMemo(() => {
-    let result = cases;
+    let result = cases
 
     // Apply search filter
     if (debouncedSearchQuery.trim()) {
-      const query = debouncedSearchQuery.toLowerCase();
-      result = result.filter(c => 
-        c.name.toLowerCase().includes(query) ||
-        c.case_id?.toLowerCase().includes(query) ||
-        c.department?.toLowerCase().includes(query) ||
-        c.client?.toLowerCase().includes(query)
-      );
+      const query = debouncedSearchQuery.toLowerCase()
+      result = result.filter(
+        (c) =>
+          c.name.toLowerCase().includes(query) ||
+          c.case_id?.toLowerCase().includes(query) ||
+          c.department?.toLowerCase().includes(query) ||
+          c.client?.toLowerCase().includes(query)
+      )
     }
 
     // Apply deployment mode filter
     if (filters.deploymentMode.length > 0) {
-      result = result.filter(c => filters.deploymentMode.includes(c.deployment_mode));
+      result = result.filter((c) => filters.deploymentMode.includes(c.deployment_mode))
     }
 
     // Apply department filter
     if (filters.departments.length > 0) {
-      result = result.filter(c => c.department && filters.departments.includes(c.department));
+      result = result.filter((c) => c.department && filters.departments.includes(c.department))
     }
 
     // Apply client filter
     if (filters.clients.length > 0) {
-      result = result.filter(c => c.client && filters.clients.includes(c.client));
+      result = result.filter((c) => c.client && filters.clients.includes(c.client))
     }
 
-    return result;
-  }, [cases, debouncedSearchQuery, filters]);
+    return result
+  }, [cases, debouncedSearchQuery, filters])
 
   // Sort cases
   const sortedCases = useMemo(() => {
-    const sorted = [...filteredCases];
-    
+    const sorted = [...filteredCases]
+
     switch (sortOption) {
-      case 'recent':
-        return sorted.sort((a, b) => b.last_opened_at - a.last_opened_at);
-      case 'name':
-        return sorted.sort((a, b) => a.name.localeCompare(b.name));
-      case 'created':
-        return sorted.sort((a, b) => b.created_at - a.created_at);
-      case 'files':
-        return sorted.sort((a, b) => (b.fileCount ?? 0) - (a.fileCount ?? 0));
+      case "recent":
+        return sorted.sort((a, b) => b.last_opened_at - a.last_opened_at)
+      case "name":
+        return sorted.sort((a, b) => a.name.localeCompare(b.name))
+      case "created":
+        return sorted.sort((a, b) => b.created_at - a.created_at)
+      case "files":
+        return sorted.sort((a, b) => (b.fileCount ?? 0) - (a.fileCount ?? 0))
       default:
-        return sorted;
+        return sorted
     }
-  }, [filteredCases, sortOption]);
+  }, [filteredCases, sortOption])
 
   // Separate recent cases (opened in last 7 days)
   const { recentCases, otherCases } = useMemo(() => {
-    const now = Date.now() / 1000;
-    const sevenDaysAgo = now - (RECENT_CASES_DAYS * 24 * 60 * 60);
-    
+    const now = Date.now() / 1000
+    const sevenDaysAgo = now - RECENT_CASES_DAYS * 24 * 60 * 60
+
     const recent = sortedCases
-      .filter(c => c.last_opened_at >= sevenDaysAgo)
-      .slice(0, MAX_RECENT_CASES);
-    
-    const other = sortedCases.filter(c => !recent.includes(c));
-    
-    return { recentCases: recent, otherCases: other };
-  }, [sortedCases]);
+      .filter((c) => c.last_opened_at >= sevenDaysAgo)
+      .slice(0, MAX_RECENT_CASES)
+
+    const other = sortedCases.filter((c) => !recent.includes(c))
+
+    return { recentCases: recent, otherCases: other }
+  }, [sortedCases])
 
   const handleEditCase = useCallback((case_: Case, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingCase(case_);
-    setEditDialogOpen(true);
-  }, []);
+    e.stopPropagation()
+    setEditingCase(case_)
+    setEditDialogOpen(true)
+  }, [])
 
   const handleEditCaseUpdated = useCallback(() => {
-    loadCases();
-  }, []);
+    loadCases()
+  }, [])
 
   const handleDeleteCaseClick = useCallback((case_: Case, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDeletingCase(case_);
-    setDeleteDialogOpen(true);
-  }, []);
+    e.stopPropagation()
+    setDeletingCase(case_)
+    setDeleteDialogOpen(true)
+  }, [])
 
   const handleDeleteConfirm = async () => {
-    if (!deletingCase) return;
+    if (!deletingCase) return
 
-    setDeleting(true);
+    setDeleting(true)
     try {
-      await caseService.deleteCase(deletingCase.id);
-      setCases(prev => prev.filter(c => c.id !== deletingCase.id));
+      await caseService.deleteCase(deletingCase.id)
+      setCases((prev) => prev.filter((c) => c.id !== deletingCase.id))
       toast({
-        title: 'Case deleted',
+        title: "Case deleted",
         description: `"${deletingCase.name}" has been successfully deleted.`,
-      });
-      setDeleteDialogOpen(false);
-      setDeletingCase(null);
+      })
+      setDeleteDialogOpen(false)
+      setDeletingCase(null)
     } catch (error) {
-      console.error('Failed to delete case:', error);
+      logError("Failed to delete case", error)
       toast({
-        title: 'Failed to delete case',
-        description: error instanceof Error ? error.message : 'An error occurred while deleting the case.',
-        variant: 'destructive',
-      });
+        title: "Failed to delete case",
+        description:
+          error instanceof Error ? error.message : "An error occurred while deleting the case.",
+        variant: "destructive",
+      })
     } finally {
-      setDeleting(false);
+      setDeleting(false)
     }
-  };
+  }
 
   // Format relative time
   const getRelativeTime = useCallback((timestamp: number) => {
-    return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true });
-  }, []);
+    return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true })
+  }, [])
 
   if (loading) {
     return (
@@ -298,20 +298,23 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
           ))}
         </div>
       </div>
-    );
+    )
   }
 
-  const totalCases = sortedCases.length;
-  const showRecentSection = recentCases.length > 0;
+  const totalCases = sortedCases.length
+  const showRecentSection = recentCases.length > 0
 
   return (
     <div className="h-full flex flex-col bg-background relative overflow-hidden">
       {/* Decorative background pattern */}
       <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.03] pointer-events-none">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)`,
-          backgroundSize: '40px 40px'
-        }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)`,
+            backgroundSize: "40px 40px",
+          }}
+        />
       </div>
 
       {/* Header Section */}
@@ -332,44 +335,9 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Dev Tools - Generate Test Cases */}
-              {import.meta.env.DEV && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        await generateDummyCases();
-                        await loadCases();
-                      } catch (error) {
-                        console.error('Failed to generate dummy cases:', error);
-                      }
-                    }}
-                    title="Generate test cases for development"
-                  >
-                    <TestTube className="h-4 w-4 mr-2" />
-                    Generate Test Cases
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        await clearDummyCases();
-                        await loadCases();
-                      } catch (error) {
-                        console.error('Failed to clear dummy cases:', error);
-                      }
-                    }}
-                    title="Clear all test cases"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Clear Test Cases
-                  </Button>
-                </>
-              )}
-              <SettingsDialog />
+              <Suspense fallback={null}>
+                <LazySettingsDialog />
+              </Suspense>
             </div>
           </div>
 
@@ -387,7 +355,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
               />
               {searchQuery && (
                 <Button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => setSearchQuery("")}
                   variant="ghost"
                   size="icon-sm"
                   className="absolute right-3 top-1/2 -translate-y-1/2"
@@ -406,7 +374,10 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
             />
 
             {/* Sort Dropdown */}
-            <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+            <Select
+              value={sortOption}
+              onValueChange={(value) => setSortOption(value as SortOption)}
+            >
               <SelectTrigger className="w-[180px] h-10">
                 <ArrowUpDown className="h-4 w-4 mr-2" />
                 <SelectValue />
@@ -445,14 +416,20 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
                 </div>
               </div>
               <h3 className="text-xl font-semibold mb-2">
-                {searchQuery || filters.deploymentMode.length > 0 || filters.departments.length > 0 || filters.clients.length > 0
-                  ? 'No cases found'
-                  : 'No cases yet'}
+                {searchQuery ||
+                filters.deploymentMode.length > 0 ||
+                filters.departments.length > 0 ||
+                filters.clients.length > 0
+                  ? "No cases found"
+                  : "No cases yet"}
               </h3>
               <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
-                {searchQuery || filters.deploymentMode.length > 0 || filters.departments.length > 0 || filters.clients.length > 0
-                  ? 'Try adjusting your search or filters to find what you\'re looking for.'
-                  : 'Get started by creating your first case to organize and manage your documents'}
+                {searchQuery ||
+                filters.deploymentMode.length > 0 ||
+                filters.departments.length > 0 ||
+                filters.clients.length > 0
+                  ? "Try adjusting your search or filters to find what you're looking for."
+                  : "Get started by creating your first case to organize and manage your documents"}
               </p>
               {onCreateCase && (
                 <Button size="lg" onClick={onCreateCase} className="shadow-sm">
@@ -473,12 +450,12 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
                     </div>
                     {totalCases > 0 && (
                       <div className="text-sm text-muted-foreground">
-                        {totalCases} {totalCases === 1 ? 'case' : 'cases'}
+                        {totalCases} {totalCases === 1 ? "case" : "cases"}
                         {searchQuery && ` matching "${searchQuery}"`}
                       </div>
                     )}
                   </div>
-                  {viewMode === 'grid' ? (
+                  {viewMode === "grid" ? (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                       {recentCases.map((case_) => (
                         <CaseListCard
@@ -529,7 +506,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
                       )}
                     </h2>
                   </div>
-                  {viewMode === 'grid' ? (
+                  {viewMode === "grid" ? (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                       {otherCases.map((case_) => (
                         <CaseListCard
@@ -581,10 +558,10 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
       <DeleteCaseConfirmationDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        caseName={deletingCase?.name || ''}
+        caseName={deletingCase?.name || ""}
         onConfirm={handleDeleteConfirm}
         loading={deleting}
       />
     </div>
-  );
+  )
 }

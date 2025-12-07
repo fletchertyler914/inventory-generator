@@ -65,7 +65,8 @@ export function useFileNavigation({
           }
           setLastFileLoaded(true)
         } catch (error) {
-          console.error("Failed to load last selected file:", error)
+          const { logError } = require('@/lib/logger');
+          logError("Failed to load last selected file", error)
           if (mounted) {
             setLastFileLoaded(true)
           }
@@ -95,7 +96,8 @@ export function useFileNavigation({
         try {
           await setStoreValue(`casespace-last-file-${caseId}`, file.absolute_path, "settings")
         } catch (error) {
-          console.error("Failed to save last selected file:", error)
+          const { logError } = require('@/lib/logger');
+          logError("Failed to save last selected file", error)
         }
       }
       // Automatically switch to split view when a file is selected

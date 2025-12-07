@@ -31,7 +31,8 @@ export function TiptapMarkdownViewer({ content, className = '' }: TiptapMarkdown
     try {
       return marked.parse(content);
     } catch (error) {
-      console.error('Error parsing markdown:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Error parsing markdown', error);
       return content; // Fallback to raw content
     }
   }, [content]);

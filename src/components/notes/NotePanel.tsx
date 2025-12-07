@@ -35,7 +35,8 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
       const loadedNotes = await noteService.listNotes(caseId, fileId)
       setNotes(loadedNotes)
     } catch (error) {
-      console.error("Failed to load notes:", error)
+      const { logError } = require('@/lib/logger');
+      logError("Failed to load notes", error)
     } finally {
       setLoading(false)
     }
@@ -94,7 +95,8 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
         setEditingNote(null)
       }
     } catch (error) {
-      console.error("Failed to delete note:", error)
+      const { logError } = require('@/lib/logger');
+      logError("Failed to delete note", error)
     }
   }
 
@@ -103,7 +105,8 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
       await noteService.toggleNotePinned(noteId)
       setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, pinned: !n.pinned } : n)))
     } catch (error) {
-      console.error("Failed to toggle pinned status:", error)
+      const { logError } = require('@/lib/logger');
+      logError("Failed to toggle pinned status", error)
     }
   }
 
@@ -239,7 +242,8 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
                                 })
                               }
                             } catch (error) {
-                              console.error("Failed to export note:", error)
+                              const { logError } = require('@/lib/logger');
+                              logError("Failed to export note", error)
                               // Fallback to browser download
                               const blob = new Blob([note.content], { type: "text/html" })
                               const url = URL.createObjectURL(blob)
@@ -351,7 +355,8 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
                         })
                       }
                     } catch (error) {
-                      console.error("Failed to export note:", error)
+                      const { logError } = require('@/lib/logger');
+                      logError("Failed to export note", error)
                       // Fallback to browser download
                       const blob = new Blob([viewingNote.content], { type: "text/html" })
                       const url = URL.createObjectURL(blob)

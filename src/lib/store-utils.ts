@@ -41,7 +41,8 @@ export async function getStoreValue<T>(key: string, defaultValue: T, storeName: 
     const value = await store.get<T>(key);
     return value ?? defaultValue;
   } catch (error) {
-    console.error(`Failed to get store value for key "${key}":`, error);
+    const { logError } = require('./logger');
+    logError(`Failed to get store value for key "${key}"`, error);
     return defaultValue;
   }
 }
@@ -55,7 +56,8 @@ export async function setStoreValue<T>(key: string, value: T, storeName: 'app' |
     await store.set(key, value);
     await store.save();
   } catch (error) {
-    console.error(`Failed to set store value for key "${key}":`, error);
+    const { logError } = require('./logger');
+    logError(`Failed to set store value for key "${key}"`, error);
     throw error;
   }
 }
@@ -69,7 +71,8 @@ export async function removeStoreValue(key: string, storeName: 'app' | 'settings
     await store.delete(key);
     await store.save();
   } catch (error) {
-    console.error(`Failed to remove store value for key "${key}":`, error);
+    const { logError } = require('./logger');
+    logError(`Failed to remove store value for key "${key}"`, error);
   }
 }
 
@@ -81,7 +84,8 @@ export async function getStoreKeys(storeName: 'app' | 'settings' = 'app'): Promi
     const store = storeName === 'settings' ? await getSettingsStore() : await getAppStore();
     return await store.keys();
   } catch (error) {
-    console.error('Failed to get store keys:', error);
+    const { logError } = require('./logger');
+    logError('Failed to get store keys', error);
     return [];
   }
 }
@@ -95,7 +99,8 @@ export async function clearStore(storeName: 'app' | 'settings' = 'app'): Promise
     await store.clear();
     await store.save();
   } catch (error) {
-    console.error('Failed to clear store:', error);
+    const { logError } = require('./logger');
+    logError('Failed to clear store', error);
   }
 }
 

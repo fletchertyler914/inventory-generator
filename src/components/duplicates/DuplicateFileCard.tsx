@@ -1,20 +1,21 @@
-import { CheckCircle2, Star, Trash2 } from 'lucide-react';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { PanelCard } from '../panel/PanelCard';
-import { StatusCell } from '../table/StatusCell';
-import type { DuplicateFile } from '@/services/duplicateService';
-import { formatBytes } from '@/lib/inventory-utils';
-import { cn } from '@/lib/utils';
+import { CheckCircle2, Star, Trash2 } from "lucide-react"
+import { Button } from "../ui/button"
+import { Badge } from "../ui/badge"
+import { PanelCard } from "../panel/PanelCard"
+import { StatusCell } from "../table/StatusCell"
+import type { DuplicateFile } from "@/services/duplicateService"
+import { formatBytes } from "@/lib/inventory-utils"
+import { cn } from "@/lib/utils"
+import type { FileStatus } from "@/types/inventory"
 
 interface DuplicateFileCardProps {
-  file: DuplicateFile;
-  isPrimary: boolean;
-  isRecommended?: boolean;
-  isViewing?: boolean;
-  onKeep: () => void;
-  onDelete: () => void;
-  recommendationReasons?: string[];
+  file: DuplicateFile
+  isPrimary: boolean
+  isRecommended?: boolean
+  isViewing?: boolean
+  onKeep: () => void
+  onDelete: () => void
+  recommendationReasons?: string[]
 }
 
 export function DuplicateFileCard({
@@ -29,8 +30,8 @@ export function DuplicateFileCard({
   return (
     <PanelCard
       className={cn(
-        isPrimary && 'border-primary/30 bg-primary/5',
-        isRecommended && !isPrimary && 'border-primary/20'
+        isPrimary && "border-primary/30 bg-primary/5",
+        isRecommended && !isPrimary && "border-primary/20"
       )}
     >
       <div className="space-y-2.5">
@@ -46,7 +47,10 @@ export function DuplicateFileCard({
                 </Badge>
               )}
               {isRecommended && !isPrimary && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/50 text-primary">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 border-primary/50 text-primary"
+                >
                   <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
                   Recommended
                 </Badge>
@@ -67,31 +71,18 @@ export function DuplicateFileCard({
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>{formatBytes(file.file_size)}</span>
           <span>•</span>
-          <StatusCell
-            status={file.status as any}
-            onStatusChange={() => {}}
-          />
+          <StatusCell status={file.status as FileStatus} onStatusChange={() => {}} />
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-2 pt-2 border-t border-border/40">
           {!isPrimary ? (
             <>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onKeep}
-                className="flex-1 text-xs h-7"
-              >
+              <Button variant="default" size="sm" onClick={onKeep} className="flex-1 text-xs h-7">
                 <CheckCircle2 className="h-3 w-3 mr-1.5" />
                 Keep
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onDelete}
-                className="h-7 w-7 p-0"
-              >
+              <Button variant="ghost" size="sm" onClick={onDelete} className="h-7 w-7 p-0">
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </>
@@ -101,6 +92,5 @@ export function DuplicateFileCard({
         </div>
       </div>
     </PanelCard>
-  );
+  )
 }
-

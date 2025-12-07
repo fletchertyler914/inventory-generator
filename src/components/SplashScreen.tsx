@@ -8,34 +8,24 @@ interface SplashScreenProps {
 }
 
 export function SplashScreen({ isVisible, onAnimationComplete }: SplashScreenProps) {
-  console.log('[Frontend] [SplashScreen] Component render - isVisible:', isVisible);
-  
   const [isAnimating, setIsAnimating] = useState(true);
   const [shouldRender, setShouldRender] = useState(true);
-  
-  console.log('[Frontend] [SplashScreen] State - isAnimating:', isAnimating, 'shouldRender:', shouldRender);
 
   useEffect(() => {
-    console.log('[Frontend] [SplashScreen] useEffect triggered - isVisible:', isVisible);
-    
     if (!isVisible) {
-      console.log('[Frontend] [SplashScreen] Hiding splash screen...');
       // Start fade out animation
       setIsAnimating(false);
       // Remove from DOM after animation completes
       const timer = setTimeout(() => {
-        console.log('[Frontend] [SplashScreen] Removing splash screen from DOM');
         setShouldRender(false);
         onAnimationComplete?.();
       }, 300); // Match animation duration
       return () => clearTimeout(timer);
     } else {
-      console.log('[Frontend] [SplashScreen] Showing splash screen...');
       // Show splash screen
       setShouldRender(true);
       // Small delay to ensure DOM is ready before starting animation
       const timer = setTimeout(() => {
-        console.log('[Frontend] [SplashScreen] Starting splash animation');
         setIsAnimating(true);
       }, 10);
       return () => clearTimeout(timer);
@@ -43,11 +33,8 @@ export function SplashScreen({ isVisible, onAnimationComplete }: SplashScreenPro
   }, [isVisible, onAnimationComplete]);
 
   if (!shouldRender) {
-    console.log('[Frontend] [SplashScreen] Not rendering (shouldRender=false)');
     return null;
   }
-
-  console.log('[Frontend] [SplashScreen] Rendering splash screen UI');
   return (
     <div
       className={cn(

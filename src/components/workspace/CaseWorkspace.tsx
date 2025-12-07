@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo, memo, lazy, Suspense } from 
 import { Loader2 } from "lucide-react"
 import { CaseHeader } from "./CaseHeader"
 import { WorkspaceLayout } from "./WorkspaceLayout"
-import { ReportGenerator } from "../reports/ReportGenerator"
 import { useWorkspacePreferences } from "@/hooks/useWorkspacePreferences"
 import { useWorkspaceAutoSync } from "@/hooks/useWorkspaceAutoSync"
 import { useFileNavigation } from "@/hooks/useFileNavigation"
@@ -15,6 +14,9 @@ import type { InventoryItem } from "@/types/inventory"
 // Lazy load heavy components for better initial load performance
 const LazyReportView = lazy(() =>
   import("../reports/ReportView").then((m) => ({ default: m.ReportView }))
+)
+const LazyReportGenerator = lazy(() =>
+  import("../reports/ReportGenerator").then((m) => ({ default: m.ReportGenerator }))
 )
 
 // Export LazyWorkflowBoard for use in BoardView
@@ -169,7 +171,8 @@ export const CaseWorkspace = memo(
         const refreshedItems = await fileService.loadCaseFilesWithInventory(case_.id, true)
         onItemsChange(refreshedItems)
       } catch (error) {
-        console.error("Failed to reload files after refresh:", error)
+        const { logError } = require("@/lib/logger")
+        logError("Failed to reload files after refresh", error)
       }
     }, [case_.id, onItemsChange])
 
@@ -236,7 +239,8 @@ export const CaseWorkspace = memo(
             }
           }
         } catch (error) {
-          console.error("Failed to fetch note for file selection:", error)
+          const { logError } = require("@/lib/logger")
+          logError("Failed to fetch note for file selection", error)
         }
       },
       [
@@ -427,13 +431,17 @@ export const CaseWorkspace = memo(
           />
         )}
 
-        {/* Report Generator Dialog */}
-        <ReportGenerator
-          items={items}
-          case_={case_}
-          open={reportDialogOpen}
-          onOpenChange={setReportDialogOpen}
-        />
+        {/* Report Generator Dialog - Lazy loaded */}
+        {reportDialogOpen && (
+          <Suspense fallback={null}>
+            <LazyReportGenerator
+              items={items}
+              case_={case_}
+              open={reportDialogOpen}
+              onOpenChange={setReportDialogOpen}
+            />
+          </Suspense>
+        )}
       </div>
     )
   },

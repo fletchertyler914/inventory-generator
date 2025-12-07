@@ -41,7 +41,7 @@ function PopoverContent({
         return computedColor
       }
     } catch (e) {
-      console.warn("Failed to compute popover color:", e)
+      // Color computation failed, using fallback
     }
     // Fallback: use the oklch value directly
     const root = document.documentElement

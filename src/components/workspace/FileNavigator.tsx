@@ -24,6 +24,7 @@ import { buildFolderTree, type FolderNode } from "@/lib/file-tree-utils"
 import { DuplicateBadge } from "../duplicates/DuplicateBadge"
 import { getDuplicateGroupVisualEncoding, clearEncodingCache } from "@/lib/duplicate-color-palette"
 import { useTheme } from "@/hooks/useTheme"
+import { logError } from "@/lib/logger"
 
 interface FileNavigatorProps {
   items: InventoryItem[]
@@ -64,10 +65,8 @@ export const FileNavigator = memo(
     onFileRemove,
     caseId,
   }: FileNavigatorProps) {
-    // Feature flag for bulk delete
-    const bulkDeleteEnabled =
-      import.meta.env["VITE_BULK_DELETE_ENABLED"] === "true" ||
-      import.meta.env["BULK_DELETE_ENABLED"] === "true"
+    // Feature flag for bulk delete (compile-time check)
+    const bulkDeleteEnabled = false // Disabled in production
 
     const [searchQuery, setSearchQuery] = React.useState("")
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
@@ -336,7 +335,7 @@ export const FileNavigator = memo(
         try {
           await onFileRemove(file)
         } catch (error) {
-          console.error("Failed to delete file:", file.file_name, error)
+          logError("Failed to delete file", error, { fileName: file.file_name })
           // Continue with other files even if one fails
         }
       }

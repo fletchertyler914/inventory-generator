@@ -73,7 +73,8 @@ export function useFileDuplicateCounts(caseId: string | undefined) {
         if (!cancelled) {
           const error = err instanceof Error ? err : new Error('Failed to fetch duplicate counts');
           setError(error);
-          console.error('[useFileDuplicateCounts] Error fetching duplicate counts:', error);
+          const { logError } = require('@/lib/logger');
+          logError('[useFileDuplicateCounts] Error fetching duplicate counts', error);
           // Return empty counts on error (files show no indicator)
           setDuplicateCounts({});
         }
@@ -108,7 +109,8 @@ export function useFileDuplicateCounts(caseId: string | undefined) {
         setDuplicateGroupIds(groupIds);
         })
         .catch((err) => {
-          console.error('[useFileDuplicateCounts] Error refetching:', err);
+          const { logError } = require('@/lib/logger');
+          logError('[useFileDuplicateCounts] Error refetching', err);
         });
     }
   }, [caseId]);

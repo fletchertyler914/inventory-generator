@@ -49,7 +49,8 @@ export function FileDuplicatePanel({
       const groupData = await duplicateService.getDuplicateGroup(caseId, fileId, true);
       setGroup(groupData);
     } catch (error) {
-      console.error('Failed to load duplicate group:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to load duplicate group', error);
       toast({
         title: 'Failed to load duplicates',
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -76,7 +77,8 @@ export function FileDuplicatePanel({
             });
         })
         .catch((error) => {
-          console.error('Failed to load recommendation:', error);
+          const { logError } = require('@/lib/logger');
+          logError('Failed to load recommendation', error);
         });
     }
   }, [group, caseId]);

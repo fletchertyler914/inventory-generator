@@ -55,7 +55,8 @@ export function CreateNoteDialog({
       onSave(true);
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to save note:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to save note', error);
     } finally {
       setSaving(false);
     }

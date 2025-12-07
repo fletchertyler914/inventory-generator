@@ -132,7 +132,10 @@ export function FieldMapperStepper({
       description: fieldName.trim() || `Extract from ${sourceType} using ${extractionMethod}`,
     }
 
-    addMapping(mapping, caseId).catch(console.error)
+    addMapping(mapping, caseId).catch((error) => {
+      const { logError } = require('@/lib/logger');
+      logError('Failed to add mapping', error);
+    })
     handleOpenChange(false)
   }, [canProceed, fieldName, sourceType, extractionMethod, pattern, patternFlags, caseId, handleOpenChange])
 

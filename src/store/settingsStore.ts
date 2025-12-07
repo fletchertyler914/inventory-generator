@@ -25,7 +25,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const config = await getSystemFileFilterConfig()
       set({ systemFileFilter: config, isLoading: false })
     } catch (error) {
-      console.error("Failed to load system file filter config:", error)
+      const { logError } = require('@/lib/logger');
+      logError("Failed to load system file filter config", error)
       // Set default config on error
       set({ 
         systemFileFilter: { 
@@ -42,7 +43,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       await saveSystemFileFilterConfig(config)
       set({ systemFileFilter: config })
     } catch (error) {
-      console.error("Failed to save system file filter config:", error)
+      const { logError } = require('@/lib/logger');
+      logError("Failed to save system file filter config", error)
       throw error
     }
   },

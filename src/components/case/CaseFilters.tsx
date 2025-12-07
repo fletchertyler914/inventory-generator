@@ -66,7 +66,7 @@ export function CaseFilters({
         return computedColor;
       }
     } catch (e) {
-      console.warn('Failed to compute card color:', e);
+      // Color computation failed, using fallback
     }
     
     // Fallback: check if dark mode

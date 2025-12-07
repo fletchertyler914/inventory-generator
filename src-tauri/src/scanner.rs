@@ -301,7 +301,7 @@ pub async fn scan_folder_async(root_path: &Path, filter_config: Option<&SystemFi
                     match FileMetadata::from_path_async(&root_clone, &path).await {
                         Ok(metadata) => Some(metadata),
                         Err(e) => {
-                            eprintln!("Error reading file {:?}: {}", path, e);
+                            log::warn!("Error reading file {:?}: {}", path, e);
                             None
                         }
                     }

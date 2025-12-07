@@ -45,7 +45,8 @@ export function CaseSwitcher({ currentCaseId, onSelectCase, onCreateCase }: Case
         }
       }
     } catch (error) {
-      console.error('Failed to load cases:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to load cases', error);
     } finally {
       setLoading(false);
     }

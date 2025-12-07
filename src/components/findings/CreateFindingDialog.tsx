@@ -71,7 +71,8 @@ export function CreateFindingDialog({
       onSave(true);
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to save finding:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to save finding', error);
     } finally {
       setSaving(false);
     }

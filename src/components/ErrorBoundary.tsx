@@ -12,6 +12,7 @@ import { AlertTriangle } from "lucide-react"
 import { Button } from "./ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { reportError, createAppErrorWithRecovery, ErrorCode } from "@/lib/error-handler"
+import { logError } from "@/lib/logger"
 
 interface Props {
   children: ReactNode
@@ -34,9 +35,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to console
-    // In production, errors should be sent to a logging service
-    console.error("ErrorBoundary caught an error:", error, errorInfo)
+    // Log error using production logger
+    logError("ErrorBoundary caught an error", error, {
+      componentStack: errorInfo.componentStack,
+    })
     
     // Report error using centralized error handler
     const appError = createAppErrorWithRecovery(error, ErrorCode.UNKNOWN_ERROR)
@@ -66,13 +68,6 @@ export class ErrorBoundary extends Component<Props, State> {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {this.state.error && (
-                <div className="p-3 bg-muted rounded-md">
-                  <p className="text-sm font-mono text-muted-foreground break-all">
-                    {this.state.error.message}
-                  </p>
-                </div>
-              )}
               <div className="flex gap-2">
                 <Button onClick={this.handleReset} variant="default">
                   Try Again

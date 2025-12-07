@@ -152,10 +152,16 @@ export function useTheme() {
 
     if (theme === "system") {
       // Remove from store to allow system autodetection
-      removeStoreValue("theme", "settings").catch(console.error)
+      removeStoreValue("theme", "settings").catch((error) => {
+        const { logError } = require('@/lib/logger');
+        logError('Failed to remove theme from store', error);
+      })
     } else {
       // Store manual override
-      setStoreValue("theme", theme, "settings").catch(console.error)
+      setStoreValue("theme", theme, "settings").catch((error) => {
+        const { logError } = require('@/lib/logger');
+        logError('Failed to save theme to store', error);
+      })
     }
   }, [theme, isLoading])
 

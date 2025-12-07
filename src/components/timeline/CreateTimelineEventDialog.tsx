@@ -55,7 +55,8 @@ export function CreateTimelineEventDialog({
       const minutes = parseInt(timeParts[1] || '0', 10);
       
       if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-        console.error('Invalid time format');
+        const { logError } = require('@/lib/logger');
+        logError('Invalid time format', new Error('Invalid time format'));
         setSaving(false);
         return;
       }
@@ -65,7 +66,8 @@ export function CreateTimelineEventDialog({
       const timestamp = Math.floor(eventDate.getTime() / 1000);
 
       if (isNaN(timestamp) || timestamp <= 0) {
-        console.error('Invalid timestamp calculated');
+        const { logError } = require('@/lib/logger');
+        logError('Invalid timestamp calculated', new Error('Invalid timestamp calculated'));
         setSaving(false);
         return;
       }
@@ -80,7 +82,8 @@ export function CreateTimelineEventDialog({
       onSave(true);
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to create timeline event:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to create timeline event', error);
     } finally {
       setSaving(false);
     }

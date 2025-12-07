@@ -48,7 +48,8 @@ export function useFileNoteCounts(caseId: string | undefined) {
         if (!cancelled) {
           const error = err instanceof Error ? err : new Error('Failed to fetch note counts');
           setError(error);
-          console.error('[useFileNoteCounts] Error fetching note counts:', error);
+          const { logError } = require('@/lib/logger');
+          logError('[useFileNoteCounts] Error fetching note counts', error);
           // Return empty counts on error (files show no indicator)
           setNoteCounts({});
         }
@@ -74,7 +75,8 @@ export function useFileNoteCounts(caseId: string | undefined) {
     }).catch((err) => {
       const error = err instanceof Error ? err : new Error('Failed to refetch note counts');
       setError(error);
-      console.error('[useFileNoteCounts] Error refetching note counts:', error);
+      const { logError } = require('@/lib/logger');
+      logError('[useFileNoteCounts] Error refetching note counts', error);
       setNoteCounts({});
     });
   }, [caseId]);

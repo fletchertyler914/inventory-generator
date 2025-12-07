@@ -12,6 +12,7 @@ import { useFileNoteCounts } from "@/hooks/useFileNoteCounts"
 import { useFileDuplicateCounts } from "@/hooks/useFileDuplicateCounts"
 import { useWorkflowSelection } from "@/hooks/useWorkflowSelection"
 import { useSwimlaneFilter } from "@/hooks/useSwimlaneFilter"
+import { logError, logDebug } from "@/lib/logger"
 import { getDuplicateGroupVisualEncoding, clearEncodingCache } from "@/lib/duplicate-color-palette"
 import { useTheme } from "@/hooks/useTheme"
 import {
@@ -505,13 +506,13 @@ export function WorkflowBoard({
           fileService
             .updateFileStatus(item.id!, newStatus)
             .then(() => {
-              console.log("[WorkflowBoard] Successfully updated file status in database:", item.id)
+              logDebug("Successfully updated file status in database", { itemId: item.id })
             })
             .catch((error) => {
-              console.error(
-                "[WorkflowBoard] Failed to update file status in database:",
+              logError(
+                "Failed to update file status in database",
                 error,
-                item.id
+                { itemId: item.id }
               )
               // Revert this item on error
               const revertedItems = [...updatedItems]
@@ -622,12 +623,6 @@ export function WorkflowBoard({
 
       // TODO: Persist sort order to database when backend support is added
       // For now, sort order is maintained in memory
-      console.log(
-        "[WorkflowBoard] Sort order changed for:",
-        activePath,
-        "to position of:",
-        overPath
-      )
     },
     [items, itemsByStatus, onItemsChange]
   )

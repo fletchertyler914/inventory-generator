@@ -38,7 +38,8 @@ export function useWorkspacePreferences(caseId: string) {
           setIsLoading(false)
         }
       } catch (error) {
-        console.error("Failed to load workspace preferences:", error)
+        const { logError } = require('@/lib/logger');
+        logError("Failed to load workspace preferences", error)
         if (mounted) {
           setPreferences(defaults)
           setPreferencesLoaded(true)
@@ -65,7 +66,8 @@ export function useWorkspacePreferences(caseId: string) {
       try {
         await workspacePreferencesService.savePreferences(caseId, debouncedPreferences)
       } catch (error) {
-        console.error("Failed to save workspace preferences:", error)
+        const { logError } = require('@/lib/logger');
+        logError("Failed to save workspace preferences", error)
       }
     }
 

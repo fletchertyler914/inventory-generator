@@ -14,6 +14,7 @@ import { caseService } from "./services/caseService"
 import { createAppError, logError, ErrorCode } from "./lib/error-handler"
 import { toast } from "./hooks/useToast"
 import { getStoreValue, setStoreValue } from "./lib/store-utils"
+import { logger, logError as logAppError } from "./lib/logger"
 import type { Case } from "./types/case"
 
 /**
@@ -27,12 +28,8 @@ import type { Case } from "./types/case"
  * - Native desktop only: Built with Tauri for Windows, macOS, Linux
  */
 function App() {
-  console.log("[Frontend] [App] ===== APP COMPONENT RENDER START =====")
-
   // App initialization state
   const [isInitializing, setIsInitializing] = useState(true)
-
-  console.log("[Frontend] [App] Initial state - isInitializing:", isInitializing)
 
   // Case-first state management
   const [currentCase, setCurrentCase] = useState<Case | null>(null)
@@ -57,7 +54,7 @@ function App() {
       try {
         await setStoreValue("casespace-last-case-id", case_.id, "settings")
       } catch (error) {
-        console.error("Failed to save last selected case:", error)
+        logAppError("Failed to save last selected case", error)
       }
 
       try {
@@ -96,7 +93,7 @@ function App() {
                 totalUpdated += result.files_updated
                 totalSkipped += result.files_skipped
               } catch (error) {
-                console.error(`Failed to ingest source ${source}:`, error)
+                logAppError(`Failed to ingest source ${source}`, error)
               }
             }
 
@@ -131,9 +128,6 @@ function App() {
    * Initialize app - wait for theme and React to be ready, and load last selected case
    */
   useEffect(() => {
-    console.log("[Frontend] [App] useEffect: Initialization effect running")
-    console.log("[Frontend] [App] Setting 800ms timer to complete initialization...")
-
     let mounted = true
 
     // Load last selected case if available
@@ -152,20 +146,18 @@ function App() {
             }
           } catch (error) {
             // Case no longer exists, ignore
-            console.log("Last selected case no longer exists:", lastCaseId)
+            logger.debug("Last selected case no longer exists", { lastCaseId })
           }
         }
       } catch (error) {
-        console.error("Failed to load last selected case:", error)
+        logAppError("Failed to load last selected case", error)
       }
     }
 
     // Wait for theme initialization and initial render
     const initTimer = setTimeout(() => {
-      console.log("[Frontend] [App] Initialization timer fired, setting isInitializing to false")
       if (mounted) {
         setIsInitializing(false)
-        console.log("[Frontend] [App] Initialization complete")
         // Load last case after initialization
         loadLastCase()
       }
@@ -173,7 +165,6 @@ function App() {
 
     return () => {
       mounted = false
-      console.log("[Frontend] [App] Cleanup: Clearing initialization timer")
       clearTimeout(initTimer)
     }
   }, [handleCaseSelect])
@@ -316,12 +307,8 @@ function App() {
     [currentCase, setItems]
   )
 
-  console.log("[Frontend] [App] Render decision - currentCase:", !!currentCase)
-  console.log("[Frontend] [App] Render decision - isInitializing:", isInitializing)
-
   // Render case list view (case-first workflow)
   if (!currentCase) {
-    console.log("[Frontend] [App] Rendering case list view (no current case)")
     return (
       <ErrorBoundary>
         <div className="h-screen w-screen bg-background text-foreground antialiased overflow-hidden">
@@ -342,7 +329,6 @@ function App() {
   }
 
   // Render case workspace (integrated multi-pane layout)
-  console.log("[Frontend] [App] Rendering case workspace (current case exists)")
   return (
     <ErrorBoundary>
       <div className="h-screen w-screen bg-background text-foreground antialiased overflow-hidden">

@@ -105,7 +105,8 @@ export function ReportGenerator({ items, case_, open, onOpenChange }: ReportGene
         })
       }
     } catch (error) {
-      console.error("Report generation error:", error)
+      const { logError } = require('@/lib/logger');
+      logError("Report generation error", error)
       toast({
         title: "Export failed",
         description: error instanceof Error ? error.message : "Failed to generate report",

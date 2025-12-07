@@ -35,7 +35,8 @@ export function DuplicateManagementPanel({ caseId, onClose }: DuplicateManagemen
       setGroups(loadedGroups);
       setStats(loadedStats);
     } catch (error) {
-      console.error('Failed to load duplicate groups:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to load duplicate groups', error);
       toast({
         title: 'Failed to load duplicates',
         description: error instanceof Error ? error.message : 'Unknown error',

@@ -89,7 +89,10 @@ export function ColumnManager({
 
   const handleApply = useCallback(() => {
     onConfigChange(localConfig);
-    saveColumnConfig(localConfig, caseId).catch(console.error);
+    saveColumnConfig(localConfig, caseId).catch((error) => {
+      const { logError } = require('@/lib/logger');
+      logError('Failed to save column config', error);
+    });
     onOpenChange(false);
   }, [localConfig, onConfigChange, caseId, onOpenChange]);
 

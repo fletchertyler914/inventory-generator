@@ -63,7 +63,8 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId, 
       const loadedEvents = await timelineService.listEvents(caseId);
       setEvents(loadedEvents);
     } catch (error) {
-      console.error('Failed to load timeline events:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to load timeline events', error);
     } finally {
       setLoading(false);
     }
@@ -80,7 +81,8 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId, 
       setEditingEventId(null);
       setEditingDescription('');
     } catch (error) {
-      console.error('Failed to update timeline event:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to update timeline event', error);
     }
   }, [editingDescription, loadEvents]);
 
@@ -92,7 +94,8 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId, 
       await timelineService.deleteEvent(eventId);
       await loadEvents();
     } catch (error) {
-      console.error('Failed to delete timeline event:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to delete timeline event', error);
     }
   }, [loadEvents]);
 

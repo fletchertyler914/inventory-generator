@@ -35,23 +35,6 @@ pub fn validate_and_canonicalize_path(path: &Path) -> Result<PathBuf, String> {
     }
 }
 
-/// Validate that a path is within an allowed directory (prevents directory traversal)
-pub fn validate_path_within_base(path: &Path, base_dir: &Path) -> Result<PathBuf, String> {
-    let canonical_path = validate_and_canonicalize_path(path)?;
-    let canonical_base = base_dir.canonicalize()
-        .map_err(|e| format!("Failed to canonicalize base directory: {}", e))?;
-    
-    // SECURITY: Ensure path is within base directory
-    if !canonical_path.starts_with(&canonical_base) {
-        return Err(format!(
-            "Path '{}' is outside allowed directory '{}'",
-            canonical_path.display(),
-            canonical_base.display()
-        ));
-    }
-    
-    Ok(canonical_path)
-}
 
 /// Validate file path for reading (must exist and be a file)
 pub async fn validate_file_path(path: &Path) -> Result<PathBuf, String> {
@@ -101,14 +84,4 @@ pub async fn validate_directory_path(path: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-/// Sanitize filename to prevent directory traversal and invalid characters
-pub fn sanitize_filename(filename: &str) -> String {
-    // Remove path separators and null bytes
-    filename
-        .replace('/', "_")
-        .replace('\\', "_")
-        .replace('\0', "")
-        .trim()
-        .to_string()
-}
 

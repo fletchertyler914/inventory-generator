@@ -7,6 +7,7 @@
 
 import { getStoreValue, setStoreValue } from "@/lib/store-utils"
 import type { MappingConfig } from "@/types/mapping"
+import { logWarn } from "@/lib/logger"
 
 export type ColumnId = 
   | 'file_name'
@@ -130,7 +131,7 @@ export async function getGlobalColumnConfigAsync(): Promise<TableColumnConfig> {
       }
     }
   } catch (error) {
-    console.warn('Failed to get global column config from database, falling back to store:', error);
+    logWarn('Failed to get global column config from database, falling back to store', { error });
   }
 
   // Fallback to store for backward compatibility
@@ -196,7 +197,7 @@ export async function getColumnConfigAsync(caseId?: string): Promise<TableColumn
       }
     }
   } catch (error) {
-    console.warn('Failed to get column config from database, falling back to store:', error);
+    logWarn('Failed to get column config from database, falling back to store', { error });
   }
 
   // Fallback to store for backward compatibility
@@ -252,7 +253,7 @@ export async function saveColumnConfig(config: TableColumnConfig, caseId?: strin
     
     return; // Success, no need for fallback
   } catch (error) {
-    console.warn('Failed to save column config to database, falling back to store:', error);
+    logWarn('Failed to save column config to database, falling back to store', { error });
   }
 
   // Fallback to store for backward compatibility

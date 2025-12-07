@@ -32,7 +32,8 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
         const extracted = await metadataService.extractMetadata(filePath);
         setMetadata(extracted);
       } catch (error) {
-        console.error('Failed to extract metadata:', error);
+        const { logError } = require('@/lib/logger');
+        logError('Failed to extract metadata', error);
         setMetadata(null); // Ensure metadata is null on error
       } finally {
         setLoading(false);
@@ -53,7 +54,8 @@ export function MetadataPanel({ filePath, item, caseId }: MetadataPanelProps) {
       setCopiedHash(hashType);
       setTimeout(() => setCopiedHash(null), 2000);
     } catch (error) {
-      console.error('Failed to copy:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to copy', error);
     }
   };
 

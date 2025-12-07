@@ -3,33 +3,31 @@
  * ELITE: Helper functions to parse and access schema-driven fields
  */
 
-import type { InventoryItem } from '@/types/inventory'
-import { getMappings } from '@/services/mappingService'
-import type { FieldMapping } from '@/types/mapping'
+import type { InventoryItem } from "@/types/inventory"
+import { getMappings } from "@/services/mappingService"
+import type { FieldMapping } from "@/types/mapping"
 
 /**
  * Format bytes to human-readable string
  */
 export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  if (bytes === 0) return "0 Bytes"
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
 }
 
 /**
  * Parse inventory_data JSON string into object
  * Uses caching for performance
  */
-const jsonCache = new WeakMap<InventoryItem, Record<string, any>>()
+const jsonCache = new WeakMap<InventoryItem, Record<string, unknown>>()
 
-export function getParsedInventoryData(item: InventoryItem): Record<string, any> {
+export function getParsedInventoryData(item: InventoryItem): Record<string, unknown> {
   if (!jsonCache.has(item)) {
     try {
-      const parsed = item.inventory_data 
-        ? JSON.parse(item.inventory_data) 
-        : {}
+      const parsed = item.inventory_data ? JSON.parse(item.inventory_data) : {}
       jsonCache.set(item, parsed)
     } catch {
       jsonCache.set(item, {})
@@ -42,11 +40,22 @@ export function getParsedInventoryData(item: InventoryItem): Record<string, any>
  * Get a specific field value from inventory_data
  */
 export function getInventoryField(
-  item: InventoryItem, 
+  item: InventoryItem,
   fieldName: string
 ): string | number | boolean | null | undefined {
   const data = getParsedInventoryData(item)
-  return data[fieldName]
+  const value = data[fieldName]
+  // Type guard: only return valid types
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null ||
+    value === undefined
+  ) {
+    return value
+  }
+  return undefined
 }
 
 /**
@@ -56,18 +65,18 @@ export function getInventoryField(
 export function getMappingFields(
   item: InventoryItem,
   caseId?: string
-): Map<string, { value: any; mapping: FieldMapping }> {
+): Map<string, { value: unknown; mapping: FieldMapping }> {
   const mappings = getMappings(caseId)
   const data = getParsedInventoryData(item)
-  const fields = new Map<string, { value: any; mapping: FieldMapping }>()
-  
+  const fields = new Map<string, { value: unknown; mapping: FieldMapping }>()
+
   for (const mapping of mappings) {
     const value = data[mapping.columnId]
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== null && value !== "") {
       fields.set(mapping.columnId, { value, mapping })
     }
   }
-  
+
   return fields
 }
 
@@ -79,40 +88,37 @@ export function getKeyMappingFields(
   item: InventoryItem,
   caseId?: string,
   maxFields: number = 2
-): Array<{ columnId: string; label: string; value: any }> {
+): Array<{ columnId: string; label: string; value: unknown }> {
   const mappings = getMappings(caseId)
   const data = getParsedInventoryData(item)
-  
+
   // Sort by priority and get fields with values
   const fieldsWithValues = mappings
-    .filter(m => {
+    .filter((m) => {
       const value = data[m.columnId]
-      return value !== undefined && value !== null && value !== ''
+      return value !== undefined && value !== null && value !== ""
     })
     .sort((a, b) => (a.priority || 999) - (b.priority || 999))
     .slice(0, maxFields)
-    .map(m => ({
+    .map((m) => ({
       columnId: m.columnId,
-      label: m.description || m.columnId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      label:
+        m.description || m.columnId.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
       value: data[m.columnId],
     }))
-  
+
   return fieldsWithValues
 }
 
 /**
  * Format a mapping field value for display
  */
-export function formatMappingValue(
-  value: any,
-  _extractionMethod?: string
-): string {
-  if (value === null || value === undefined) return ''
-  
-  if (typeof value === 'string') return value
-  if (typeof value === 'number') return String(value)
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  
+export function formatMappingValue(value: unknown, _extractionMethod?: string): string {
+  if (value === null || value === undefined) return ""
+
+  if (typeof value === "string") return value
+  if (typeof value === "number") return String(value)
+  if (typeof value === "boolean") return value ? "Yes" : "No"
+
   return String(value)
 }
-

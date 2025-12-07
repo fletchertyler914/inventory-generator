@@ -61,7 +61,8 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
       onCaseUpdated();
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to update case:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to update case', error);
       toast({
         title: 'Failed to update case',
         description: error instanceof Error ? error.message : 'An error occurred while updating the case.',
@@ -169,7 +170,10 @@ export function EditCaseDialog({ open, onOpenChange, case_, onCaseUpdated }: Edi
           config={columnConfig}
           onConfigChange={(newConfig) => {
             setColumnConfig(newConfig);
-            saveColumnConfig(newConfig, case_.id).catch(console.error);
+            saveColumnConfig(newConfig, case_.id).catch((error) => {
+              const { logError } = require('@/lib/logger');
+              logError('Failed to save column config', error);
+            });
           }}
           caseId={case_.id}
         />

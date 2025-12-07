@@ -4,7 +4,7 @@ import { Badge } from "../ui/badge"
 import { cn } from "@/lib/utils"
 import { getFileIcon } from "@/lib/file-icon-utils"
 import type { InventoryItem } from "@/types/inventory"
-import { useDraggable } from "@dnd-kit/core"
+import { useDraggable, type DraggableAttributes } from "@dnd-kit/core"
 import { getKeyMappingFields, formatMappingValue } from "@/lib/inventory-utils"
 import { DuplicateBadge } from "../duplicates/DuplicateBadge"
 
@@ -20,8 +20,8 @@ interface WorkflowCardProps {
   duplicateCount?: number
   duplicateGroupId?: string
   duplicateShape?: "dot" | "square" | "diamond"
-  dragListeners?: any
-  dragAttributes?: any
+  dragListeners?: ReturnType<typeof useDraggable>["listeners"]
+  dragAttributes?: DraggableAttributes
 }
 
 export const WorkflowCard = memo(function WorkflowCard({
@@ -119,7 +119,7 @@ export const WorkflowCard = memo(function WorkflowCard({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
-          handleClick(e as any)
+          handleClick(e as unknown as React.MouseEvent)
         }
       }}
     >

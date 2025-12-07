@@ -54,7 +54,8 @@ export function FileChangeWarning({
       await onRefresh();
       setDismissed(true);
     } catch (error) {
-      console.error('Failed to refresh file:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to refresh file', error);
     } finally {
       setIsRefreshing(false);
     }

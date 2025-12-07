@@ -510,7 +510,7 @@ function SearchResultsPanel({
         return computedColor
       }
     } catch (e) {
-      console.warn("Failed to compute popover color:", e)
+      // Color computation failed, using fallback
     }
     const root = document.documentElement
     const popoverValue = getComputedStyle(root).getPropertyValue("--popover").trim()

@@ -31,7 +31,8 @@ export function DuplicateGroupView({ group, caseId, onBack, onResolved }: Duplic
       const rec = recommendFileToKeep(group.files, notesCounts, findingsCounts);
       setRecommendation(rec);
     } catch (error) {
-      console.error('Failed to load recommendation:', error);
+      const { logError } = require('@/lib/logger');
+      logError('Failed to load recommendation', error);
     }
   }, [group.files, caseId]);
 

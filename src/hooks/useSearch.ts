@@ -65,7 +65,8 @@ export function useSearch({
           setQueryLoaded(true);
         }
       } catch (error) {
-        console.error('Failed to load saved search query:', error);
+        const { logError } = require('@/lib/logger');
+        logError('Failed to load saved search query', error);
         if (mounted) {
           setQueryLoaded(true);
         }
@@ -91,7 +92,8 @@ export function useSearch({
           'settings'
         );
       } catch (error) {
-        console.error('Failed to save search query:', error);
+        const { logError } = require('@/lib/logger');
+        logError('Failed to save search query', error);
       }
     };
 
@@ -216,7 +218,8 @@ export function useSearch({
         if (!cancelled) {
           const error = err instanceof Error ? err : new Error('Search failed');
           setError(error);
-          console.error('Search error:', error);
+          const { logError } = require('@/lib/logger');
+          logError('Search error', error);
           
           // Fallback to local search on error
           try {
@@ -226,7 +229,8 @@ export function useSearch({
             }
           } catch (localError) {
             if (!cancelled) {
-              console.error('Local search fallback failed:', localError);
+              const { logError } = require('@/lib/logger');
+              logError('Local search fallback failed', localError);
               setResults([]);
             }
           }

@@ -142,7 +142,8 @@ export async function getNotesCounts(
     }
     return map;
   } catch (error) {
-    console.error('Failed to get note counts:', error);
+    const { logError } = require('./logger');
+    logError('Failed to get note counts', error);
     return new Map();
   }
 }
@@ -183,7 +184,8 @@ export async function getFindingsCounts(
     
     return map;
   } catch (error) {
-    console.error('Failed to get finding counts:', error);
+    const { logError } = require('./logger');
+    logError('Failed to get finding counts', error);
     return new Map();
   }
 }

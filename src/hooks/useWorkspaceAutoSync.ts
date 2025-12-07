@@ -1,18 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { fileService } from "@/services/fileService"
 import { toast } from "@/hooks/useToast"
+import type { InventoryItem } from "@/types/inventory"
 
 interface UseWorkspaceAutoSyncOptions {
   caseId: string
   enabled: boolean
   intervalMinutes: number
   preferencesLoaded: boolean
-  onItemsChange: (items: any[]) => void
+  onItemsChange: (items: InventoryItem[]) => void
 }
 
 /**
  * ELITE: Auto-sync hook with intelligent interval management
- * 
+ *
  * Features:
  * - Only runs when component is mounted (case is open)
  * - Pauses when app/tab is hidden (document.hidden check)
@@ -64,12 +65,16 @@ export function useWorkspaceAutoSync({
         lastAutoSyncTimeRef.current = now
 
         // Show subtle notification only if files were actually changed
-        if (result.files_inserted > 0 || result.files_updated > 0 || (result.files_deleted ?? 0) > 0) {
+        if (
+          result.files_inserted > 0 ||
+          result.files_updated > 0 ||
+          (result.files_deleted ?? 0) > 0
+        ) {
           const parts: string[] = []
           if (result.files_inserted > 0) parts.push(`${result.files_inserted} new`)
           if (result.files_updated > 0) parts.push(`${result.files_updated} updated`)
           if ((result.files_deleted ?? 0) > 0) parts.push(`${result.files_deleted} deleted (auto)`)
-          
+
           toast({
             title: "Files synced",
             description: parts.join(", "),
@@ -88,7 +93,8 @@ export function useWorkspaceAutoSync({
         }
       } catch (error) {
         // Silent failure for auto-sync (don't spam user with errors)
-        console.error("Auto-sync failed:", error)
+        const { logError } = require("@/lib/logger")
+        logError("Auto-sync failed", error)
       } finally {
         setIsSyncing(false)
       }
@@ -126,13 +132,13 @@ export function useWorkspaceAutoSync({
       if (result.files_updated > 0) parts.push(`${result.files_updated} updated`)
       if (result.files_skipped > 0) parts.push(`${result.files_skipped} skipped`)
       if ((result.files_deleted ?? 0) > 0) parts.push(`${result.files_deleted} deleted (auto)`)
-      
+
       toast({
         title: "Files synced",
         description: parts.length > 0 ? parts.join(", ") : "No changes",
         variant: "success",
       })
-      
+
       // Show warning if files were protected (have user data)
       if ((result.files_protected ?? 0) > 0) {
         toast({
@@ -166,4 +172,3 @@ export function useWorkspaceAutoSync({
     handleSyncFiles,
   }
 }
-

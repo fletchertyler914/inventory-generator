@@ -690,7 +690,8 @@ export const IntegratedFileViewer = memo(
             setPdfBlobUrl(blobUrl)
             setLoading(false)
           } catch (err) {
-            console.error("[IntegratedFileViewer] Error loading PDF:", err)
+            const { logError } = require("@/lib/logger")
+            logError("[IntegratedFileViewer] Error loading PDF", err)
             const errorMessage = err instanceof Error ? err.message : String(err)
 
             // ELITE: Provide helpful error message for file not found (e.g., after rename)
@@ -720,7 +721,8 @@ export const IntegratedFileViewer = memo(
             setImageBlobUrl(blobUrl)
             setLoading(false)
           } catch (err) {
-            console.error("[IntegratedFileViewer] Error loading image:", err)
+            const { logError } = require("@/lib/logger")
+            logError("[IntegratedFileViewer] Error loading image", err)
             const errorMessage = err instanceof Error ? err.message : String(err)
 
             // ELITE: Provide helpful error message for file not found (e.g., after rename)

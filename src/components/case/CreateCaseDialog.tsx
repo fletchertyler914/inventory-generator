@@ -1,114 +1,120 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { FolderOpen, File, X } from 'lucide-react';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { createAppError, logError, ErrorCode } from '@/lib/error-handler';
-import { toast } from '@/hooks/useToast';
+import { useState, useCallback, useEffect } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog"
+import { Button } from "../ui/button"
+import { Input } from "../ui/input"
+import { Label } from "../ui/label"
+import { FolderOpen, File, X } from "lucide-react"
+import { open as openDialog } from "@tauri-apps/plugin-dialog"
+import { createAppError, logError, ErrorCode } from "@/lib/error-handler"
+import { toast } from "@/hooks/useToast"
 
 interface CreateCaseDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onCaseCreated: (
     name: string,
     sources: string[],
     caseId?: string,
     department?: string,
     client?: string
-  ) => void;
+  ) => void
 }
 
 export function CreateCaseDialog({ open, onOpenChange, onCaseCreated }: CreateCaseDialogProps) {
-  // Pre-populate with dummy data for testing (cross-platform compatible)
-  const [name, setName] = useState('Demo Case');
-  const [caseId, setCaseId] = useState('CASE-2025-001');
-  const [department, setDepartment] = useState('Legal');
-  const [client, setClient] = useState('Demo Corp');
-  const [sources, setSources] = useState<string[]>([]); // Array of file/folder paths
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("")
+  const [caseId, setCaseId] = useState("")
+  const [department, setDepartment] = useState("")
+  const [client, setClient] = useState("")
+  const [sources, setSources] = useState<string[]>([]) // Array of file/folder paths
+  const [loading, setLoading] = useState(false)
 
-  // Reset to dummy data when dialog opens
+  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      setName('Demo Case');
-      setCaseId('CASE-2025-001');
-      setDepartment('Legal');
-      setClient('Demo Corp');
-      setSources([]); // Empty - user must select sources
+      setName("")
+      setCaseId("")
+      setDepartment("")
+      setClient("")
+      setSources([]) // Empty - user must select sources
     }
-  }, [open]);
+  }, [open])
 
   const handleSelectFolder = useCallback(async () => {
     try {
       const selected = await openDialog({
         directory: true,
         multiple: true,
-        title: 'Select folder(s) for case',
-      });
+        title: "Select folder(s) for case",
+      })
 
       if (selected) {
-        const newSources = Array.isArray(selected) ? selected : [selected];
-        setSources(prev => {
-          const combined = [...prev, ...newSources];
+        const newSources = Array.isArray(selected) ? selected : [selected]
+        setSources((prev) => {
+          const combined = [...prev, ...newSources]
           // Remove duplicates
-          return Array.from(new Set(combined));
-        });
+          return Array.from(new Set(combined))
+        })
         // Auto-fill name from first folder if not set
         if (!name && newSources.length > 0 && newSources[0]) {
-          const folderName = newSources[0].split(/[/\\]/).pop() || 'Untitled Case';
-          setName(folderName);
+          const folderName = newSources[0].split(/[/\\]/).pop() || "Untitled Case"
+          setName(folderName)
         }
       }
     } catch (error) {
-      const appError = createAppError(error, ErrorCode.INVALID_PATH);
-      logError(appError, 'CreateCaseDialog');
+      const appError = createAppError(error, ErrorCode.INVALID_PATH)
+      logError(appError, "CreateCaseDialog")
       toast({
-        title: 'Failed to select folder',
+        title: "Failed to select folder",
         description: appError.message,
-        variant: 'destructive',
-      });
+        variant: "destructive",
+      })
     }
-  }, [name]);
+  }, [name])
 
   const handleSelectFile = useCallback(async () => {
     try {
       const selected = await openDialog({
         directory: false,
         multiple: true,
-        title: 'Select file(s) for case',
-      });
+        title: "Select file(s) for case",
+      })
 
       if (selected) {
-        const newSources = Array.isArray(selected) ? selected : [selected];
-        setSources(prev => {
-          const combined = [...prev, ...newSources];
+        const newSources = Array.isArray(selected) ? selected : [selected]
+        setSources((prev) => {
+          const combined = [...prev, ...newSources]
           // Remove duplicates
-          return Array.from(new Set(combined));
-        });
+          return Array.from(new Set(combined))
+        })
       }
     } catch (error) {
-      const appError = createAppError(error, ErrorCode.INVALID_PATH);
-      logError(appError, 'CreateCaseDialog');
+      const appError = createAppError(error, ErrorCode.INVALID_PATH)
+      logError(appError, "CreateCaseDialog")
       toast({
-        title: 'Failed to select file',
+        title: "Failed to select file",
         description: appError.message,
-        variant: 'destructive',
-      });
+        variant: "destructive",
+      })
     }
-  }, []);
+  }, [])
 
   const handleRemoveSource = useCallback((index: number) => {
-    setSources(prev => prev.filter((_, i) => i !== index));
-  }, []);
+    setSources((prev) => prev.filter((_, i) => i !== index))
+  }, [])
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim() || sources.length === 0) {
-      return;
+      return
     }
 
-    setLoading(true);
+    setLoading(true)
     try {
       await onCaseCreated(
         name.trim(),
@@ -116,34 +122,37 @@ export function CreateCaseDialog({ open, onOpenChange, onCaseCreated }: CreateCa
         caseId.trim() || undefined,
         department.trim() || undefined,
         client.trim() || undefined
-      );
+      )
       // Reset form
-      setName('');
-      setCaseId('');
-      setDepartment('');
-      setClient('');
-      setSources([]);
+      setName("")
+      setCaseId("")
+      setDepartment("")
+      setClient("")
+      setSources([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [name, sources, caseId, department, client, onCaseCreated]);
+  }, [name, sources, caseId, department, client, onCaseCreated])
 
-  const handleOpenChange = useCallback((newOpen: boolean) => {
-    if (!newOpen) {
-      // Reset form when closing
-      setName('');
-      setCaseId('');
-      setDepartment('');
-      setClient('');
-      setSources([]);
-    }
-    onOpenChange(newOpen);
-  }, [onOpenChange]);
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      if (!newOpen) {
+        // Reset form when closing
+        setName("")
+        setCaseId("")
+        setDepartment("")
+        setClient("")
+        setSources([])
+      }
+      onOpenChange(newOpen)
+    },
+    [onOpenChange]
+  )
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
+        <DialogHeader>
           <DialogTitle>Create New Case</DialogTitle>
           <DialogDescription>
             Create a new case workspace. Select one or more files or folders as sources.
@@ -245,15 +254,11 @@ export function CreateCaseDialog({ open, onOpenChange, onCaseCreated }: CreateCa
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!name.trim() || sources.length === 0 || loading}
-          >
-            {loading ? 'Creating...' : 'Create Case'}
+          <Button onClick={handleSubmit} disabled={!name.trim() || sources.length === 0 || loading}>
+            {loading ? "Creating..." : "Create Case"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
-
