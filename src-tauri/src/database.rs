@@ -51,7 +51,8 @@ pub async fn get_db_pool(app: &tauri::AppHandle) -> Result<SqlitePool, String> {
             format!("Failed to create app data directory: {}", e)
         })?;
     
-    log::info!("Connecting to database at {}", db_path.display());
+    // Only log connection at debug level - routine operation, too verbose for info
+    log::debug!("Connecting to database at {}", db_path.display());
     let pool = SqlitePoolOptions::new()
         .max_connections(1) // SQLite is single-writer, single connection is optimal
         .acquire_timeout(std::time::Duration::from_secs(30))
@@ -123,7 +124,8 @@ pub async fn get_db_pool(app: &tauri::AppHandle) -> Result<SqlitePool, String> {
     // Run migrations
     log::debug!("Running database migrations");
     run_migrations(&pool).await?;
-    log::info!("Database connection established successfully");
+    // Only log at debug level - connection establishment is routine, not noteworthy
+    log::debug!("Database connection established successfully");
     
     Ok(pool)
 }

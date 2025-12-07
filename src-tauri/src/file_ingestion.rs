@@ -518,6 +518,10 @@ pub async fn batch_update_files(
 /// ELITE: Batch create duplicate groups for newly inserted files
 /// Only processes local files (filters by case_sources.source_location = 'local')
 /// Groups files with the same hash into duplicate_groups
+/// 
+/// Performance: Uses single batch SQL query with GROUP BY instead of sequential per-file queries
+/// Scalability: Handles millions of files efficiently using index-optimized queries
+/// Complexity: O(1) queries instead of O(n) where n = files with duplicates
 pub async fn batch_create_duplicate_groups(
     pool: &SqlitePool,
     case_id: &str,
@@ -541,87 +545,157 @@ pub async fn batch_create_duplicate_groups(
         .await
         .map_err(|e| format!("Failed to begin transaction: {}", e))?;
     
+    // ELITE: Ultra-optimized single query approach
+    // Gets ALL duplicate files with their data AND existing duplicate_groups entries in one query
+    // Then processes everything in memory and batch inserts
+    let duplicate_files_rows = sqlx::query(
+        r#"
+        SELECT 
+            f.file_hash as group_id,
+            f.id as file_id,
+            f.created_at,
+            dg.file_id as existing_file_id,
+            dg.is_primary as existing_is_primary
+        FROM files f
+        INNER JOIN case_sources cs ON f.case_id = cs.case_id 
+            AND f.source_directory = cs.source_path
+        LEFT JOIN duplicate_groups dg ON dg.group_id = f.file_hash AND dg.file_id = f.id
+        WHERE f.case_id = ?
+          AND f.file_hash IS NOT NULL
+          AND f.deleted_at IS NULL
+          AND cs.source_location = 'local'
+          AND f.file_hash IN (
+              SELECT file_hash
+              FROM files f2
+              INNER JOIN case_sources cs2 ON f2.case_id = cs2.case_id 
+                  AND f2.source_directory = cs2.source_path
+              WHERE f2.case_id = ?
+                AND f2.file_hash IS NOT NULL
+                AND f2.deleted_at IS NULL
+                AND cs2.source_location = 'local'
+              GROUP BY f2.file_hash
+              HAVING COUNT(*) > 1
+          )
+        ORDER BY f.file_hash, f.created_at ASC
+        "#
+    )
+    .bind(case_id)
+    .bind(case_id)
+    .fetch_all(&mut *transaction)
+    .await
+    .map_err(|e| format!("Failed to find duplicate files: {}", e))?;
+    
+    if duplicate_files_rows.is_empty() {
+        transaction.commit()
+            .await
+            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+        return Ok(0);
+    }
+    
+    // Process results in memory: group by hash, track existing entries, determine what to insert
+    use std::collections::{HashMap, HashSet};
+    
+    // Map: group_id -> (file_id -> (created_at, is_existing, existing_is_primary))
+    let mut groups: HashMap<String, HashMap<String, (i64, bool, Option<i64>)>> = HashMap::new();
+    
+    // Track which groups already exist (have at least one entry in duplicate_groups)
+    let mut existing_groups: HashSet<String> = HashSet::new();
+    
+    for row in duplicate_files_rows {
+        let group_id: String = row.get("group_id");
+        let file_id: String = row.get("file_id");
+        let created_at: i64 = row.get("created_at");
+        let existing_file_id: Option<String> = row.try_get("existing_file_id").ok();
+        let existing_is_primary: Option<i64> = row.try_get("existing_is_primary").ok();
+        
+        let is_existing = existing_file_id.is_some();
+        if is_existing {
+            existing_groups.insert(group_id.clone());
+        }
+        
+        groups
+            .entry(group_id)
+            .or_insert_with(HashMap::new)
+            .insert(file_id, (created_at, is_existing, existing_is_primary));
+    }
+    
+    // Build batch insert list
+    let mut inserts: Vec<(String, String, i64, i64)> = Vec::new(); // (group_id, file_id, is_primary, created_at)
     let mut duplicate_groups_created = 0;
     
-    // For each file with a hash, check for existing duplicates (local files only)
-    for file in files_with_hash {
-        if let Some(ref hash) = file.file_hash {
-            // Find existing files with same hash in this case (local files only)
-            // JOIN with case_sources to ensure we only check local files
-            let existing_duplicates = sqlx::query(
-                r#"
-                SELECT DISTINCT f.id, f.file_hash
-                FROM files f
-                INNER JOIN case_sources cs ON f.case_id = cs.case_id
-                WHERE f.case_id = ?
-                  AND f.file_hash = ?
-                  AND f.id != ?
-                  AND f.deleted_at IS NULL
-                  AND cs.source_location = 'local'
-                  AND f.source_directory = cs.source_path
-                LIMIT 100
-                "#
-            )
-            .bind(case_id)
-            .bind(hash)
-            .bind(&file.file_id)
-            .fetch_all(&mut *transaction)
-            .await
-            .map_err(|e| format!("Failed to find duplicates: {}", e))?;
+    for (group_id, files) in groups {
+        // Filter to files that don't already exist in duplicate_groups
+        let files_to_insert: Vec<(String, i64)> = files
+            .iter()
+            .filter(|(_, (_, is_existing, _))| !is_existing)
+            .map(|(file_id, (created_at, _, _))| (file_id.clone(), *created_at))
+            .collect();
+        
+        if files_to_insert.is_empty() {
+            continue; // All files already in duplicate_groups
+        }
+        
+        let group_exists = existing_groups.contains(&group_id);
+        
+        if !group_exists {
+            // New group: find file with earliest created_at to be primary
+            // Check ALL files in the group (not just files_to_insert) to find the true primary
+            let primary_file_id = files
+                .iter()
+                .min_by_key(|(_, (created_at, _, _))| *created_at)
+                .map(|(file_id, _)| file_id.clone())
+                .unwrap_or_else(|| {
+                    // Fallback: use first file if min_by_key fails (shouldn't happen)
+                    files.keys().next().cloned().unwrap_or_default()
+                });
             
-            if !existing_duplicates.is_empty() {
-                // Create or get duplicate group
-                // Use hash as group_id for simplicity (ensures same hash = same group)
-                let group_id = hash.clone();
-                
-                // Check if group already exists and if it has a primary
-                let group_info = sqlx::query(
-                    "SELECT COUNT(*) as count, MAX(is_primary) as has_primary FROM duplicate_groups WHERE group_id = ?"
-                )
-                .bind(&group_id)
-                .fetch_one(&mut *transaction)
-                .await
-                .map_err(|e| format!("Failed to check group existence: {}", e))?;
-                
-                let group_count: i64 = group_info.get("count");
-                let _has_primary: Option<i64> = group_info.get("has_primary");
-                let group_exists = group_count > 0;
-                
-                // If group doesn't exist, add all existing duplicates to it
-                // First existing duplicate becomes primary
-                if !group_exists {
-                    let mut first = true;
-                    for row in &existing_duplicates {
-                        let existing_file_id: String = row.get("id");
-                        let is_primary = first; // First file becomes primary
-                        first = false;
-                        
-                        sqlx::query(
-                            "INSERT INTO duplicate_groups (group_id, file_id, is_primary, created_at) VALUES (?, ?, ?, ?)"
-                        )
-                        .bind(&group_id)
-                        .bind(&existing_file_id)
-                        .bind(if is_primary { 1 } else { 0 })
-                        .bind(now)
-                        .execute(&mut *transaction)
-                        .await
-                        .map_err(|e| format!("Failed to insert duplicate group: {}", e))?;
-                    }
-                }
-                
-                // Add current file to the group (not primary - existing files take precedence)
-                sqlx::query(
-                    "INSERT OR IGNORE INTO duplicate_groups (group_id, file_id, is_primary, created_at) VALUES (?, ?, 0, ?)"
-                )
-                .bind(&group_id)
-                .bind(&file.file_id)
-                .bind(now)
-                .execute(&mut *transaction)
-                .await
-                .map_err(|e| format!("Failed to insert duplicate group: {}", e))?;
-                
+            // Verify primary is in files_to_insert (should always be true for new groups)
+            let primary_in_inserts = files_to_insert.iter().any(|(fid, _)| fid == &primary_file_id);
+            
+            // Add all files, marking primary
+            for (file_id, _created_at) in &files_to_insert {
+                // Only mark as primary if it's the primary file AND it's being inserted
+                let is_primary = if file_id == &primary_file_id && primary_in_inserts { 1 } else { 0 };
+                inserts.push((group_id.clone(), file_id.clone(), is_primary, now));
+            }
+            
+            duplicate_groups_created += 1;
+        } else {
+            // Existing group: add new files (none as primary)
+            for (file_id, _created_at) in &files_to_insert {
+                inserts.push((group_id.clone(), file_id.clone(), 0, now));
+            }
+            
+            if !files_to_insert.is_empty() {
                 duplicate_groups_created += 1;
             }
+        }
+    }
+    
+    // ELITE: Batch insert all entries at once using prepared statement
+    if !inserts.is_empty() {
+        // SQLite has a limit of 999 parameters, so we need to chunk if needed
+        const MAX_BATCH_SIZE: usize = 200; // 4 params per insert = 800 params max (safe margin)
+        
+        for chunk in inserts.chunks(MAX_BATCH_SIZE) {
+            let placeholders: Vec<String> = (0..chunk.len())
+                .map(|_| "(?, ?, ?, ?)".to_string())
+                .collect();
+            
+            let query_str = format!(
+                "INSERT OR IGNORE INTO duplicate_groups (group_id, file_id, is_primary, created_at) VALUES {}",
+                placeholders.join(", ")
+            );
+            
+            let mut query = sqlx::query(&query_str);
+            for (group_id, file_id, is_primary, created_at) in chunk {
+                query = query.bind(group_id).bind(file_id).bind(is_primary).bind(created_at);
+            }
+            
+            query
+                .execute(&mut *transaction)
+                .await
+                .map_err(|e| format!("Failed to batch insert duplicate groups: {}", e))?;
         }
     }
     
@@ -630,5 +704,436 @@ pub async fn batch_create_duplicate_groups(
         .map_err(|e| format!("Failed to commit transaction: {}", e))?;
     
     Ok(duplicate_groups_created)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePool;
+    use crate::database;
+    
+    /// Helper to create in-memory test database with migrations
+    async fn create_test_db() -> Result<SqlitePool, String> {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .map_err(|e| format!("Failed to create test database: {}", e))?;
+        
+        // Run migrations manually (copying from database.rs)
+        sqlx::raw_sql(
+            "CREATE TABLE IF NOT EXISTS _migrations (
+                version INTEGER PRIMARY KEY,
+                description TEXT,
+                applied_at INTEGER NOT NULL
+            )"
+        )
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to create migration tracking table: {}", e))?;
+        
+        let migrations = database::get_migrations();
+        for migration in migrations {
+            use tauri_plugin_sql::MigrationKind;
+            if matches!(migration.kind, MigrationKind::Up) {
+                let applied: Option<i32> = sqlx::query_scalar(
+                    "SELECT version FROM _migrations WHERE version = ?"
+                )
+                .bind(migration.version)
+                .fetch_optional(&pool)
+                .await
+                .map_err(|e| format!("Failed to check migration status: {}", e))?;
+                
+                if applied.is_none() {
+                    sqlx::raw_sql(migration.sql)
+                        .execute(&pool)
+                        .await
+                        .map_err(|e| format!("Migration {} failed: {}", migration.version, e))?;
+                    
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() as i64;
+                    
+                    sqlx::query(
+                        "INSERT OR IGNORE INTO _migrations (version, description, applied_at) VALUES (?, ?, ?)"
+                    )
+                    .bind(migration.version)
+                    .bind(migration.description)
+                    .bind(now)
+                    .execute(&pool)
+                    .await
+                    .map_err(|e| format!("Failed to record migration {}: {}", migration.version, e))?;
+                }
+            }
+        }
+        
+        Ok(pool)
+    }
+    
+    /// Helper to create test case
+    async fn create_test_case(pool: &SqlitePool, case_id: &str, name: &str) -> Result<(), String> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            "INSERT INTO cases (id, name, created_at, updated_at, last_opened_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(case_id)
+        .bind(name)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to create test case: {}", e))?;
+        
+        Ok(())
+    }
+    
+    /// Helper to create test source
+    async fn create_test_source(pool: &SqlitePool, case_id: &str, source_path: &str, source_location: &str) -> Result<(), String> {
+        let source_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            "INSERT INTO case_sources (id, case_id, source_path, source_type, source_location, added_at) VALUES (?, ?, ?, 'folder', ?, ?)"
+        )
+        .bind(&source_id)
+        .bind(case_id)
+        .bind(source_path)
+        .bind(source_location)
+        .bind(now)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to create test source: {}", e))?;
+        
+        Ok(())
+    }
+    
+    /// Helper to create test file in database
+    async fn create_test_file(
+        pool: &SqlitePool,
+        case_id: &str,
+        file_id: &str,
+        file_hash: Option<&str>,
+        source_directory: &str,
+        created_at: Option<i64>,
+    ) -> Result<(), String> {
+        let now = created_at.unwrap_or_else(|| chrono::Utc::now().timestamp());
+        sqlx::query(
+            "INSERT INTO files (id, case_id, file_name, folder_path, absolute_path, file_hash, file_type, file_size, created_at, modified_at, updated_at, status, source_directory) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unreviewed', ?)"
+        )
+        .bind(file_id)
+        .bind(case_id)
+        .bind("test_file.txt")
+        .bind("/test")
+        .bind(&format!("/test/{}.txt", file_id))
+        .bind(file_hash)
+        .bind("text/plain")
+        .bind(1000)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(source_directory)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to create test file: {}", e))?;
+        
+        Ok(())
+    }
+    
+    #[tokio::test]
+    async fn test_batch_create_duplicate_groups_no_duplicates() {
+        let pool = create_test_db().await.unwrap();
+        let case_id = "test-case-1";
+        let source_path = "/test/source";
+        
+        create_test_case(&pool, case_id, "Test Case").await.unwrap();
+        create_test_source(&pool, case_id, source_path, "local").await.unwrap();
+        
+        // Create files with unique hashes
+        create_test_file(&pool, case_id, "file-1", Some("hash-1"), source_path, None).await.unwrap();
+        create_test_file(&pool, case_id, "file-2", Some("hash-2"), source_path, None).await.unwrap();
+        
+        // Process new file with unique hash
+        let files = vec![
+            ProcessedFile {
+                file_id: "file-3".to_string(),
+                case_id: case_id.to_string(),
+                file_name: "test.txt".to_string(),
+                folder_path: "/test".to_string(),
+                absolute_path: "/test/file-3.txt".to_string(),
+                file_hash: Some("hash-3".to_string()),
+                file_type: "text/plain".to_string(),
+                file_size: 1000,
+                created_at: chrono::Utc::now().timestamp(),
+                modified_at: chrono::Utc::now().timestamp(),
+                source_directory: source_path.to_string(),
+                inventory_data: "{}".to_string(),
+                action: FileAction::Insert,
+            },
+        ];
+        
+        let now = chrono::Utc::now().timestamp();
+        let result = batch_create_duplicate_groups(&pool, case_id, &files, now).await;
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0); // No duplicates, no groups created
+        
+        // Verify no duplicate groups created
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM duplicate_groups")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+    
+    #[tokio::test]
+    async fn test_batch_create_duplicate_groups_with_duplicates() {
+        let pool = create_test_db().await.unwrap();
+        let case_id = "test-case-2";
+        let source_path = "/test/source";
+        
+        create_test_case(&pool, case_id, "Test Case").await.unwrap();
+        create_test_source(&pool, case_id, source_path, "local").await.unwrap();
+        
+        // Create existing files with same hash
+        let base_time = chrono::Utc::now().timestamp();
+        create_test_file(&pool, case_id, "file-1", Some("duplicate-hash"), source_path, Some(base_time)).await.unwrap();
+        create_test_file(&pool, case_id, "file-2", Some("duplicate-hash"), source_path, Some(base_time + 1)).await.unwrap();
+        
+        // New file with same hash
+        let files = vec![
+            ProcessedFile {
+                file_id: "file-3".to_string(),
+                case_id: case_id.to_string(),
+                file_name: "test.txt".to_string(),
+                folder_path: "/test".to_string(),
+                absolute_path: "/test/file-3.txt".to_string(),
+                file_hash: Some("duplicate-hash".to_string()),
+                file_type: "text/plain".to_string(),
+                file_size: 1000,
+                created_at: base_time + 2,
+                modified_at: chrono::Utc::now().timestamp(),
+                source_directory: source_path.to_string(),
+                inventory_data: "{}".to_string(),
+                action: FileAction::Insert,
+            },
+        ];
+        
+        let now = chrono::Utc::now().timestamp();
+        let result = batch_create_duplicate_groups(&pool, case_id, &files, now).await;
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1); // One duplicate group created
+        
+        // Verify duplicate group created with all 3 files
+        let rows = sqlx::query("SELECT file_id, is_primary FROM duplicate_groups WHERE group_id = 'duplicate-hash'")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        
+        assert_eq!(rows.len(), 3); // All 3 files in group
+        
+        // Verify primary file is set (earliest created_at = file-1)
+        let primary_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM duplicate_groups WHERE group_id = 'duplicate-hash' AND is_primary = 1"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(primary_count, 1); // Exactly one primary
+        
+        // Verify file-1 is primary (earliest created_at)
+        let primary_file: String = sqlx::query_scalar(
+            "SELECT file_id FROM duplicate_groups WHERE group_id = 'duplicate-hash' AND is_primary = 1"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(primary_file, "file-1");
+    }
+    
+    #[tokio::test]
+    async fn test_batch_create_duplicate_groups_performance() {
+        let pool = create_test_db().await.unwrap();
+        let case_id = "test-case-3";
+        let source_path = "/test/source";
+        
+        create_test_case(&pool, case_id, "Test Case").await.unwrap();
+        create_test_source(&pool, case_id, source_path, "local").await.unwrap();
+        
+        // Create 1000 files with 100 duplicate hashes (10 files per hash)
+        let base_time = chrono::Utc::now().timestamp();
+        for i in 0..1000 {
+            let file_id = format!("file-{}", i);
+            let hash = format!("hash-{}", i / 10); // 10 files per hash
+            create_test_file(&pool, case_id, &file_id, Some(&hash), source_path, Some(base_time + i as i64)).await.unwrap();
+        }
+        
+        // Create processed files for new ingestion (100 more files, some duplicates)
+        let files: Vec<ProcessedFile> = (1000..1100)
+            .map(|i| {
+                let file_id = format!("file-{}", i);
+                let hash = format!("hash-{}", i / 10); // Some will be duplicates
+                ProcessedFile {
+                    file_id: file_id.clone(),
+                    case_id: case_id.to_string(),
+                    file_name: "test.txt".to_string(),
+                    folder_path: "/test".to_string(),
+                    absolute_path: format!("/test/{}.txt", file_id),
+                    file_hash: Some(hash),
+                    file_type: "text/plain".to_string(),
+                    file_size: 1000,
+                    created_at: base_time + i as i64,
+                    modified_at: chrono::Utc::now().timestamp(),
+                    source_directory: source_path.to_string(),
+                    inventory_data: "{}".to_string(),
+                    action: FileAction::Insert,
+                }
+            })
+            .collect();
+        
+        let now = chrono::Utc::now().timestamp();
+        let start = std::time::Instant::now();
+        let result = batch_create_duplicate_groups(&pool, case_id, &files, now).await;
+        let duration = start.elapsed();
+        
+        assert!(result.is_ok());
+        
+        // Performance assertion: Should complete in <500ms even with 1000 existing files
+        // Note: In-memory DB is faster, but this tests the algorithm efficiency
+        assert!(duration.as_millis() < 500, "Duplicate detection took {}ms, expected <500ms", duration.as_millis());
+        
+        // Verify groups created
+        let group_count: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT group_id) FROM duplicate_groups")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(group_count > 0, "Should have created duplicate groups");
+    }
+    
+    #[tokio::test]
+    async fn test_batch_create_duplicate_groups_local_files_only() {
+        let pool = create_test_db().await.unwrap();
+        let case_id = "test-case-4";
+        let local_source = "/test/local";
+        let cloud_source = "s3://test/cloud";
+        
+        create_test_case(&pool, case_id, "Test Case").await.unwrap();
+        create_test_source(&pool, case_id, local_source, "local").await.unwrap();
+        create_test_source(&pool, case_id, cloud_source, "cloud").await.unwrap();
+        
+        // Create local file with hash
+        create_test_file(&pool, case_id, "local-file", Some("test-hash"), local_source, None).await.unwrap();
+        
+        // Create cloud file with same hash (should not be grouped with local files)
+        create_test_file(&pool, case_id, "cloud-file", Some("test-hash"), cloud_source, None).await.unwrap();
+        
+        // New local file with same hash
+        let files = vec![
+            ProcessedFile {
+                file_id: "local-file-2".to_string(),
+                case_id: case_id.to_string(),
+                file_name: "test.txt".to_string(),
+                folder_path: "/test".to_string(),
+                absolute_path: "/test/local-file-2.txt".to_string(),
+                file_hash: Some("test-hash".to_string()),
+                file_type: "text/plain".to_string(),
+                file_size: 1000,
+                created_at: chrono::Utc::now().timestamp(),
+                modified_at: chrono::Utc::now().timestamp(),
+                source_directory: local_source.to_string(),
+                inventory_data: "{}".to_string(),
+                action: FileAction::Insert,
+            },
+        ];
+        
+        let now = chrono::Utc::now().timestamp();
+        let result = batch_create_duplicate_groups(&pool, case_id, &files, now).await;
+        assert!(result.is_ok());
+        
+        // Verify only local files are in duplicate group
+        let rows = sqlx::query(
+            "SELECT f.id FROM duplicate_groups dg JOIN files f ON dg.file_id = f.id WHERE dg.group_id = 'test-hash'"
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        
+        let file_ids: Vec<String> = rows.into_iter().map(|r| r.get::<String, _>("id")).collect();
+        assert!(file_ids.contains(&"local-file".to_string()), "Should include local-file");
+        assert!(file_ids.contains(&"local-file-2".to_string()), "Should include local-file-2");
+        assert!(!file_ids.contains(&"cloud-file".to_string()), "Should exclude cloud-file");
+    }
+    
+    #[tokio::test]
+    async fn test_batch_create_duplicate_groups_existing_group() {
+        let pool = create_test_db().await.unwrap();
+        let case_id = "test-case-5";
+        let source_path = "/test/source";
+        
+        create_test_case(&pool, case_id, "Test Case").await.unwrap();
+        create_test_source(&pool, case_id, source_path, "local").await.unwrap();
+        
+        // Create existing files with duplicate group already created
+        let base_time = chrono::Utc::now().timestamp();
+        create_test_file(&pool, case_id, "file-1", Some("existing-hash"), source_path, Some(base_time)).await.unwrap();
+        create_test_file(&pool, case_id, "file-2", Some("existing-hash"), source_path, Some(base_time + 1)).await.unwrap();
+        
+        // Manually create duplicate group (simulating previous ingestion)
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query("INSERT INTO duplicate_groups (group_id, file_id, is_primary, created_at) VALUES (?, ?, 1, ?)")
+            .bind("existing-hash")
+            .bind("file-1")
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO duplicate_groups (group_id, file_id, is_primary, created_at) VALUES (?, ?, 0, ?)")
+            .bind("existing-hash")
+            .bind("file-2")
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        
+        // New file with same hash
+        let files = vec![
+            ProcessedFile {
+                file_id: "file-3".to_string(),
+                case_id: case_id.to_string(),
+                file_name: "test.txt".to_string(),
+                folder_path: "/test".to_string(),
+                absolute_path: "/test/file-3.txt".to_string(),
+                file_hash: Some("existing-hash".to_string()),
+                file_type: "text/plain".to_string(),
+                file_size: 1000,
+                created_at: base_time + 2,
+                modified_at: chrono::Utc::now().timestamp(),
+                source_directory: source_path.to_string(),
+                inventory_data: "{}".to_string(),
+                action: FileAction::Insert,
+            },
+        ];
+        
+        let result = batch_create_duplicate_groups(&pool, case_id, &files, now).await;
+        assert!(result.is_ok());
+        
+        // Verify file-3 added to existing group (not as primary)
+        let file_3_primary: Option<i64> = sqlx::query_scalar(
+            "SELECT is_primary FROM duplicate_groups WHERE group_id = 'existing-hash' AND file_id = 'file-3'"
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        
+        assert_eq!(file_3_primary, Some(0), "New file should not be primary");
+        
+        // Verify original primary still exists
+        let original_primary: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM duplicate_groups WHERE group_id = 'existing-hash' AND file_id = 'file-1' AND is_primary = 1"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(original_primary, 1, "Original primary should remain");
+    }
 }
 

@@ -50,6 +50,9 @@ function App() {
   const handleCaseSelect = useCallback(
     async (case_: Case) => {
       setCurrentCase(case_)
+      // Show loading screen during case loading
+      setIsInitializing(true)
+
       // Persist last selected case ID
       try {
         await setStoreValue("casespace-last-case-id", case_.id, "settings")
@@ -63,10 +66,18 @@ function App() {
 
         if (dbItems.length > 0) {
           // Fast path: Files exist in DB
+          // Wait for duplicate detection to complete before showing UI
+          const { duplicateService } = await import("@/services/duplicateService")
+          await duplicateService.findAllDuplicateGroups(case_.id, false)
+
           setItems(dbItems)
           // Get first source for selectedFolder display
           const sources = await fileService.listCaseSources(case_.id)
           setSelectedFolder(sources[0] || null)
+
+          // Hide loading screen after duplicate detection completes
+          setIsInitializing(false)
+
           toast({
             title: "Case opened",
             description: `Loaded ${dbItems.length} file${dbItems.length !== 1 ? "s" : ""}`,
@@ -81,7 +92,7 @@ function App() {
               description: `Scanning ${sources.length} source${sources.length !== 1 ? "s" : ""} and storing files in database...`,
             })
 
-            // Ingest from all sources
+            // Ingest from all sources (duplicate detection happens during ingestion)
             let totalInserted = 0
             let totalUpdated = 0
             let totalSkipped = 0
@@ -99,13 +110,25 @@ function App() {
 
             // Load the ingested files
             const ingestedItems = await fileService.loadCaseFilesWithInventory(case_.id)
+
+            // Wait for duplicate detection to complete (it happens during ingestion, but we need to fetch the results)
+            // This ensures duplicate counts are loaded before UI shows
+            const { duplicateService } = await import("@/services/duplicateService")
+            await duplicateService.findAllDuplicateGroups(case_.id, false)
+
             setItems(ingestedItems)
             setSelectedFolder(sources[0] || null)
+
+            // Hide loading screen after duplicate detection completes
+            setIsInitializing(false)
 
             toast({
               title: "Files ingested",
               description: `Added ${totalInserted} new file${totalInserted !== 1 ? "s" : ""}, updated ${totalUpdated}, skipped ${totalSkipped}`,
             })
+          } else {
+            // No sources, just hide loading screen
+            setIsInitializing(false)
           }
         }
       } catch (_error) {
@@ -114,6 +137,10 @@ function App() {
           ErrorCode.SCAN_DIRECTORY_FAILED
         )
         logError(appError, "handleCaseSelect")
+
+        // Hide loading screen on error
+        setIsInitializing(false)
+
         toast({
           title: "Failed to load case",
           description: appError.message,
@@ -180,6 +207,9 @@ function App() {
       department?: string,
       client?: string
     ) => {
+      // Show loading screen during case creation and ingestion
+      setIsInitializing(true)
+
       try {
         const newCase = await caseService.createCase(name, sources, caseId, department, client)
 
@@ -201,6 +231,7 @@ function App() {
           setPendingFolderPath(sources[0] || null)
           setPendingFileCount(totalFileCount)
           setWarningDialogOpen(true)
+          // Keep loading screen visible - will be hidden when user confirms or cancels
         } else {
           // Small sources, ingest immediately
           await handleCaseSelect(newCase)
@@ -213,6 +244,10 @@ function App() {
           ErrorCode.CREATE_CASE_FAILED
         )
         logError(appError, "handleCreateCase")
+
+        // Hide loading screen on error
+        setIsInitializing(false)
+
         toast({
           title: "Failed to create case",
           description: appError.message,
@@ -228,13 +263,25 @@ function App() {
    */
   const handleWarningConfirm = useCallback(async () => {
     if (pendingFolderPath && currentCase) {
+      // Show loading screen during ingestion
+      setIsInitializing(true)
+
       try {
         await fileService.ingestFilesToCase(currentCase.id, pendingFolderPath, true)
         const ingestedItems = await fileService.loadCaseFilesWithInventory(currentCase.id)
+
+        // Wait for duplicate detection to complete (it happens during ingestion, but we need to fetch the results)
+        const { duplicateService } = await import("@/services/duplicateService")
+        await duplicateService.findAllDuplicateGroups(currentCase.id, false)
+
         setItems(ingestedItems)
         setSelectedFolder(pendingFolderPath)
         setPendingFolderPath(null)
         setPendingFileCount(0)
+
+        // Hide loading screen after duplicate detection completes
+        setIsInitializing(false)
+
         toast({
           title: "Files ingested",
           description: `Files have been added to the case`,
@@ -242,6 +289,10 @@ function App() {
       } catch (error) {
         const appError = createAppError(error, ErrorCode.SCAN_DIRECTORY_FAILED)
         logError(appError, "handleWarningConfirm")
+
+        // Hide loading screen on error
+        setIsInitializing(false)
+
         toast({
           title: "Failed to ingest files",
           description: appError.message,
@@ -257,6 +308,9 @@ function App() {
   const handleWarningCancel = useCallback(() => {
     setPendingFolderPath(null)
     setPendingFileCount(0)
+    setWarningDialogOpen(false)
+    // Hide loading screen when user cancels
+    setIsInitializing(false)
   }, [])
 
   /**

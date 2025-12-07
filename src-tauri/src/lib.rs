@@ -3810,15 +3810,6 @@ pub fn run() {
     
     let mut builder = tauri::Builder::default();
     
-    // Initialize and register CrabNebula DevTools early for advanced debugging
-    // This provides better debugging than basic devtools, including asset inspection
-    // Only enable in debug builds to avoid issues in production
-    #[cfg(debug_assertions)]
-    {
-        log::debug!("Registering devtools plugin (debug build)");
-        builder = builder.plugin(tauri_plugin_devtools::init());
-    }
-    
     builder = builder.plugin(log_plugin);
     builder = builder.plugin(tauri_plugin_opener::init());
     builder = builder.plugin(tauri_plugin_dialog::init());
