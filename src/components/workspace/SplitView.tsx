@@ -106,7 +106,7 @@ export const SplitView = memo(function SplitView({
               caseId={caseId}
               navigatorOpen={navigatorOpen}
               onExpandNavigator={onExpandNavigator}
-              onToggleNavigator={onToggleNavigator}
+              {...(onToggleNavigator && { onToggleNavigator })}
               onFileRefresh={onFileRefresh}
               onFileRemove={onFileRemove}
               onToggleDuplicates={() => {
@@ -159,7 +159,7 @@ export const SplitView = memo(function SplitView({
           <ResizeHandle />
           <Panel defaultSize={panelSizes.findingsPanelSize} minSize={20} maxSize={40}>
             <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
-              <FindingsPanel caseId={caseId} onClose={onCloseFindings} initialFindingId={selectedFindingId} />
+              <FindingsPanel caseId={caseId} onClose={onCloseFindings} {...(selectedFindingId !== undefined && selectedFindingId !== null && { initialFindingId: selectedFindingId })} />
             </div>
           </Panel>
         </>
@@ -171,7 +171,7 @@ export const SplitView = memo(function SplitView({
           <ResizeHandle />
           <Panel defaultSize={panelSizes.timelinePanelSize} minSize={20} maxSize={50}>
             <div className="h-full flex flex-col overflow-hidden bg-card animate-in slide-in-from-right-2 duration-300">
-              <TimelineView caseId={caseId} currentFileId={viewingFile?.id} onClose={onCloseTimeline} initialEventId={selectedTimelineEventId} />
+              <TimelineView caseId={caseId} {...(viewingFile?.id && { currentFileId: viewingFile.id })} {...(onCloseTimeline && { onClose: onCloseTimeline })} {...(selectedTimelineEventId !== undefined && selectedTimelineEventId !== null && { initialEventId: selectedTimelineEventId })} />
             </div>
           </Panel>
         </>
@@ -187,7 +187,7 @@ export const SplitView = memo(function SplitView({
                 caseId={caseId}
                 fileId={viewingFile.id!}
                 fileName={viewingFile.file_name}
-                onClose={onCloseDuplicates}
+                onClose={onCloseDuplicates || (() => {})}
                 onResolved={() => {
                   // Optionally refresh or close panel after resolution
                 }}

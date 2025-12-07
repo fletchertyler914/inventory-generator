@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, CheckCircle2 } from 'lucide-react';
-import { Button } from '../ui/button';
-import { ScrollArea } from '../ui/scroll-area';
-import { Alert, AlertDescription } from '../ui/alert';
+import { CheckCircle2 } from 'lucide-react';
 import { PanelContainer } from '../panel/PanelContainer';
 import { PanelHeader } from '../panel/PanelHeader';
 import { PanelContent } from '../panel/PanelContent';
@@ -12,7 +9,6 @@ import { recommendFileToKeep, getNotesCounts, getFindingsCounts } from '@/lib/du
 import { toast } from '@/hooks/useToast';
 import { DuplicateFileCard } from './DuplicateFileCard';
 import { DuplicateDecisionDialog } from './DuplicateDecisionDialog';
-import type { DuplicateFile } from '@/services/duplicateService';
 
 interface FileDuplicatePanelProps {
   caseId: string;
@@ -37,7 +33,6 @@ interface FileDuplicatePanelProps {
 export function FileDuplicatePanel({
   caseId,
   fileId,
-  fileName,
   onClose,
   onResolved,
 }: FileDuplicatePanelProps) {
@@ -107,7 +102,11 @@ export function FileDuplicatePanel({
   }, [group, loadGroup, onResolved]);
 
   const handleDeleteFile = useCallback((fileIdToDelete: string, mergeToFileId?: string) => {
-    setSelectedAction({ type: mergeToFileId ? 'merge' : 'delete', fileId: fileIdToDelete, targetFileId: mergeToFileId });
+    setSelectedAction({ 
+      type: mergeToFileId ? 'merge' : 'delete', 
+      fileId: fileIdToDelete, 
+      ...(mergeToFileId && { targetFileId: mergeToFileId })
+    });
     setDecisionDialogOpen(true);
   }, []);
 
@@ -168,97 +167,65 @@ export function FileDuplicatePanel({
     );
   }
 
-  const currentFile = group.files.find(f => f.file_id === fileId) || group.files[0];
-  const otherFiles = group.files.filter(f => f.file_id !== fileId);
+  // Sort files: current file first, then by primary status, then recommended
+  const sortedFiles = [...group.files].sort((a, b) => {
+    // Current file always first
+    if (a.file_id === fileId) return -1;
+    if (b.file_id === fileId) return 1;
+    // Then primary files
+    if (a.is_primary && !b.is_primary) return -1;
+    if (!a.is_primary && b.is_primary) return 1;
+    // Then recommended
+    if (recommendation) {
+      if (a.file_id === recommendation.file_id && b.file_id !== recommendation.file_id) return -1;
+      if (a.file_id !== recommendation.file_id && b.file_id === recommendation.file_id) return 1;
+    }
+    return 0;
+  });
+
   const recommendedFile = recommendation ? group.files.find(f => f.file_id === recommendation.file_id) : null;
 
   return (
     <PanelContainer>
       <PanelHeader 
         title="Duplicates" 
-        count={otherFiles.length}
+        count={group.files.length - 1}
         onClose={onClose}
       />
       <PanelContent>
-        <div className="p-4 space-y-4">
-            {/* Recommendation Banner - Subtle, informative */}
-            {recommendation && recommendedFile && (
-              <Alert variant="default" className="bg-primary/5 border-primary/20">
-                <CheckCircle2 className="h-4 w-4 text-primary" />
-                <AlertDescription className="space-y-2">
-                  <p className="text-xs font-medium text-primary">
-                    Recommended: Keep "{recommendedFile.file_name}"
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {recommendation.reasons.join(' • ')}
-                  </p>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => handleKeepFile(recommendedFile.file_id)}
-                    className="mt-2 h-7 text-xs"
-                  >
-                    Keep This File
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Current File (being viewed) */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Current File
-              </p>
+        <div className="space-y-2.5 p-3">
+          {sortedFiles.map((file) => {
+            const isViewing = file.file_id === fileId;
+            const isRecommended = recommendation?.file_id === file.file_id;
+            
+            return (
               <DuplicateFileCard
-                file={currentFile}
-                isPrimary={currentFile.is_primary}
-                isRecommended={recommendation?.file_id === currentFile.file_id}
-                onKeep={() => handleKeepFile(currentFile.file_id)}
+                key={file.file_id}
+                file={file}
+                isPrimary={file.is_primary}
+                isRecommended={isRecommended}
+                isViewing={isViewing}
+                {...(isRecommended && recommendation ? { recommendationReasons: recommendation.reasons } : {})}
+                onKeep={() => handleKeepFile(file.file_id)}
                 onDelete={() => {
-                  toast({
-                    title: 'Cannot delete current file',
-                    description: 'Please select a different file to delete',
-                    variant: 'default',
-                  });
-                }}
-                onView={() => {
-                  // Current file is already being viewed
+                  if (isViewing) {
+                    toast({
+                      title: 'Cannot delete current file',
+                      description: 'Please select a different file to delete',
+                      variant: 'default',
+                    });
+                    return;
+                  }
+                  const targetFile = recommendedFile || group.files.find(f => f.file_id === fileId) || group.files[0];
+                  handleDeleteFile(
+                    file.file_id,
+                    file.file_id !== targetFile?.file_id ? targetFile?.file_id : undefined
+                  );
                 }}
               />
-            </div>
-
-            {/* Duplicate Files */}
-            {otherFiles.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Duplicate Files ({otherFiles.length})
-                </p>
-                {otherFiles.map((file) => (
-                  <DuplicateFileCard
-                    key={file.file_id}
-                    file={file}
-                    isPrimary={file.is_primary}
-                    isRecommended={recommendation?.file_id === file.file_id}
-                    onKeep={() => handleKeepFile(file.file_id)}
-                    onDelete={() => {
-                      const targetFile = recommendedFile || currentFile;
-                      handleDeleteFile(
-                        file.file_id,
-                        file.file_id !== targetFile?.file_id ? targetFile?.file_id : undefined
-                      );
-                    }}
-                    onView={() => {
-                      // Would navigate to file - handled by parent
-                      toast({
-                        title: 'View file',
-                        description: 'File viewing would be implemented here',
-                      });
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+            );
+          })}
+        </div>
 
         {/* Decision Dialog */}
         {selectedAction && group && (
@@ -266,7 +233,10 @@ export function FileDuplicatePanel({
             open={decisionDialogOpen}
             onOpenChange={setDecisionDialogOpen}
             fileToDelete={group.files.find(f => f.file_id === selectedAction.fileId)!}
-            targetFile={selectedAction.targetFileId ? group.files.find(f => f.file_id === selectedAction.targetFileId) : undefined}
+            {...(selectedAction.targetFileId ? (() => {
+              const targetFile = group.files.find(f => f.file_id === selectedAction.targetFileId);
+              return targetFile ? { targetFile } : {};
+            })() : {})}
             onConfirm={handleConfirmDelete}
             onCancel={() => {
               setDecisionDialogOpen(false);

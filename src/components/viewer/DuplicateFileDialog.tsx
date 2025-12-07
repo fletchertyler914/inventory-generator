@@ -1,4 +1,4 @@
-import { Copy, FileText, AlertTriangle, Settings } from 'lucide-react';
+import { Copy, AlertTriangle, Settings } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,6 @@ import {
 import { Button } from '../ui/button';
 import { Alert, AlertDescription } from '../ui/alert';
 import type { DuplicateFile as OldDuplicateFile } from '@/services/fileService';
-import { fileService } from '@/services/fileService';
 import { duplicateService } from '@/services/duplicateService';
 import { toast } from '@/hooks/useToast';
 import { DuplicateFileCard } from '../duplicates/DuplicateFileCard';
@@ -35,17 +34,14 @@ export function DuplicateFileDialog({
   fileId,
   fileName,
   duplicates: oldDuplicates,
-  onFileSelect,
   onManageAll,
 }: DuplicateFileDialogProps) {
   const [group, setGroup] = useState<{ files: any[]; group_id: string } | null>(null);
   const [recommendation, setRecommendation] = useState<{ file_id: string; confidence: number; reasons: string[] } | null>(null);
-  const [loading, setLoading] = useState(false);
 
   // Load duplicate group using new service
   useEffect(() => {
     if (open && fileId && caseId) {
-      setLoading(true);
       duplicateService.getDuplicateGroup(caseId, fileId, true)
         .then((groupData) => {
           if (groupData) {
@@ -85,8 +81,7 @@ export function DuplicateFileDialog({
               is_primary: false,
             })),
           });
-        })
-        .finally(() => setLoading(false));
+        });
     }
   }, [open, fileId, caseId, oldDuplicates]);
 
@@ -125,24 +120,6 @@ export function DuplicateFileDialog({
   };
   const otherFiles = files.filter(f => f.file_id !== fileId);
 
-  const handleOpenFile = async (duplicatePath: string) => {
-    try {
-      await fileService.openFile(duplicatePath);
-    } catch (error) {
-      toast({
-        title: 'Failed to open file',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleSelectFile = (duplicateFileId: string) => {
-    if (onFileSelect) {
-      onFileSelect(duplicateFileId);
-    }
-    onOpenChange(false);
-  };
 
   const handleKeepFile = useCallback(async (fileIdToKeep: string) => {
     if (!group) return;
@@ -231,12 +208,14 @@ export function DuplicateFileDialog({
           </Alert>
         )}
 
-        <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-2.5 min-h-0 p-1">
           {/* Current file */}
           <DuplicateFileCard
             file={currentFile}
             isPrimary={currentFile.is_primary}
             isRecommended={recommendation?.file_id === currentFile.file_id}
+            isViewing={true}
+            {...(recommendation?.file_id === currentFile.file_id && recommendation ? { recommendationReasons: recommendation.reasons } : {})}
             onKeep={() => handleKeepFile(currentFile.file_id)}
             onDelete={() => {
               toast({
@@ -244,9 +223,6 @@ export function DuplicateFileDialog({
                 description: 'Please select a different file to delete',
                 variant: 'default',
               });
-            }}
-            onView={() => {
-              // Current file is already being viewed
             }}
           />
 
@@ -257,6 +233,7 @@ export function DuplicateFileDialog({
               file={dup}
               isPrimary={dup.is_primary}
               isRecommended={recommendation?.file_id === dup.file_id}
+              {...(recommendation?.file_id === dup.file_id && recommendation ? { recommendationReasons: recommendation.reasons } : {})}
               onKeep={() => handleKeepFile(dup.file_id)}
               onDelete={() => {
                 // Would open delete dialog - simplified for now
@@ -266,7 +243,6 @@ export function DuplicateFileDialog({
                   variant: 'default',
                 });
               }}
-              onView={() => handleSelectFile(dup.file_id)}
             />
           ))}
         </div>

@@ -59,15 +59,15 @@ export const FileNavigator = memo(
     onFileSelect,
     selectedFolderPath,
     onFolderSelect,
-    navigatorOpen = true,
-    onToggleNavigator,
+    navigatorOpen: _navigatorOpen = true,
+    onToggleNavigator: _onToggleNavigator,
     onFileRemove,
     caseId,
   }: FileNavigatorProps) {
     // Feature flag for bulk delete
     const bulkDeleteEnabled =
-      import.meta.env.VITE_BULK_DELETE_ENABLED === "true" ||
-      import.meta.env.BULK_DELETE_ENABLED === "true"
+      import.meta.env["VITE_BULK_DELETE_ENABLED"] === "true" ||
+      import.meta.env["BULK_DELETE_ENABLED"] === "true"
 
     const [searchQuery, setSearchQuery] = React.useState("")
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
@@ -245,12 +245,6 @@ export const FileNavigator = memo(
     // Collapse all folders
     const collapseAll = useCallback(() => {
       setExpandedFolders(new Set())
-    }, [])
-
-    const handleDeleteClick = useCallback((e: React.MouseEvent, item: InventoryItem) => {
-      e.stopPropagation()
-      setFileToDelete(item)
-      setDeleteDialogOpen(true)
     }, [])
 
     const handleConfirmDelete = useCallback(() => {
@@ -497,22 +491,23 @@ export const FileNavigator = memo(
                           >
                             {item.file_name}
                           </span>
-                          {item.id && duplicateCounts.has(item.id) && (
-                            <DuplicateBadge
-                              groupId={duplicateGroupIds.get(item.id)}
-                              count={duplicateCounts.get(item.id) || 0}
-                              shape={
-                                item.id
-                                  ? groupShapes.get(duplicateGroupIds.get(item.id) || "")
-                                  : undefined
-                              }
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                // Open duplicate management - would need parent handler
-                              }}
-                              className="flex-shrink-0 ml-1.5 pointer-events-auto"
-                            />
-                          )}
+                          {item.id &&
+                            duplicateCounts.has(item.id) &&
+                            duplicateGroupIds.get(item.id) && (
+                              <DuplicateBadge
+                                groupId={duplicateGroupIds.get(item.id)!}
+                                count={duplicateCounts.get(item.id) || 0}
+                                {...(() => {
+                                  const groupId = duplicateGroupIds.get(item.id)
+                                  const shape = groupId ? groupShapes.get(groupId) : undefined
+                                  return shape ? { shape } : {}
+                                })()}
+                                onClick={() => {
+                                  // Open duplicate management - would need parent handler
+                                }}
+                                className="flex-shrink-0 ml-1.5 pointer-events-auto"
+                              />
+                            )}
                         </button>
                       </div>
                     </ContextMenuTrigger>

@@ -136,7 +136,7 @@ export const WorkflowCard = memo(function WorkflowCard({
           </h4>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {duplicateCount !== undefined && duplicateCount > 0 && (
+          {duplicateCount !== undefined && duplicateCount > 0 && duplicateGroupId && (
             <DuplicateBadge
               groupId={duplicateGroupId}
               count={duplicateCount}

@@ -396,6 +396,7 @@ export const SearchBar = memo(
           window.removeEventListener("resize", handleResize)
         }
       }
+      return undefined
     }, [isFocused, updateResultsPosition])
 
     // Show results when input is focused AND has a value

@@ -124,6 +124,7 @@ export const duplicateService = {
         
         // Calculate size savings (all duplicates except primary)
         const primaryFile = group.files.find(f => f.is_primary) || group.files[0];
+        if (!primaryFile) continue;
         for (const file of group.files) {
           if (file.file_id !== primaryFile.file_id) {
             total_size_savings += file.file_size;

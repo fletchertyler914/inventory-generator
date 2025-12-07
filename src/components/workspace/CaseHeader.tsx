@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
-import { X, MoreVertical, StickyNote, AlertTriangle, Calendar, Plus, FileSearch, FileBarChart, RefreshCw, Search, Copy, File, FolderOpen } from 'lucide-react';
+import { X, MoreVertical, StickyNote, AlertTriangle, Calendar, FileSearch, FileBarChart, RefreshCw, Search, File, FolderOpen } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { SearchDialog } from '../search/SearchDialog';
@@ -44,7 +44,6 @@ interface CaseHeaderProps {
 
 export function CaseHeader({
   case: case_,
-  fileCount,
   items,
   onClose,
   onAddFiles,
@@ -285,11 +284,11 @@ export function CaseHeader({
         onOpenChange={setSearchDialogOpen}
         caseId={case_.id}
         items={items}
-        onFileSelect={onFileOpen}
-        onNoteSelect={onNoteSelect}
-        onSearchChange={onSearchChange}
-        onFindingSelect={onFindingSelect}
-        onTimelineSelect={onTimelineSelect}
+        {...(onFileOpen && { onFileSelect: onFileOpen })}
+        {...(onNoteSelect && { onNoteSelect })}
+        {...(onSearchChange && { onSearchChange })}
+        {...(onFindingSelect && { onFindingSelect })}
+        {...(onTimelineSelect && { onTimelineSelect })}
       />
     </div>
   );

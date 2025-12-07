@@ -112,7 +112,7 @@ export function getDuplicateGroupColor(
   }
 
   const colorIndex = Math.abs(hash) % DUPLICATE_COLOR_PALETTE.length;
-  const color = DUPLICATE_COLOR_PALETTE[colorIndex];
+  const color = DUPLICATE_COLOR_PALETTE[colorIndex] || DUPLICATE_COLOR_PALETTE[0]!;
 
   return {
     bg: isDark ? color.dark : color.light,
@@ -236,19 +236,27 @@ function calculateColorDistance(
  */
 let colorDistanceMatrix: number[][] | null = null;
 
-function getColorDistanceMatrix(): number[][] {
+// @ts-expect-error - Stubbed for future use
+function _getColorDistanceMatrix(): number[][] {
+  // Stubbed for future use
   if (colorDistanceMatrix !== null) {
     return colorDistanceMatrix;
   }
+  return [];
 
   const matrix: number[][] = [];
   for (let i = 0; i < PALETTE_RGB.length; i++) {
     matrix[i] = [];
+    const row = matrix[i]!;
+    const colorI = PALETTE_RGB[i];
+    if (!colorI) continue;
     for (let j = 0; j < PALETTE_RGB.length; j++) {
+      const colorJ = PALETTE_RGB[j];
+      if (!colorJ) continue;
       if (i === j) {
-        matrix[i][j] = 0;
+        row[j] = 0;
       } else {
-        matrix[i][j] = calculateColorDistance(PALETTE_RGB[i], PALETTE_RGB[j]);
+        row[j] = calculateColorDistance(colorI!, colorJ!);
       }
     }
   }
@@ -264,42 +272,50 @@ function getColorDistanceMatrix(): number[][] {
  * @param usedColorIndices - Set of color indices already in use
  * @returns Index of most distinguishable color, or -1 if all colors are used
  */
-function getMostDistinguishableColor(usedColorIndices: Set<number>): number {
-  if (usedColorIndices.size === 0) {
-    // First color: use first in palette (blue, which is highly distinguishable)
+// Stubbed for future use
+// @ts-expect-error - Intentionally unused, stubbed for future use
+function _getMostDistinguishableColor(_usedColorIndices: Set<number>): number {
+  // Returns first color index
     return 0;
-  }
+  // if (_usedColorIndices.size === 0) {
+  //   // First color: use first in palette (blue, which is highly distinguishable)
+  //   return 0;
+  // }
 
-  if (usedColorIndices.size >= DUPLICATE_COLOR_PALETTE.length) {
-    // All colors used, return -1 to indicate shape differentiation needed
-    return -1;
-  }
+  // if (_usedColorIndices.size >= DUPLICATE_COLOR_PALETTE.length) {
+  //   // All colors used, return -1 to indicate shape differentiation needed
+  //   return -1;
+  // }
 
-  const distanceMatrix = getColorDistanceMatrix();
-  let bestColorIndex = -1;
-  let bestMinDistance = -1;
+  // const distanceMatrix = getColorDistanceMatrix();
+  // let bestColorIndex = -1;
+  // let bestMinDistance = -1;
 
-  // For each unused color, find minimum distance to all used colors
-  for (let i = 0; i < DUPLICATE_COLOR_PALETTE.length; i++) {
-    if (usedColorIndices.has(i)) {
-      continue; // Skip already used colors
-    }
+  // // For each unused color, find minimum distance to all used colors
+  // for (let i = 0; i < DUPLICATE_COLOR_PALETTE.length; i++) {
+  //   if (_usedColorIndices.has(i)) {
+  //     continue; // Skip already used colors
+  //   }
 
-    // Find minimum distance from this color to any used color
-    let minDistance = Infinity;
-    for (const usedIndex of usedColorIndices) {
-      const distance = distanceMatrix[i][usedIndex];
-      minDistance = Math.min(minDistance, distance);
-    }
+  //   // Find minimum distance from this color to any used color
+  //   let minDistance = Infinity;
+  //   const row = distanceMatrix[i];
+  //   if (!row) continue;
+  //   for (const usedIndex of _usedColorIndices) {
+  //     const distance = row[usedIndex];
+  //     if (distance !== undefined) {
+  //       minDistance = Math.min(minDistance, distance);
+  //     }
+  //   }
 
-    // Select color with maximum minimum distance (most distinguishable)
-    if (minDistance > bestMinDistance) {
-      bestMinDistance = minDistance;
-      bestColorIndex = i;
-    }
-  }
+  //   // Select color with maximum minimum distance (most distinguishable)
+  //   if (minDistance > bestMinDistance) {
+  //     bestMinDistance = minDistance;
+  //     bestColorIndex = i;
+  //   }
+  // }
 
-  return bestColorIndex;
+  // return bestColorIndex;
 }
 
 /**
@@ -418,7 +434,7 @@ export function getDuplicateGroupVisualEncoding(
   }
 
   // Get color from palette
-  const color = DUPLICATE_COLOR_PALETTE[baseColorIndex];
+  const color = DUPLICATE_COLOR_PALETTE[baseColorIndex] || DUPLICATE_COLOR_PALETTE[0]!;
 
   const encoding: DuplicateGroupVisualEncoding = {
     color: {

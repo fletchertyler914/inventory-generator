@@ -27,8 +27,12 @@ export function recommendFileToKeep(
   }
 
   if (files.length === 1) {
+    const firstFile = files[0];
+    if (!firstFile) {
+      return { file_id: '', confidence: 0, reasons: [] };
+    }
     return {
-      file_id: files[0].file_id,
+      file_id: firstFile.file_id,
       confidence: 1.0,
       reasons: ['Only one file in group'],
     };
@@ -109,7 +113,9 @@ export function recommendFileToKeep(
 
   // Calculate confidence based on score difference
   const scores = scoredFiles.map((s) => s.score).sort((a, b) => b - a);
-  const scoreDiff = scores.length > 1 ? scores[0] - scores[1] : scores[0];
+  const firstScore = scores[0] ?? 0;
+  const secondScore = scores[1] ?? 0;
+  const scoreDiff = scores.length > 1 ? firstScore - secondScore : firstScore;
   const confidence = Math.min(1.0, Math.max(0.5, scoreDiff / 50));
 
   return {
@@ -161,7 +167,7 @@ export async function getFindingsCounts(
     
     // Count findings linked to each file
     for (const finding of findings) {
-      if (finding.linked_files) {
+      if (finding.linked_files && typeof finding.linked_files === 'string') {
         try {
           const linkedFiles = JSON.parse(finding.linked_files) as string[];
           for (const fileId of linkedFiles) {

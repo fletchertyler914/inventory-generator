@@ -36,7 +36,6 @@ import { StatusCell } from "../table/StatusCell"
 import { toast } from "@/hooks/useToast"
 import { ErrorBoundary } from "../ErrorBoundary"
 import { createBlobUrlFromBase64, getMimeTypeFromExtension, revokeBlobUrl } from "@/lib/blob-utils"
-import { extractFilename } from "@/lib/file-validation"
 
 // ELITE: Lazy load heavy viewer components for optimal bundle size
 const LazyViewer = lazy(() => import("react-viewer").then((m) => ({ default: m.default })))
@@ -332,6 +331,7 @@ export const IntegratedFileViewer = memo(
           window.removeEventListener("scroll", updatePosition, true)
         }
       }
+      return undefined
     }, [metadataPanelOpen])
     const [vscDarkPlusStyle, setVscDarkPlusStyle] = useState<any>(null)
     const [syntaxHighlighterModule, setSyntaxHighlighterModule] = useState<any>(null)
@@ -541,24 +541,12 @@ export const IntegratedFileViewer = memo(
         if (!file?.id) return
 
         try {
-          // ELITE: Optimistic UI update - update local state immediately
-          const oldFileName = file.file_name
-          const oldAbsolutePath = file.absolute_path
-
           // Call rename service
-          const newPath = await fileService.renameFile(file.id, newName)
-
-          // Update local file state optimistically
-          const newFileName = extractFilename(newPath)
-          const updatedFile = {
-            ...file,
-            file_name: newFileName,
-            absolute_path: newPath,
-          }
+          await fileService.renameFile(file.id, newName)
 
           toast({
             title: "File renamed",
-            description: `"${oldFileName}" renamed to "${newFileName}"`,
+            description: `File successfully renamed`,
             variant: "success",
           })
 
@@ -1019,7 +1007,7 @@ export const IntegratedFileViewer = memo(
             // Find the maximum number of columns across all rows to ensure uniform grid
             const maxColumns = Math.max(
               ...titleRows.map((row) => row.length),
-              headers.length,
+              headers?.length ?? 0,
               ...dataRows.map((row) => row.length),
               1 // At least 1 column
             )
@@ -1034,15 +1022,16 @@ export const IntegratedFileViewer = memo(
             })
 
             // Normalize headers
-            const normalizedHeaders = hasHeaders
-              ? (() => {
-                  const normalized = [...headers]
-                  while (normalized.length < maxColumns) {
-                    normalized.push(null)
-                  }
-                  return normalized.slice(0, maxColumns)
-                })()
-              : []
+            const normalizedHeaders =
+              hasHeaders && headers
+                ? (() => {
+                    const normalized = [...headers]
+                    while (normalized.length < maxColumns) {
+                      normalized.push(null)
+                    }
+                    return normalized.slice(0, maxColumns)
+                  })()
+                : []
 
             // Normalize data rows
             const normalizedRows = dataRows.map((row) => {
@@ -1068,9 +1057,7 @@ export const IntegratedFileViewer = memo(
                             // Merge cells if the row has mostly empty cells (likely a title row)
                             const hasContent =
                               cell !== null && cell !== undefined && String(cell).trim() !== ""
-                            const isEmpty = !hasContent
                             const isFirstCell = cellIndex === 0
-                            const isLastCell = cellIndex === titleRow.length - 1
 
                             // If this is a title row with content in first cell, span across all columns
                             if (
@@ -1475,7 +1462,7 @@ export const IntegratedFileViewer = memo(
                   filePath={file.absolute_path}
                   fileType={fileType}
                   item={file}
-                  caseId={caseId}
+                  {...(caseId && { caseId })}
                 />
               </div>
             </div>
@@ -1539,18 +1526,16 @@ export const IntegratedFileViewer = memo(
           currentFileName={file.file_name}
           fileType={file.file_type}
           onConfirm={handleRename}
-          onSyncFirst={
-            file?.id
-              ? async () => {
-                  if (!file.id) return
-                  const autoTransition = file.status === "reviewed" || file.status === "flagged"
-                  await fileService.refreshSingleFile(file.id, autoTransition)
-                  if (onFileRefresh) {
-                    await onFileRefresh()
-                  }
-                }
-              : undefined
-          }
+          {...(file?.id && {
+            onSyncFirst: async () => {
+              if (!file.id) return
+              const autoTransition = file.status === "reviewed" || file.status === "flagged"
+              await fileService.refreshSingleFile(file.id, autoTransition)
+              if (onFileRefresh) {
+                await onFileRefresh()
+              }
+            },
+          })}
         />
       </div>
     )

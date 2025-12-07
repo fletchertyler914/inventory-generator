@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { Copy, CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
@@ -62,7 +62,7 @@ export function DuplicateManagementPanel({ caseId, onClose }: DuplicateManagemen
   if (loading) {
     return (
       <PanelContainer>
-        <PanelHeader title="Duplicates" onClose={onClose} />
+        <PanelHeader title="Duplicates" {...(onClose && { onClose })} />
         <PanelContent>
           <div className="flex items-center justify-center h-full">
             <div className="text-sm text-muted-foreground">Loading duplicates...</div>
@@ -75,7 +75,7 @@ export function DuplicateManagementPanel({ caseId, onClose }: DuplicateManagemen
   if (groups.length === 0) {
     return (
       <PanelContainer>
-        <PanelHeader title="Duplicates" onClose={onClose} />
+        <PanelHeader title="Duplicates" {...(onClose && { onClose })} />
         <PanelContent>
           <PanelEmptyState
             icon={CheckCircle2}
@@ -94,7 +94,7 @@ export function DuplicateManagementPanel({ caseId, onClose }: DuplicateManagemen
       <PanelHeader 
         title="Duplicates" 
         count={groups.length}
-        onClose={onClose}
+        {...(onClose && { onClose })}
       />
       <PanelContent>
         {selectedGroup ? (
@@ -129,6 +129,7 @@ export function DuplicateManagementPanel({ caseId, onClose }: DuplicateManagemen
               <div className="space-y-2">
                 {groups.map((group) => {
                   const primaryFile = group.files.find(f => f.is_primary) || group.files[0];
+                  if (!primaryFile) return null;
                   const duplicateCount = group.count - 1;
                   const totalSize = group.files.reduce((sum, f) => sum + f.file_size, 0);
                   const savingsSize = totalSize - primaryFile.file_size;

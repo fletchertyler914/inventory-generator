@@ -75,7 +75,7 @@ const workflowStates: { value: FileStatus; label: string; color: string }[] = [
 // Sortable WorkflowCard wrapper component
 function SortableWorkflowCard({
   item,
-  index,
+  index: _index,
   isSelected,
   onSelect,
   onFileOpen,
@@ -123,14 +123,14 @@ function SortableWorkflowCard({
         item={item}
         isSelected={isSelected}
         onSelect={onSelect}
-        onFileOpen={onFileOpen}
+        {...(onFileOpen && { onFileOpen })}
         fileChanged={fileChanged}
         isDragging={isDragging || isSortableDragging}
-        caseId={caseId}
-        noteCount={noteCount}
-        duplicateCount={duplicateCount}
-        duplicateGroupId={duplicateGroupId}
-        duplicateShape={duplicateShape}
+        {...(caseId && { caseId })}
+        {...(noteCount !== undefined && { noteCount })}
+        {...(duplicateCount !== undefined && { duplicateCount })}
+        {...(duplicateGroupId && { duplicateGroupId })}
+        {...(duplicateShape && { duplicateShape })}
         dragListeners={listeners}
         dragAttributes={attributes}
       />
@@ -274,7 +274,7 @@ export function WorkflowBoard({
   onSelectionChange,
   selectedIndices,
   onFileOpen,
-  onFileRemove,
+  onFileRemove: _onFileRemove,
   statusFilter: _statusFilter = "all",
   onStatusFilterChange: _onStatusFilterChange,
   totalFiles: _totalFiles,
@@ -293,8 +293,8 @@ export function WorkflowBoard({
 
   // Use optimized selection hook
   const { isSelected, handleSelect, selectedCount } = useWorkflowSelection({
-    selectedIndices,
-    onSelectionChange,
+    ...(selectedIndices && { selectedIndices }),
+    ...(onSelectionChange && { onSelectionChange }),
     totalItems: items.length,
   })
 
@@ -578,7 +578,9 @@ export function WorkflowBoard({
       // Reorder items in the status column
       const reorderedStatusItems = [...statusItems]
       const [movedItem] = reorderedStatusItems.splice(activeIndex, 1)
+      if (movedItem) {
       reorderedStatusItems.splice(overIndex, 0, movedItem)
+      }
 
       // Create a map of all items by absolute_path for quick lookup
       const itemsMap = new Map(items.map((item) => [item.absolute_path, item]))
@@ -804,6 +806,7 @@ export function WorkflowBoard({
         document.removeEventListener("click", handleClickOutside)
       }
     }
+    return undefined
   }, [selectedCount, onSelectionChange, activeId])
 
   return (
@@ -883,11 +886,24 @@ export function WorkflowBoard({
                           {...(onFileOpen && { onFileOpen })}
                           fileChanged={changedFiles.has(item.id || item.absolute_path)}
                           isDragging={activeId === `file-${item.absolute_path}`}
-                          caseId={caseId}
-                          noteCount={itemNoteCounts.get(item.absolute_path)}
-                          duplicateCount={itemDuplicateCounts.get(item.absolute_path) ?? undefined}
-                          duplicateGroupId={duplicateGroupIds.get(item.id)}
-                          duplicateShape={item.id ? groupShapes.get(duplicateGroupIds.get(item.id) || '') : undefined}
+                          {...(caseId && { caseId })}
+                          {...(() => {
+                            const noteCount = itemNoteCounts.get(item.absolute_path);
+                            const duplicateCount = itemDuplicateCounts.get(item.absolute_path);
+                            const duplicateGroupId = item.id ? duplicateGroupIds.get(item.id) : undefined;
+                            let duplicateShape: "dot" | "square" | "diamond" | undefined = undefined;
+                            if (duplicateGroupId !== undefined) {
+                              const shape = groupShapes.get(duplicateGroupId as string);
+                              duplicateShape = shape || undefined;
+                            }
+                            return {
+                              ...(noteCount !== undefined && { noteCount }),
+                              ...(duplicateCount !== undefined && { duplicateCount }),
+                              ...(duplicateGroupId && { duplicateGroupId }),
+                              ...(duplicateShape && { duplicateShape }),
+                            };
+                          })()}
+                          {...(caseId && { caseId })}
                         />
                       )
                     })
@@ -917,11 +933,23 @@ export function WorkflowBoard({
                   <WorkflowCard
                     item={item}
                     isDragging={true}
-                    caseId={caseId}
-                    noteCount={itemNoteCounts.get(item.absolute_path)}
-                    duplicateCount={itemDuplicateCounts.get(item.absolute_path) ?? undefined}
-                    duplicateGroupId={duplicateGroupIds.get(item.id)}
-                    duplicateShape={item.id ? groupShapes.get(duplicateGroupIds.get(item.id) || '') : undefined}
+                    {...(() => {
+                      const noteCount = itemNoteCounts.get(item.absolute_path);
+                      const duplicateCount = itemDuplicateCounts.get(item.absolute_path);
+                      const duplicateGroupId = item.id ? duplicateGroupIds.get(item.id) : undefined;
+                      let duplicateShape: "dot" | "square" | "diamond" | undefined = undefined;
+                      if (duplicateGroupId !== undefined) {
+                        const shape = groupShapes.get(duplicateGroupId as string);
+                        duplicateShape = shape || undefined;
+                      }
+                      return {
+                        ...(caseId && { caseId }),
+                        ...(noteCount !== undefined && { noteCount }),
+                        ...(duplicateCount !== undefined && { duplicateCount }),
+                        ...(duplicateGroupId && { duplicateGroupId }),
+                        ...(duplicateShape && { duplicateShape }),
+                      };
+                    })()}
                   />
                 </div>
               </div>
@@ -943,11 +971,23 @@ export function WorkflowBoard({
             <WorkflowCard
               item={activeItem}
               isDragging={true}
-              caseId={caseId}
-              noteCount={itemNoteCounts.get(activeItem.absolute_path)}
-              duplicateCount={itemDuplicateCounts.get(activeItem.absolute_path) ?? undefined}
-              duplicateGroupId={duplicateGroupIds.get(activeItem.id)}
-              duplicateShape={activeItem.id ? groupShapes.get(duplicateGroupIds.get(activeItem.id) || '') : undefined}
+              {...(() => {
+                const noteCount = itemNoteCounts.get(activeItem.absolute_path);
+                const duplicateCount = itemDuplicateCounts.get(activeItem.absolute_path);
+                const duplicateGroupId = activeItem.id ? duplicateGroupIds.get(activeItem.id) : undefined;
+                let duplicateShape: "dot" | "square" | "diamond" | undefined = undefined;
+                if (duplicateGroupId !== undefined) {
+                  const shape = groupShapes.get(duplicateGroupId as string);
+                  duplicateShape = shape || undefined;
+                }
+                return {
+                  ...(caseId && { caseId }),
+                  ...(noteCount !== undefined && { noteCount }),
+                  ...(duplicateCount !== undefined && { duplicateCount }),
+                  ...(duplicateGroupId && { duplicateGroupId }),
+                  ...(duplicateShape && { duplicateShape }),
+                };
+              })()}
             />
           </div>
         ) : null}

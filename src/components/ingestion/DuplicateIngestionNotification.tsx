@@ -1,4 +1,4 @@
-import { Copy, AlertTriangle } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Button } from '../ui/button';
 

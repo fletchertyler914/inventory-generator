@@ -14,7 +14,7 @@ export const SearchErrorState = memo(function SearchErrorState({ error }: Search
       <div className="text-xs text-muted-foreground/70">
         Please try again or use local search
       </div>
-      {error && process.env.NODE_ENV === "development" && (
+      {error && process.env['NODE_ENV'] === "development" && (
         <div className="text-xs text-muted-foreground/50 mt-2 font-mono">
           {error.message}
         </div>

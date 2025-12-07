@@ -25,12 +25,10 @@ interface ReportSectionsProps {
 
 export function ReportSections({
   case_,
-  items,
   notes,
   findings,
   timelineEvents,
   inventorySummary,
-  currentSection = "executive-summary",
 }: ReportSectionsProps) {
   // Get case-level notes only
   const caseNotes = notes.filter((note) => !note.file_id)

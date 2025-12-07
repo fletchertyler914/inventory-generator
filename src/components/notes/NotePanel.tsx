@@ -90,9 +90,8 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
     try {
       await noteService.deleteNote(noteId)
       setNotes((prev) => prev.filter((n) => n.id !== noteId))
-      if (editingNoteId === noteId) {
-        setEditingNoteId(null)
-        setEditingContent("")
+      if (editingNote?.id === noteId) {
+        setEditingNote(null)
       }
     } catch (error) {
       console.error("Failed to delete note:", error)
@@ -414,7 +413,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
           }
         }}
         caseId={caseId}
-        fileId={fileId}
+        {...(fileId && { fileId })}
         note={editingNote}
         onSave={handleDialogClose}
       />

@@ -10,7 +10,7 @@
 
 import { safeInvoke } from '@/lib/tauri-utils';
 import { cachedInvoke, clearCache } from '@/lib/request-cache';
-import { createAppErrorWithRecovery, reportError, withRetry, ErrorCode, type AppError } from '@/lib/error-handler';
+import { createAppErrorWithRecovery, reportError, withRetry, ErrorCode } from '@/lib/error-handler';
 
 /**
  * Service method options
@@ -49,7 +49,7 @@ export async function serviceInvoke<T>(
       if (cache) {
         return cachedInvoke<T>(command, args, cacheTtl);
       }
-      return safeInvoke<T>(command, args);
+      return safeInvoke<T>(command, args as Record<string, unknown> | undefined);
     };
 
     if (retry) {

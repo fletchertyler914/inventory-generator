@@ -10,7 +10,7 @@ import {
 } from './dialog';
 import { Input } from './input';
 import { Label } from './label';
-import { validateFilename, extractFilename, extractExtension, getFilenameWithoutExtension } from '@/lib/file-validation';
+import { validateFilename, extractExtension, getFilenameWithoutExtension } from '@/lib/file-validation';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from './alert';
 

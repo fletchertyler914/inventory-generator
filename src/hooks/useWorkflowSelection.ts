@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react"
+import { useCallback, useMemo, useRef } from "react"
 
 /**
  * ELITE: Optimized workflow selection hook with performance optimizations

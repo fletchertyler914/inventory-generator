@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo, memo } from "react"
-import { ArrowUp, ArrowDown, CornerDownLeft, X } from "lucide-react"
+import { X } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -76,6 +76,7 @@ export const SearchDialog = memo(
         }, 100)
         return () => clearTimeout(timer)
       }
+      return undefined
     }, [open])
 
     // Optimized result click handler
@@ -249,7 +250,7 @@ export const SearchDialog = memo(
                     type={MATCH_TYPES.FILE}
                     results={groupedResults[MATCH_TYPES.FILE] || []}
                     query={query}
-                    count={resultCounts?.files}
+                    {...(resultCounts?.files !== undefined && { count: resultCounts.files })}
                     onResultSelect={handleResultSelect}
                     getSearchValue={getSearchValue}
                     showSeparator={
@@ -263,7 +264,7 @@ export const SearchDialog = memo(
                     type={MATCH_TYPES.NOTE}
                     results={groupedResults[MATCH_TYPES.NOTE] || []}
                     query={query}
-                    count={resultCounts?.notes}
+                    {...(resultCounts?.notes !== undefined && { count: resultCounts.notes })}
                     onResultSelect={handleResultSelect}
                     getSearchValue={getSearchValue}
                     showSeparator={
@@ -276,7 +277,7 @@ export const SearchDialog = memo(
                     type={MATCH_TYPES.FINDING}
                     results={groupedResults[MATCH_TYPES.FINDING] || []}
                     query={query}
-                    count={resultCounts?.findings}
+                    {...(resultCounts?.findings !== undefined && { count: resultCounts.findings })}
                     onResultSelect={handleResultSelect}
                     getSearchValue={getSearchValue}
                     showSeparator={
@@ -288,7 +289,7 @@ export const SearchDialog = memo(
                     type={MATCH_TYPES.TIMELINE}
                     results={groupedResults[MATCH_TYPES.TIMELINE] || []}
                     query={query}
-                    count={resultCounts?.timeline}
+                    {...(resultCounts?.timeline !== undefined && { count: resultCounts.timeline })}
                     onResultSelect={handleResultSelect}
                     getSearchValue={getSearchValue}
                     showSeparator={false}

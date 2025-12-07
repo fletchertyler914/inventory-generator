@@ -22,14 +22,15 @@
         "resizable": true,
         "visible": true,
         "decorations": true,
-        "url": "index.html"
+        "url": "tauri://localhost/index.html",
+        "devtools": true
       }
     ],
     "security": {
-      "csp": "default-src 'self' asset: data: blob:; img-src 'self' asset: data: blob:; worker-src 'self' asset: blob:;",
+      "csp": "default-src 'self' asset: data: blob:; script-src 'self' asset: 'unsafe-inline' 'unsafe-eval'; img-src 'self' asset: data: blob:; worker-src 'self' asset: blob:; connect-src 'self' asset:;",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDIR/**"]
+        "scope": ["$APPDIR/**", "$RESOURCE/**"]
       }
     }
   },
@@ -49,6 +50,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "resources": [
+      "../public/pdf.worker.min.js",
+      "../public/logo.png"
     ],
     "macOS": {
       "signingIdentity": "-"

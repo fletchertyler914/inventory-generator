@@ -133,11 +133,11 @@ export const WorkspaceLayout = memo(function WorkspaceLayout({
             notesVisible={notesVisible}
             findingsVisible={findingsVisible}
             timelineVisible={timelineVisible}
-            duplicatesVisible={duplicatesVisible}
+            {...(duplicatesVisible !== undefined && { duplicatesVisible })}
             caseId={caseId}
             selectedNoteId={selectedNoteId}
-            selectedFindingId={selectedFindingId}
-            selectedTimelineEventId={selectedTimelineEventId}
+            {...(selectedFindingId !== undefined && selectedFindingId !== null && { selectedFindingId })}
+            {...(selectedTimelineEventId !== undefined && selectedTimelineEventId !== null && { selectedTimelineEventId })}
             navigatorOpen={navigatorOpen}
             onExpandNavigator={onExpandNavigator}
             onToggleNavigator={onToggleNavigator}
@@ -150,9 +150,9 @@ export const WorkspaceLayout = memo(function WorkspaceLayout({
             onFileRemove={onFileRemove}
             onCloseNotes={onCloseNotes}
             onCloseFindings={onCloseFindings}
-            onCloseTimeline={onCloseTimeline}
-            onCloseDuplicates={onCloseDuplicates}
-            onOpenDuplicates={onOpenDuplicates}
+            {...(onCloseTimeline && { onCloseTimeline })}
+            {...(onCloseDuplicates && { onCloseDuplicates })}
+            {...(onOpenDuplicates && { onOpenDuplicates })}
           />
         ) : (
           <BoardView

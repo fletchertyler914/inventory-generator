@@ -79,6 +79,7 @@ export function useFileNavigation({
       }
     } else {
       setLastFileLoaded(true)
+      return undefined
     }
   }, [caseId, items, preferencesLoaded, viewMode, viewingFile])
 

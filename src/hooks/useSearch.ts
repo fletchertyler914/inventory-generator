@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { searchService, type SearchResult } from '@/services/searchService';
 import { useDebounce } from './useDebounce';
 import { getStoreValue, setStoreValue } from '@/lib/store-utils';
@@ -144,9 +144,9 @@ export function useSearch({
           
           if (inventoryData) {
             // Check standard fields
-            const docDesc = String(inventoryData.document_description || '').toLowerCase();
-            const docType = String(inventoryData.document_type || '').toLowerCase();
-            const notes = String(inventoryData.notes || '').toLowerCase();
+            const docDesc = String(inventoryData['document_description'] || '').toLowerCase();
+            const docType = String(inventoryData['document_type'] || '').toLowerCase();
+            const notes = String(inventoryData['notes'] || '').toLowerCase();
             
             if (docDesc.includes(lowerQuery)) score += 5;
             if (docType.includes(lowerQuery)) score += 3;

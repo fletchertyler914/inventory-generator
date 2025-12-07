@@ -3773,16 +3773,18 @@ pub fn run() {
     use tauri_plugin_log::{Builder, Target, TargetKind, RotationStrategy};
     
     // Configure logging based on build mode
-    // Temporarily use Debug level in production for troubleshooting
+    // Production: Info level (reduces noise, keeps important messages)
+    // Development: Debug level (full logging for troubleshooting)
     let log_level = if cfg!(debug_assertions) {
         LevelFilter::Debug
     } else {
-        LevelFilter::Debug // Changed to Debug for troubleshooting
+        LevelFilter::Info
     };
     
     // Configure log targets: stdout + file for dev, file only for production
     // Note: tauri-plugin-log automatically appends .log extension, so use "casespace" not "casespace.log"
-    // Temporarily enable stdout in production for debugging
+    // Production: File logging only (no stdout to avoid console spam)
+    // Development: Both stdout and file for immediate feedback
     let log_targets = if cfg!(debug_assertions) {
         vec![
             Target::new(TargetKind::Stdout),
@@ -3790,7 +3792,6 @@ pub fn run() {
         ]
     } else {
         vec![
-            Target::new(TargetKind::Stdout), // Enable stdout for debugging
             Target::new(TargetKind::LogDir { file_name: Some("casespace".to_string()) }),
         ]
     };
@@ -3813,27 +3814,37 @@ pub fn run() {
     eprintln!("[CaseSpace] Builder created, registering handlers...");
     eprintln!("[CaseSpace] Starting Tauri application...");
     eprintln!("[CaseSpace] About to call Builder::default()...");
-    let builder = tauri::Builder::default();
+    let mut builder = tauri::Builder::default();
     eprintln!("[CaseSpace] Builder::default() returned");
     
+    // Initialize and register CrabNebula DevTools early for advanced debugging
+    // This provides better debugging than basic devtools, including asset inspection
+    // Only enable in debug builds to avoid issues in production
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[CaseSpace] Registering devtools plugin (debug build)...");
+        builder = builder.plugin(tauri_plugin_devtools::init());
+        eprintln!("[CaseSpace] Devtools plugin registered");
+    }
+    
     eprintln!("[CaseSpace] Registering log plugin...");
-    let builder = builder.plugin(log_plugin);
+    builder = builder.plugin(log_plugin);
     eprintln!("[CaseSpace] Log plugin registered");
     
     eprintln!("[CaseSpace] Registering opener plugin...");
-    let builder = builder.plugin(tauri_plugin_opener::init());
+    builder = builder.plugin(tauri_plugin_opener::init());
     eprintln!("[CaseSpace] Opener plugin registered");
     
     eprintln!("[CaseSpace] Registering dialog plugin...");
-    let builder = builder.plugin(tauri_plugin_dialog::init());
+    builder = builder.plugin(tauri_plugin_dialog::init());
     eprintln!("[CaseSpace] Dialog plugin registered");
     
     eprintln!("[CaseSpace] Registering store plugin...");
-    let builder = builder.plugin(tauri_plugin_store::Builder::default().build());
+    builder = builder.plugin(tauri_plugin_store::Builder::default().build());
     eprintln!("[CaseSpace] Store plugin registered");
     
     eprintln!("[CaseSpace] Setting up setup callback...");
-    let builder = builder
+    builder = builder
         .setup(|app| {
             eprintln!("[CaseSpace] ===== SETUP CALLBACK STARTED =====");
             log::info!("[Setup] Setup callback called");
@@ -3865,7 +3876,7 @@ pub fn run() {
             Ok(())
         });
     eprintln!("[CaseSpace] Registering invoke handlers...");
-    let builder = builder
+    builder = builder
         .invoke_handler(tauri::generate_handler![
             get_database_path,
             count_directory_files,

@@ -1,17 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, Copy, Trash2, Eye, FileText } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
-import { Card } from '../ui/card';
-import { duplicateService, type DuplicateGroup, type DuplicateFile } from '@/services/duplicateService';
+import { duplicateService, type DuplicateGroup } from '@/services/duplicateService';
 import { recommendFileToKeep, getNotesCounts, getFindingsCounts } from '@/lib/duplicate-recommendations';
-import { formatBytes } from '@/lib/inventory-utils';
 import { toast } from '@/hooks/useToast';
 import { DuplicateFileCard } from './DuplicateFileCard';
 import { DuplicateDecisionDialog } from './DuplicateDecisionDialog';
-import { format } from 'date-fns';
-import { StatusCell } from '../table/StatusCell';
 
 interface DuplicateGroupViewProps {
   group: DuplicateGroup;
@@ -22,14 +17,12 @@ interface DuplicateGroupViewProps {
 
 export function DuplicateGroupView({ group, caseId, onBack, onResolved }: DuplicateGroupViewProps) {
   const [recommendation, setRecommendation] = useState<{ file_id: string; confidence: number; reasons: string[] } | null>(null);
-  const [loadingRecommendation, setLoadingRecommendation] = useState(true);
   const [decisionDialogOpen, setDecisionDialogOpen] = useState(false);
   const [selectedAction, setSelectedAction] = useState<{ type: 'delete' | 'merge'; fileId: string; targetFileId?: string } | null>(null);
 
   // Load recommendation
   const loadRecommendation = useCallback(async () => {
     try {
-      setLoadingRecommendation(true);
       const [notesCounts, findingsCounts] = await Promise.all([
         getNotesCounts(group.files.map(f => f.file_id), caseId),
         getFindingsCounts(group.files.map(f => f.file_id), caseId),
@@ -39,8 +32,6 @@ export function DuplicateGroupView({ group, caseId, onBack, onResolved }: Duplic
       setRecommendation(rec);
     } catch (error) {
       console.error('Failed to load recommendation:', error);
-    } finally {
-      setLoadingRecommendation(false);
     }
   }, [group.files, caseId]);
 
@@ -67,7 +58,11 @@ export function DuplicateGroupView({ group, caseId, onBack, onResolved }: Duplic
   }, [group.group_id, onResolved]);
 
   const handleDeleteFile = useCallback((fileId: string, mergeToFileId?: string) => {
-    setSelectedAction({ type: mergeToFileId ? 'merge' : 'delete', fileId, targetFileId: mergeToFileId });
+    setSelectedAction({ 
+      type: mergeToFileId ? 'merge' : 'delete', 
+      fileId, 
+      ...(mergeToFileId && { targetFileId: mergeToFileId })
+    });
     setDecisionDialogOpen(true);
   }, []);
 
@@ -102,6 +97,19 @@ export function DuplicateGroupView({ group, caseId, onBack, onResolved }: Duplic
   const primaryFile = group.files.find(f => f.is_primary) || group.files[0];
   const recommendedFile = recommendation ? group.files.find(f => f.file_id === recommendation.file_id) : null;
 
+  // Sort files: primary first, then recommended
+  const sortedFiles = [...group.files].sort((a, b) => {
+    // Primary files first
+    if (a.is_primary && !b.is_primary) return -1;
+    if (!a.is_primary && b.is_primary) return 1;
+    // Then recommended
+    if (recommendation) {
+      if (a.file_id === recommendation.file_id && b.file_id !== recommendation.file_id) return -1;
+      if (a.file_id !== recommendation.file_id && b.file_id === recommendation.file_id) return 1;
+    }
+    return 0;
+  });
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -111,55 +119,25 @@ export function DuplicateGroupView({ group, caseId, onBack, onResolved }: Duplic
           Back
         </Button>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold truncate">{primaryFile.file_name}</h3>
+          <h3 className="text-sm font-semibold truncate">{primaryFile?.file_name || 'Unknown'}</h3>
           <p className="text-xs text-muted-foreground truncate">{group.count} duplicate files</p>
         </div>
       </div>
 
-      {/* Recommendation Banner */}
-      {recommendation && recommendedFile && (
-        <div className="p-3 bg-primary/10 border-b border-border/40 dark:border-border/50 flex-shrink-0">
-          <div className="flex items-start gap-2">
-            <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-primary mb-1">
-                Recommended: Keep "{recommendedFile.file_name}"
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {recommendation.reasons.join(', ')}
-              </p>
-            </div>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => handleKeepFile(recommendedFile.file_id)}
-            >
-              Keep This
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Files Comparison */}
+      {/* Files List */}
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-3">
-          {group.files.map((file) => (
+        <div className="p-3 space-y-2.5">
+          {sortedFiles.map((file) => (
             <DuplicateFileCard
               key={file.file_id}
               file={file}
               isPrimary={file.is_primary}
               isRecommended={recommendation?.file_id === file.file_id}
+              {...(recommendation?.file_id === file.file_id && recommendation ? { recommendationReasons: recommendation.reasons } : {})}
               onKeep={() => handleKeepFile(file.file_id)}
               onDelete={() => {
                 const targetFile = recommendedFile || primaryFile;
                 handleDeleteFile(file.file_id, file.file_id !== targetFile?.file_id ? targetFile?.file_id : undefined);
-              }}
-              onView={() => {
-                // Navigate to file - this would be handled by parent
-                toast({
-                  title: 'View file',
-                  description: 'File viewing would be implemented here',
-                });
               }}
             />
           ))}
@@ -172,7 +150,10 @@ export function DuplicateGroupView({ group, caseId, onBack, onResolved }: Duplic
           open={decisionDialogOpen}
           onOpenChange={setDecisionDialogOpen}
           fileToDelete={group.files.find(f => f.file_id === selectedAction.fileId)!}
-          targetFile={selectedAction.targetFileId ? group.files.find(f => f.file_id === selectedAction.targetFileId) : undefined}
+          {...(selectedAction.targetFileId ? (() => {
+            const targetFile = group.files.find(f => f.file_id === selectedAction.targetFileId);
+            return targetFile ? { targetFile } : {};
+          })() : {})}
           onConfirm={handleConfirmDelete}
           onCancel={() => {
             setDecisionDialogOpen(false);
