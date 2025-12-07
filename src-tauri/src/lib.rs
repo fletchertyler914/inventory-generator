@@ -2308,15 +2308,23 @@ async fn ingest_files_to_case(
     
     // ELITE: Detect and create duplicate groups for newly inserted/updated files (local files only)
     let all_processed_files: Vec<_> = to_insert.iter().chain(to_update.iter()).cloned().collect();
-    let duplicate_groups_created = file_ingestion::batch_create_duplicate_groups(
+    match file_ingestion::batch_create_duplicate_groups(
         &pool,
         &case_id,
         &all_processed_files,
         now,
-    ).await.unwrap_or(0);
-    
-    if duplicate_groups_created > 0 {
-        log::info!("Created {} duplicate groups during ingestion", duplicate_groups_created);
+    ).await {
+        Ok(duplicate_groups_created) => {
+            if duplicate_groups_created > 0 {
+                log::info!("Created {} duplicate groups during ingestion", duplicate_groups_created);
+            } else {
+                log::debug!("No duplicate groups created (no duplicates found or all already exist)");
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to create duplicate groups during ingestion: {}", e);
+            // Don't fail ingestion if duplicate detection fails - it's non-critical
+        }
     }
     
     // Update case timestamp
@@ -3275,6 +3283,7 @@ async fn find_all_duplicate_groups(
     let pool = database::get_db_pool(&app).await?;
     
     // Find all duplicate groups with file details (local files only)
+    // Use LEFT JOIN to handle cases where source might not be in case_sources yet
     let rows = sqlx::query(
         r#"
         SELECT 
@@ -3291,10 +3300,10 @@ async fn find_all_duplicate_groups(
             f.source_directory
         FROM duplicate_groups dg
         INNER JOIN files f ON dg.file_id = f.id
-        INNER JOIN case_sources cs ON f.case_id = cs.case_id AND f.source_directory = cs.source_path
+        LEFT JOIN case_sources cs ON f.case_id = cs.case_id AND f.source_directory = cs.source_path
         WHERE f.case_id = ?
           AND f.deleted_at IS NULL
-          AND cs.source_location = 'local'
+          AND (cs.source_location = 'local' OR cs.source_location IS NULL)
         ORDER BY dg.group_id, dg.is_primary DESC, f.file_name
         "#
     )
@@ -3341,6 +3350,7 @@ async fn find_all_duplicate_groups(
 }
 
 /// ELITE: Get duplicate group for a specific file
+/// Falls back to hash-based lookup if file isn't in duplicate_groups table
 #[tauri::command]
 async fn get_duplicate_group(
     case_id: String,
@@ -3349,7 +3359,7 @@ async fn get_duplicate_group(
 ) -> Result<Option<serde_json::Value>, String> {
     let pool = database::get_db_pool(&app).await?;
     
-    // Get group_id for this file
+    // First, try to get group_id from duplicate_groups table
     let group_row = sqlx::query(
         "SELECT group_id FROM duplicate_groups WHERE file_id = ?"
     )
@@ -3358,17 +3368,89 @@ async fn get_duplicate_group(
     .await
     .map_err(|e| format!("Failed to find duplicate group: {}", e))?;
     
-    let group_id: String = match group_row {
-        Some(row) => row.get("group_id"),
-        None => return Ok(None),
-    };
+    let group_id: Option<String> = group_row.map(|row| row.get("group_id"));
     
-    // Get all files in this group (local files only)
+    // If found in duplicate_groups, use that
+    if let Some(ref group_id) = group_id {
+        // Get all files in this group (local files only)
+        let rows = sqlx::query(
+            r#"
+            SELECT 
+                dg.file_id,
+                dg.is_primary,
+                f.file_name,
+                f.absolute_path,
+                f.folder_path,
+                f.status,
+                f.file_size,
+                f.created_at,
+                f.modified_at,
+                f.source_directory
+            FROM duplicate_groups dg
+            INNER JOIN files f ON dg.file_id = f.id
+            INNER JOIN case_sources cs ON f.case_id = cs.case_id AND f.source_directory = cs.source_path
+            WHERE dg.group_id = ?
+              AND f.case_id = ?
+              AND f.deleted_at IS NULL
+              AND cs.source_location = 'local'
+            ORDER BY dg.is_primary DESC, f.file_name
+            "#
+        )
+        .bind(group_id)
+        .bind(&case_id)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Failed to get duplicate group files: {}", e))?;
+        
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        
+        let files: Vec<serde_json::Value> = rows.iter().map(|row| {
+            serde_json::json!({
+                "file_id": row.get::<String, _>("file_id"),
+                "file_name": row.get::<String, _>("file_name"),
+                "absolute_path": row.get::<String, _>("absolute_path"),
+                "folder_path": row.get::<String, _>("folder_path"),
+                "status": row.get::<String, _>("status"),
+                "file_size": row.get::<i64, _>("file_size"),
+                "created_at": row.get::<i64, _>("created_at"),
+                "modified_at": row.get::<i64, _>("modified_at"),
+                "source_directory": row.get::<Option<String>, _>("source_directory"),
+                "is_primary": row.get::<i64, _>("is_primary") == 1,
+            })
+        }).collect();
+        
+        return Ok(Some(serde_json::json!({
+            "group_id": group_id,
+            "files": files,
+            "count": files.len(),
+        })));
+    }
+    
+    // Fallback: Query by hash (like find_duplicate_files does)
+    // This ensures we find duplicates even if duplicate_groups table is missing entries
+    let file_row = sqlx::query(
+        "SELECT file_hash FROM files WHERE id = ? AND case_id = ? AND deleted_at IS NULL"
+    )
+    .bind(&file_id)
+    .bind(&case_id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("Database error: {}", e))?
+    .ok_or_else(|| "File not found".to_string())?;
+    
+    let file_hash: Option<String> = file_row.get("file_hash");
+    
+    if file_hash.is_none() {
+        return Ok(None);
+    }
+    
+    // Find all files with same hash (local files only)
     let rows = sqlx::query(
         r#"
         SELECT 
-            dg.file_id,
-            dg.is_primary,
+            f.id as file_id,
             f.file_name,
             f.absolute_path,
             f.folder_path,
@@ -3376,26 +3458,31 @@ async fn get_duplicate_group(
             f.file_size,
             f.created_at,
             f.modified_at,
-            f.source_directory
-        FROM duplicate_groups dg
-        INNER JOIN files f ON dg.file_id = f.id
+            f.source_directory,
+            COALESCE(dg.is_primary, 0) as is_primary
+        FROM files f
         INNER JOIN case_sources cs ON f.case_id = cs.case_id AND f.source_directory = cs.source_path
-        WHERE dg.group_id = ?
-          AND f.case_id = ?
+        LEFT JOIN duplicate_groups dg ON dg.file_id = f.id
+        WHERE f.case_id = ?
+          AND f.file_hash = ?
           AND f.deleted_at IS NULL
           AND cs.source_location = 'local'
-        ORDER BY dg.is_primary DESC, f.file_name
+        ORDER BY is_primary DESC, f.created_at ASC, f.file_name
         "#
     )
-    .bind(&group_id)
     .bind(&case_id)
+    .bind(&file_hash.as_ref().unwrap())
     .fetch_all(&pool)
     .await
-    .map_err(|e| format!("Failed to get duplicate group files: {}", e))?;
+    .map_err(|e| format!("Failed to find duplicate files by hash: {}", e))?;
     
-    if rows.is_empty() {
+    if rows.len() <= 1 {
+        // Only one file (the file itself), no duplicates
         return Ok(None);
     }
+    
+    // Use file_hash as group_id for fallback case
+    let fallback_group_id = file_hash.unwrap();
     
     let files: Vec<serde_json::Value> = rows.iter().map(|row| {
         serde_json::json!({
@@ -3413,7 +3500,7 @@ async fn get_duplicate_group(
     }).collect();
     
     Ok(Some(serde_json::json!({
-        "group_id": group_id,
+        "group_id": fallback_group_id,
         "files": files,
         "count": files.len(),
     })))

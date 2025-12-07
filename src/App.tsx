@@ -66,7 +66,8 @@ function App() {
 
         if (dbItems.length > 0) {
           // Fast path: Files exist in DB
-          // Wait for duplicate detection to complete before showing UI
+          // Pre-warm duplicate cache (without clearing) so hook gets instant data
+          // Cache deduplication ensures only one request if hook also fetches
           const { duplicateService } = await import("@/services/duplicateService")
           await duplicateService.findAllDuplicateGroups(case_.id, false)
 
@@ -75,7 +76,7 @@ function App() {
           const sources = await fileService.listCaseSources(case_.id)
           setSelectedFolder(sources[0] || null)
 
-          // Hide loading screen after duplicate detection completes
+          // Hide loading screen after cache is warmed
           setIsInitializing(false)
 
           toast({
@@ -111,15 +112,15 @@ function App() {
             // Load the ingested files
             const ingestedItems = await fileService.loadCaseFilesWithInventory(case_.id)
 
-            // Wait for duplicate detection to complete (it happens during ingestion, but we need to fetch the results)
-            // This ensures duplicate counts are loaded before UI shows
+            // Pre-warm duplicate cache with forceRefresh to ensure fresh data after ingestion
+            // This clears any stale cache and populates with newly created duplicate groups
             const { duplicateService } = await import("@/services/duplicateService")
-            await duplicateService.findAllDuplicateGroups(case_.id, false)
+            await duplicateService.findAllDuplicateGroups(case_.id, true)
 
             setItems(ingestedItems)
             setSelectedFolder(sources[0] || null)
 
-            // Hide loading screen after duplicate detection completes
+            // Hide loading screen after cache is warmed with fresh data
             setIsInitializing(false)
 
             toast({

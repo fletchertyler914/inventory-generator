@@ -548,6 +548,7 @@ pub async fn batch_create_duplicate_groups(
     // ELITE: Ultra-optimized single query approach
     // Gets ALL duplicate files with their data AND existing duplicate_groups entries in one query
     // Then processes everything in memory and batch inserts
+    // Note: Uses LEFT JOIN for case_sources to handle cases where source might not be in case_sources yet
     let duplicate_files_rows = sqlx::query(
         r#"
         SELECT 
@@ -557,22 +558,22 @@ pub async fn batch_create_duplicate_groups(
             dg.file_id as existing_file_id,
             dg.is_primary as existing_is_primary
         FROM files f
-        INNER JOIN case_sources cs ON f.case_id = cs.case_id 
+        LEFT JOIN case_sources cs ON f.case_id = cs.case_id 
             AND f.source_directory = cs.source_path
         LEFT JOIN duplicate_groups dg ON dg.group_id = f.file_hash AND dg.file_id = f.id
         WHERE f.case_id = ?
           AND f.file_hash IS NOT NULL
           AND f.deleted_at IS NULL
-          AND cs.source_location = 'local'
+          AND (cs.source_location = 'local' OR cs.source_location IS NULL)
           AND f.file_hash IN (
               SELECT file_hash
               FROM files f2
-              INNER JOIN case_sources cs2 ON f2.case_id = cs2.case_id 
+              LEFT JOIN case_sources cs2 ON f2.case_id = cs2.case_id 
                   AND f2.source_directory = cs2.source_path
               WHERE f2.case_id = ?
                 AND f2.file_hash IS NOT NULL
                 AND f2.deleted_at IS NULL
-                AND cs2.source_location = 'local'
+                AND (cs2.source_location = 'local' OR cs2.source_location IS NULL)
               GROUP BY f2.file_hash
               HAVING COUNT(*) > 1
           )
@@ -586,11 +587,14 @@ pub async fn batch_create_duplicate_groups(
     .map_err(|e| format!("Failed to find duplicate files: {}", e))?;
     
     if duplicate_files_rows.is_empty() {
+        log::debug!("No duplicate files found for case {} (all files are unique or already grouped)", case_id);
         transaction.commit()
             .await
             .map_err(|e| format!("Failed to commit transaction: {}", e))?;
         return Ok(0);
     }
+    
+    log::debug!("Found {} duplicate file rows to process for case {}", duplicate_files_rows.len(), case_id);
     
     // Process results in memory: group by hash, track existing entries, determine what to insert
     use std::collections::{HashMap, HashSet};

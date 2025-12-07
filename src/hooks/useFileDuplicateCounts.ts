@@ -4,13 +4,27 @@ import { duplicateService } from '@/services/duplicateService';
 /**
  * ELITE: Optimized hook for fetching and caching file duplicate counts
  * 
- * Features:
- * - Fetches duplicate groups for entire case (single query, scalable)
- * - Automatic caching via cachedInvoke in service layer
- * - Memoized results for O(1) lookups
- * - Cancellation support for cleanup
- * - Error handling that doesn't break UI
- * - Only fetches when caseId is defined
+ * ARCHITECTURE:
+ * - Cache is source of truth - hook reads from cache, never forces refresh
+ * - App.tsx pre-warms cache before UI shows (optional optimization)
+ * - Cache deduplication ensures only one request if multiple components fetch
+ * - Memoized Map lookups for O(1) access in components
+ * 
+ * PERFORMANCE:
+ * - Single query for entire case (scalable to thousands of files)
+ * - Automatic request deduplication via cachedInvoke
+ * - Memoized results prevent unnecessary re-renders
+ * - Cancellation support prevents memory leaks
+ * 
+ * MODULARITY:
+ * - Self-contained: hook manages its own data fetching
+ * - No external dependencies on App.tsx or other components
+ * - Cache layer handles all optimization transparently
+ * 
+ * MAINTAINABILITY:
+ * - Clear separation of concerns: hook owns duplicate data
+ * - Error handling doesn't break UI (graceful degradation)
+ * - Type-safe with proper TypeScript types
  */
 export function useFileDuplicateCounts(caseId: string | undefined) {
   const [duplicateCounts, setDuplicateCounts] = useState<Record<string, number>>({});
@@ -50,6 +64,10 @@ export function useFileDuplicateCounts(caseId: string | undefined) {
 
     const fetchData = async () => {
       try {
+        // Cache is source of truth - read from cache (never force refresh)
+        // App.tsx may pre-warm cache, but hook is self-sufficient
+        // Cache deduplication ensures only one request if multiple components fetch
+        // If cache is empty/stale, cachedInvoke will fetch and cache automatically
         const groups = await duplicateService.findAllDuplicateGroups(caseId, false);
         
         // Build count map: fileId -> duplicate count (excluding itself)
@@ -68,6 +86,11 @@ export function useFileDuplicateCounts(caseId: string | undefined) {
         if (!cancelled) {
           setDuplicateCounts(counts);
           setDuplicateGroupIds(groupIds);
+          // Debug logging to verify data is loaded
+          if (Object.keys(counts).length > 0) {
+            const { logger } = require('@/lib/logger');
+            logger.debug(`[useFileDuplicateCounts] Loaded ${Object.keys(counts).length} files with duplicates for case ${caseId}`);
+          }
         }
       } catch (err) {
         if (!cancelled) {
