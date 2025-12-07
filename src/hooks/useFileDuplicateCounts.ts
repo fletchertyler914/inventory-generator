@@ -86,11 +86,6 @@ export function useFileDuplicateCounts(caseId: string | undefined) {
         if (!cancelled) {
           setDuplicateCounts(counts);
           setDuplicateGroupIds(groupIds);
-          // Debug logging to verify data is loaded
-          if (Object.keys(counts).length > 0) {
-            const { logger } = require('@/lib/logger');
-            logger.debug(`[useFileDuplicateCounts] Loaded ${Object.keys(counts).length} files with duplicates for case ${caseId}`);
-          }
         }
       } catch (err) {
         if (!cancelled) {

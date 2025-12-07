@@ -491,22 +491,21 @@ export const FileNavigator = memo(
                             {item.file_name}
                           </span>
                           {item.id &&
-                            duplicateCounts.has(item.id) &&
-                            duplicateGroupIds.get(item.id) && (
-                              <DuplicateBadge
-                                groupId={duplicateGroupIds.get(item.id)!}
-                                count={duplicateCounts.get(item.id) || 0}
-                                {...(() => {
-                                  const groupId = duplicateGroupIds.get(item.id)
-                                  const shape = groupId ? groupShapes.get(groupId) : undefined
-                                  return shape ? { shape } : {}
-                                })()}
-                                onClick={() => {
-                                  // Open duplicate management - would need parent handler
-                                }}
-                                className="flex-shrink-0 ml-1.5 pointer-events-auto"
-                              />
-                            )}
+                            (() => {
+                              const count = duplicateCounts.get(item.id)
+                              const groupId = duplicateGroupIds.get(item.id)
+                              if (!count || count === 0 || !groupId) return null
+                              return (
+                                <DuplicateBadge
+                                  groupId={groupId}
+                                  count={count}
+                                  {...(groupShapes.get(groupId) && {
+                                    shape: groupShapes.get(groupId),
+                                  })}
+                                  className="flex-shrink-0 ml-1.5 pointer-events-auto"
+                                />
+                              )
+                            })()}
                         </button>
                       </div>
                     </ContextMenuTrigger>

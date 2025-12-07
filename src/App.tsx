@@ -66,11 +66,8 @@ function App() {
 
         if (dbItems.length > 0) {
           // Fast path: Files exist in DB
-          // Pre-warm duplicate cache (without clearing) so hook gets instant data
-          // Cache deduplication ensures only one request if hook also fetches
-          const { duplicateService } = await import("@/services/duplicateService")
-          await duplicateService.findAllDuplicateGroups(case_.id, false)
-
+          // Cache is source of truth - hook will fetch when needed
+          // Cache deduplication ensures only one request if multiple components fetch
           setItems(dbItems)
           // Get first source for selectedFolder display
           const sources = await fileService.listCaseSources(case_.id)
@@ -110,12 +107,9 @@ function App() {
             }
 
             // Load the ingested files
+            // Cache is automatically cleared by fileService.ingestFilesToCase
+            // Hook will fetch fresh duplicate data when components mount
             const ingestedItems = await fileService.loadCaseFilesWithInventory(case_.id)
-
-            // Pre-warm duplicate cache with forceRefresh to ensure fresh data after ingestion
-            // This clears any stale cache and populates with newly created duplicate groups
-            const { duplicateService } = await import("@/services/duplicateService")
-            await duplicateService.findAllDuplicateGroups(case_.id, true)
 
             setItems(ingestedItems)
             setSelectedFolder(sources[0] || null)

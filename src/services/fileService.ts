@@ -68,9 +68,12 @@ export const fileService = {
       folderPath,
       incremental: incremental ?? true,
     });
-    // Clear cache for this case's files
+    // Clear cache for this case's files and duplicate groups
+    // Duplicate groups are created during ingestion, so cache must be invalidated
     clearCache('load_case_files_with_inventory');
     clearCache('get_case_file_count');
+    clearCache('find_all_duplicate_groups');
+    clearCache('get_duplicate_group');
     return result;
   },
 

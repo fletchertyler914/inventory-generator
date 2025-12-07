@@ -2,11 +2,38 @@ import { CheckCircle2, Star, Trash2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
 import { PanelCard } from "../panel/PanelCard"
-import { StatusCell } from "../table/StatusCell"
 import type { DuplicateFile } from "@/services/duplicateService"
 import { formatBytes } from "@/lib/inventory-utils"
 import { cn } from "@/lib/utils"
 import type { FileStatus } from "@/types/inventory"
+
+const statusOptions: { value: FileStatus; label: string; color: string }[] = [
+  {
+    value: "unreviewed",
+    label: "Unreviewed",
+    color: "text-muted-foreground",
+  },
+  {
+    value: "in_progress",
+    label: "In Progress",
+    color: "text-blue-400",
+  },
+  {
+    value: "reviewed",
+    label: "Reviewed",
+    color: "text-green-400",
+  },
+  {
+    value: "flagged",
+    label: "Flagged",
+    color: "text-yellow-400",
+  },
+  {
+    value: "finalized",
+    label: "Finalized",
+    color: "text-green-500",
+  },
+]
 
 interface DuplicateFileCardProps {
   file: DuplicateFile
@@ -71,7 +98,17 @@ export function DuplicateFileCard({
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>{formatBytes(file.file_size)}</span>
           <span>•</span>
-          <StatusCell status={file.status as FileStatus} onStatusChange={() => {}} />
+          {(() => {
+            const status = (file.status as FileStatus) || "unreviewed"
+            const currentStatus = statusOptions.find(
+              (opt) => opt.value === status
+            ) || statusOptions[0]
+            return (
+              <span className={cn("text-xs", currentStatus.color)}>
+                {currentStatus.label}
+              </span>
+            )
+          })()}
         </div>
 
         {/* Actions */}

@@ -331,19 +331,6 @@ export function WorkflowBoard({
     return counts
   }, [items, noteCounts])
 
-  // Memoize duplicate count lookups for each item
-  const itemDuplicateCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    items.forEach((item) => {
-      if (item.id) {
-        const count = duplicateCounts.get(item.id)
-        if (count !== undefined && count > 0) {
-          counts.set(item.absolute_path, count)
-        }
-      }
-    })
-    return counts
-  }, [items, duplicateCounts])
 
   // ELITE: Collect visible duplicate groupIds and compute visual encodings
   const { resolvedTheme } = useTheme()
@@ -884,16 +871,12 @@ export function WorkflowBoard({
                           {...(caseId && { caseId })}
                           {...(() => {
                             const noteCount = itemNoteCounts.get(item.absolute_path);
-                            const duplicateCount = itemDuplicateCounts.get(item.absolute_path);
+                            const duplicateCount = item.id ? duplicateCounts.get(item.id) : undefined;
                             const duplicateGroupId = item.id ? duplicateGroupIds.get(item.id) : undefined;
-                            let duplicateShape: "dot" | "square" | "diamond" | undefined = undefined;
-                            if (duplicateGroupId !== undefined) {
-                              const shape = groupShapes.get(duplicateGroupId as string);
-                              duplicateShape = shape || undefined;
-                            }
+                            const duplicateShape = duplicateGroupId ? groupShapes.get(duplicateGroupId) : undefined;
                             return {
                               ...(noteCount !== undefined && { noteCount }),
-                              ...(duplicateCount !== undefined && { duplicateCount }),
+                              ...(duplicateCount !== undefined && duplicateCount > 0 && { duplicateCount }),
                               ...(duplicateGroupId && { duplicateGroupId }),
                               ...(duplicateShape && { duplicateShape }),
                             };
@@ -930,17 +913,13 @@ export function WorkflowBoard({
                     isDragging={true}
                     {...(() => {
                       const noteCount = itemNoteCounts.get(item.absolute_path);
-                      const duplicateCount = itemDuplicateCounts.get(item.absolute_path);
+                      const duplicateCount = item.id ? duplicateCounts.get(item.id) : undefined;
                       const duplicateGroupId = item.id ? duplicateGroupIds.get(item.id) : undefined;
-                      let duplicateShape: "dot" | "square" | "diamond" | undefined = undefined;
-                      if (duplicateGroupId !== undefined) {
-                        const shape = groupShapes.get(duplicateGroupId as string);
-                        duplicateShape = shape || undefined;
-                      }
+                      const duplicateShape = duplicateGroupId ? groupShapes.get(duplicateGroupId) : undefined;
                       return {
                         ...(caseId && { caseId }),
                         ...(noteCount !== undefined && { noteCount }),
-                        ...(duplicateCount !== undefined && { duplicateCount }),
+                        ...(duplicateCount !== undefined && duplicateCount > 0 && { duplicateCount }),
                         ...(duplicateGroupId && { duplicateGroupId }),
                         ...(duplicateShape && { duplicateShape }),
                       };
@@ -968,17 +947,13 @@ export function WorkflowBoard({
               isDragging={true}
               {...(() => {
                 const noteCount = itemNoteCounts.get(activeItem.absolute_path);
-                const duplicateCount = itemDuplicateCounts.get(activeItem.absolute_path);
+                const duplicateCount = activeItem.id ? duplicateCounts.get(activeItem.id) : undefined;
                 const duplicateGroupId = activeItem.id ? duplicateGroupIds.get(activeItem.id) : undefined;
-                let duplicateShape: "dot" | "square" | "diamond" | undefined = undefined;
-                if (duplicateGroupId !== undefined) {
-                  const shape = groupShapes.get(duplicateGroupId as string);
-                  duplicateShape = shape || undefined;
-                }
+                const duplicateShape = duplicateGroupId ? groupShapes.get(duplicateGroupId) : undefined;
                 return {
                   ...(caseId && { caseId }),
                   ...(noteCount !== undefined && { noteCount }),
-                  ...(duplicateCount !== undefined && { duplicateCount }),
+                  ...(duplicateCount !== undefined && duplicateCount > 0 && { duplicateCount }),
                   ...(duplicateGroupId && { duplicateGroupId }),
                   ...(duplicateShape && { duplicateShape }),
                 };
