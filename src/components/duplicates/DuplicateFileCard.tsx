@@ -103,6 +103,7 @@ export function DuplicateFileCard({
             const currentStatus = statusOptions.find(
               (opt) => opt.value === status
             ) || statusOptions[0]
+            if (!currentStatus) return null
             return (
               <span className={cn("text-xs", currentStatus.color)}>
                 {currentStatus.label}

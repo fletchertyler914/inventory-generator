@@ -495,13 +495,12 @@ export const FileNavigator = memo(
                               const count = duplicateCounts.get(item.id)
                               const groupId = duplicateGroupIds.get(item.id)
                               if (!count || count === 0 || !groupId) return null
+                              const shape = groupShapes.get(groupId)
                               return (
                                 <DuplicateBadge
                                   groupId={groupId}
                                   count={count}
-                                  {...(groupShapes.get(groupId) && {
-                                    shape: groupShapes.get(groupId),
-                                  })}
+                                  {...(shape && { shape })}
                                   className="flex-shrink-0 ml-1.5 pointer-events-auto"
                                 />
                               )
