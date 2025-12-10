@@ -406,7 +406,7 @@ export const SearchBar = memo(
       <div className="relative w-[600px]">
         <Command
           ref={commandRef}
-          className="rounded-lg border shadow-sm border-border/50 dark:border-border/60 bg-background [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group]]:px-2 [&_[cmdk-group]]:py-1 [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2.5"
+          className="rounded-lg border shadow-sm border-border/30 dark:border-border/40 bg-background [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group]]:px-2 [&_[cmdk-group]]:py-1 [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2.5"
           shouldFilter={false}
         >
           <div
@@ -524,7 +524,7 @@ function SearchResultsPanel({
 
   return createPortal(
     <Command
-      className="fixed w-[700px] p-0 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground rounded-md border border-border/50 dark:border-border/60 shadow-md outline-hidden overflow-hidden [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group]]:px-2 [&_[cmdk-group]]:py-1 [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2.5"
+      className="fixed w-[700px] p-0 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground rounded-md border border-border/30 dark:border-border/40 shadow-md outline-hidden overflow-hidden [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group]]:px-2 [&_[cmdk-group]]:py-1 [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2.5"
       shouldFilter={false}
       style={{
         top: `${position.top}px`,
@@ -537,7 +537,7 @@ function SearchResultsPanel({
       }}
     >
       {query && (
-        <div className="px-4 py-2.5 border-b border-border/40 dark:border-border/50">
+        <div className="px-4 py-2.5 border-b border-border/30 dark:border-border/40">
           <div className="text-xs font-medium text-muted-foreground">
             {loading ? (
               <span className="flex items-center gap-2">

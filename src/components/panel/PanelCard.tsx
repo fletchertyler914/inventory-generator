@@ -15,7 +15,7 @@ export const PanelCard = forwardRef<HTMLDivElement, PanelCardProps>(
         ref={ref}
         className={cn(
           "p-3 rounded-md border bg-background hover:bg-muted/40 transition-all duration-200",
-          "border-border/40 dark:border-border/50 hover:border-border/60 dark:hover:border-border/70",
+          "border-border/30 dark:border-border/40 hover:border-border/50 dark:hover:border-border/50",
           "min-w-0 overflow-hidden",
           "[&_*]:pointer-events-auto [&_button]:pointer-events-auto [&_a]:pointer-events-auto",
           onClick && "cursor-pointer",

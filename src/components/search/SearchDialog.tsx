@@ -207,25 +207,25 @@ export const SearchDialog = memo(
           )}
         </div>
         {query && resultCounts && resultCounts.total > 0 && (
-          <div className="px-4 py-2.5 border-b border-border/40 bg-muted/20 text-xs text-muted-foreground flex items-center justify-between">
+          <div className="px-4 py-2.5 border-b border-border/30 dark:border-border/40 bg-muted/20 text-xs text-muted-foreground flex items-center justify-between">
             <span className="font-medium">
               {resultCounts.total} result{resultCounts.total !== 1 ? "s" : ""} found
             </span>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground/70">
               <span className="flex items-center gap-1.5">
-                <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/50 text-[10px] font-mono">
+                <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/30 dark:border-border/40 text-[10px] font-mono">
                   ↑↓
                 </kbd>
                 <span>Navigate</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/50 text-[10px] font-mono">
+                <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/30 dark:border-border/40 text-[10px] font-mono">
                   ↵
                 </kbd>
                 <span>Select</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/50 text-[10px] font-mono">
+                <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/30 dark:border-border/40 text-[10px] font-mono">
                   Esc
                 </kbd>
                 <span>Close</span>

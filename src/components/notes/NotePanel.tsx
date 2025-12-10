@@ -331,7 +331,7 @@ export function NotePanel({ caseId, fileId, onClose, initialNoteId }: NotePanelP
                   </div>
                 </ScrollArea>
               </div>
-              <div className="flex items-center justify-end gap-2 p-6 pt-4 border-t border-border/40 dark:border-border/50">
+              <div className="flex items-center justify-end gap-2 p-6 pt-4 border-t border-border/30 dark:border-border/40">
                 <Button
                   variant="ghost"
                   size="sm"

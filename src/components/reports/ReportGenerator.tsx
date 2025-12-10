@@ -228,7 +228,7 @@ export function ReportGenerator({ items, case_, open, onOpenChange }: ReportGene
           </div>
 
           {/* Preview Stats */}
-          <div className="p-4 border rounded-lg bg-muted/30 border-border/40 dark:border-border/50">
+          <div className="p-4 border rounded-lg bg-muted/30 border-border/30 dark:border-border/40">
             <div className="text-sm font-semibold mb-3">Report Preview</div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>

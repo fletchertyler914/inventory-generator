@@ -127,7 +127,7 @@ export function CaseFilters({
         onClick={() => setIsOpen(false)}
       />
       <div 
-        className="fixed z-50 w-80 p-4 border rounded-lg shadow-lg border-border/50 dark:border-border/60"
+        className="fixed z-50 w-80 p-4 border rounded-lg shadow-lg border-border/30 dark:border-border/40"
         style={{
           top: `${panelPosition.top}px`,
           left: `${panelPosition.left}px`,

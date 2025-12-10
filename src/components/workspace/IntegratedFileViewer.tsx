@@ -34,6 +34,7 @@ import { DeleteFileDialog } from "../ui/delete-file-dialog"
 import { RenameFileDialog } from "../ui/rename-file-dialog"
 import { StatusCell } from "../table/StatusCell"
 import { toast } from "@/hooks/useToast"
+import { useTheme } from "@/hooks/useTheme"
 import { ErrorBoundary } from "../ErrorBoundary"
 import { createBlobUrlFromBase64, getMimeTypeFromExtension, revokeBlobUrl } from "@/lib/blob-utils"
 
@@ -333,7 +334,8 @@ export const IntegratedFileViewer = memo(
       }
       return undefined
     }, [metadataPanelOpen])
-    const [vscDarkPlusStyle, setVscDarkPlusStyle] = useState<any>(null)
+    const { resolvedTheme } = useTheme()
+    const [customCodeTheme, setCustomCodeTheme] = useState<any>(null)
     const [syntaxHighlighterModule, setSyntaxHighlighterModule] = useState<any>(null)
     const [fileChanged, setFileChanged] = useState<FileChangeStatus | null>(null)
     const [duplicates, setDuplicates] = useState<
@@ -412,15 +414,114 @@ export const IntegratedFileViewer = memo(
     // ELITE: Lazy load syntax highlighter when code is detected
     useEffect(() => {
       if (fileCategory === "code" && !syntaxHighlighterModule) {
-        Promise.all([
-          import("react-syntax-highlighter"),
-          import("react-syntax-highlighter/dist/esm/styles/prism"),
-        ]).then(([highlighter, styles]) => {
+        import("react-syntax-highlighter").then((highlighter) => {
           setSyntaxHighlighterModule(highlighter)
-          setVscDarkPlusStyle(styles.vscDarkPlus)
         })
       }
     }, [fileCategory, syntaxHighlighterModule])
+
+    // Create custom theme based on app theme - science-backed colors
+    useEffect(() => {
+      if (!syntaxHighlighterModule) return
+
+      // Custom theme matching our science-backed color palette
+      // react-syntax-highlighter Prism expects token names as keys with React inline style objects
+      const createCustomTheme = (isDark: boolean) => {
+        if (isDark) {
+          // Dark theme: warm dark gray background, comfortable contrast, moderate saturation
+          return {
+            'code[class*="language-"]': {
+              background: 'oklch(0.18 0.01 85)',
+              color: 'oklch(0.92 0.005 85)',
+              textShadow: 'none',
+            },
+            'pre[class*="language-"]': {
+              background: 'oklch(0.18 0.01 85)',
+              color: 'oklch(0.92 0.005 85)',
+              textShadow: 'none',
+            },
+            comment: {
+              color: 'oklch(0.65 0.01 85)',
+              fontStyle: 'italic',
+            },
+            prolog: { color: 'oklch(0.65 0.01 85)' },
+            doctype: { color: 'oklch(0.65 0.01 85)' },
+            cdata: { color: 'oklch(0.65 0.01 85)' },
+            punctuation: { color: 'oklch(0.75 0.01 85)' },
+            property: { color: 'oklch(0.70 0.15 220)' },
+            tag: { color: 'oklch(0.65 0.20 25)' },
+            boolean: { color: 'oklch(0.70 0.18 145)' },
+            number: { color: 'oklch(0.70 0.18 145)' },
+            constant: { color: 'oklch(0.80 0.15 85)' },
+            symbol: { color: 'oklch(0.80 0.15 85)' },
+            deleted: { color: 'oklch(0.65 0.20 25)' },
+            selector: { color: 'oklch(0.70 0.15 220)' },
+            'attr-name': { color: 'oklch(0.70 0.15 220)' },
+            string: { color: 'oklch(0.75 0.12 85)' },
+            char: { color: 'oklch(0.75 0.12 85)' },
+            builtin: { color: 'oklch(0.70 0.15 220)' },
+            inserted: { color: 'oklch(0.70 0.18 145)' },
+            operator: { color: 'oklch(0.75 0.01 85)' },
+            entity: { color: 'oklch(0.70 0.15 220)', cursor: 'help' },
+            url: { color: 'oklch(0.70 0.15 220)' },
+            'attr-value': { color: 'oklch(0.75 0.12 85)' },
+            keyword: { color: 'oklch(0.65 0.18 240)' },
+            function: { color: 'oklch(0.70 0.15 220)' },
+            'class-name': { color: 'oklch(0.70 0.15 220)' },
+            regex: { color: 'oklch(0.80 0.15 85)' },
+            important: { color: 'oklch(0.65 0.20 25)', fontWeight: 'bold' },
+            variable: { color: 'oklch(0.70 0.15 220)' },
+          }
+        } else {
+          // Light theme: warm off-white background, comfortable contrast, moderate saturation
+          return {
+            'code[class*="language-"]': {
+              background: 'oklch(0.97 0.005 85)',
+              color: 'oklch(0.25 0 0)',
+              textShadow: 'none',
+            },
+            'pre[class*="language-"]': {
+              background: 'oklch(0.97 0.005 85)',
+              color: 'oklch(0.25 0 0)',
+              textShadow: 'none',
+            },
+            comment: {
+              color: 'oklch(0.45 0.01 85)',
+              fontStyle: 'italic',
+            },
+            prolog: { color: 'oklch(0.45 0.01 85)' },
+            doctype: { color: 'oklch(0.45 0.01 85)' },
+            cdata: { color: 'oklch(0.45 0.01 85)' },
+            punctuation: { color: 'oklch(0.40 0.01 85)' },
+            property: { color: 'oklch(0.50 0.15 240)' },
+            tag: { color: 'oklch(0.55 0.18 25)' },
+            boolean: { color: 'oklch(0.60 0.15 145)' },
+            number: { color: 'oklch(0.60 0.15 145)' },
+            constant: { color: 'oklch(0.75 0.12 85)' },
+            symbol: { color: 'oklch(0.75 0.12 85)' },
+            deleted: { color: 'oklch(0.55 0.18 25)' },
+            selector: { color: 'oklch(0.50 0.15 240)' },
+            'attr-name': { color: 'oklch(0.50 0.15 240)' },
+            string: { color: 'oklch(0.60 0.12 220)' },
+            char: { color: 'oklch(0.60 0.12 220)' },
+            builtin: { color: 'oklch(0.50 0.15 240)' },
+            inserted: { color: 'oklch(0.60 0.15 145)' },
+            operator: { color: 'oklch(0.40 0.01 85)' },
+            entity: { color: 'oklch(0.50 0.15 240)', cursor: 'help' },
+            url: { color: 'oklch(0.50 0.15 240)' },
+            'attr-value': { color: 'oklch(0.60 0.12 220)' },
+            keyword: { color: 'oklch(0.50 0.15 240)' },
+            function: { color: 'oklch(0.50 0.15 240)' },
+            'class-name': { color: 'oklch(0.50 0.15 240)' },
+            regex: { color: 'oklch(0.75 0.12 85)' },
+            important: { color: 'oklch(0.55 0.18 25)', fontWeight: 'bold' },
+            variable: { color: 'oklch(0.50 0.15 240)' },
+          }
+        }
+      }
+
+      setCustomCodeTheme(createCustomTheme(resolvedTheme === 'dark'))
+    }, [syntaxHighlighterModule, resolvedTheme])
 
     // ELITE: Lazy loading - only load file content when viewer is actually visible
     useEffect(() => {
@@ -930,7 +1031,7 @@ export const IntegratedFileViewer = memo(
           )
 
         case "code":
-          if (!syntaxHighlighterModule || !vscDarkPlusStyle) {
+          if (!syntaxHighlighterModule || !customCodeTheme) {
             return (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-sm text-muted-foreground">Loading syntax highlighter...</div>
@@ -939,20 +1040,63 @@ export const IntegratedFileViewer = memo(
           }
           const { Prism: SyntaxHighlighter } = syntaxHighlighterModule
           return (
-            <div className="w-full h-full overflow-auto">
-              <SyntaxHighlighter
-                language={getLanguageFromExtension(fileType)}
-                style={vscDarkPlusStyle}
-                customStyle={{
-                  margin: 0,
-                  borderRadius: 0,
-                  height: "100%",
-                }}
-                showLineNumbers
-                wrapLines
-              >
-                {fileContent}
-              </SyntaxHighlighter>
+            <div className="w-full h-full overflow-auto bg-background">
+              <style>{`
+                /* Custom code viewer styling to match app design system */
+                .code-viewer-container {
+                  background-color: var(--background) !important;
+                }
+                .code-viewer-container pre {
+                  background-color: var(--background) !important;
+                  margin: 0 !important;
+                  padding: 1rem !important;
+                  border-radius: 0 !important;
+                  font-family: var(--font-mono) !important;
+                  color: var(--foreground) !important;
+                }
+                .code-viewer-container code {
+                  font-family: var(--font-mono) !important;
+                  background-color: transparent !important;
+                }
+                .code-viewer-container .linenumber,
+                .code-viewer-container [class*="linenumber"] {
+                  color: var(--muted-foreground) !important;
+                  opacity: 0.6 !important;
+                }
+                /* Ensure syntax highlighting colors are applied */
+                .code-viewer-container .token {
+                  font-family: var(--font-mono) !important;
+                }
+              `}</style>
+              <div className="code-viewer-container">
+                <SyntaxHighlighter
+                  language={getLanguageFromExtension(fileType)}
+                  style={customCodeTheme}
+                  customStyle={{
+                    margin: 0,
+                    borderRadius: 0,
+                    height: "100%",
+                    background: 'var(--background)',
+                    padding: '1rem',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                  showLineNumbers
+                  wrapLines
+                  lineNumberStyle={{
+                    color: 'var(--muted-foreground)',
+                    opacity: 0.6,
+                    paddingRight: '1rem',
+                    minWidth: '3rem',
+                  }}
+                  lineProps={{
+                    style: {
+                      fontFamily: 'var(--font-mono)',
+                    },
+                  }}
+                >
+                  {fileContent}
+                </SyntaxHighlighter>
+              </div>
             </div>
           )
 
@@ -1064,7 +1208,7 @@ export const IntegratedFileViewer = memo(
             return (
               <div className="w-full h-full overflow-auto p-4">
                 <table
-                  className="border-collapse border border-border/40 dark:border-border/50"
+                  className="border-collapse border border-border/30 dark:border-border/40"
                   style={{ tableLayout: "auto", width: "max-content" }}
                 >
                   {/* Title rows above headers */}
@@ -1090,7 +1234,7 @@ export const IntegratedFileViewer = memo(
                                 <th
                                   key={cellIndex}
                                   colSpan={maxColumns}
-                                  className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold bg-muted/30"
+                                  className="border border-border/30 dark:border-border/40 p-2 text-left text-sm font-semibold bg-muted/30"
                                   style={{ textAlign: "left" }}
                                 >
                                   {String(cell)}
@@ -1120,7 +1264,7 @@ export const IntegratedFileViewer = memo(
                         {normalizedHeaders.map((header, index) => (
                           <th
                             key={index}
-                            className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10 whitespace-nowrap"
+                            className="border border-border/30 dark:border-border/40 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10 whitespace-nowrap"
                             style={{ minWidth: "150px", maxWidth: "none" }}
                           >
                             {header !== null && header !== undefined
@@ -1139,7 +1283,7 @@ export const IntegratedFileViewer = memo(
                         {row.map((cell, cellIndex) => (
                           <td
                             key={cellIndex}
-                            className="border border-border/40 dark:border-border/50 p-2 text-sm whitespace-nowrap"
+                            className="border border-border/30 dark:border-border/40 p-2 text-sm whitespace-nowrap"
                             style={{ minWidth: "150px", maxWidth: "none", overflow: "visible" }}
                           >
                             <span style={{ display: "inline-block", maxWidth: "none" }}>
@@ -1247,7 +1391,7 @@ export const IntegratedFileViewer = memo(
     return (
       <div className="flex-1 flex flex-col overflow-hidden bg-background animate-in fade-in-0 duration-200">
         {/* Header */}
-        <div className="relative flex items-center gap-2 p-3 border-b border-border/40 dark:border-border/50 bg-card flex-shrink-0 shadow-sm">
+        <div className="relative flex items-center gap-2 p-3 border-b border-border/30 dark:border-border/40 bg-card flex-shrink-0 shadow-sm">
           {/* Left Section - Toggle Navigator Button and File Name */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {(onToggleNavigator || onExpandNavigator) && (
@@ -1473,7 +1617,7 @@ export const IntegratedFileViewer = memo(
             }}
           >
             <div className="flex flex-col h-full max-h-[80vh]">
-              <div className="p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+              <div className="p-3 border-b border-border/30 dark:border-border/40 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
                 <h3 className="text-sm font-semibold">Metadata</h3>
               </div>
               <div className="flex-1 overflow-hidden min-h-0">

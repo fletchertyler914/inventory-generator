@@ -124,7 +124,7 @@ export const CaseHeader = memo(
     }, [])
 
     return (
-      <div className="h-16 border-b border-border/40 dark:border-border/50 bg-card flex-shrink-0 relative px-3 shadow-sm">
+      <div className="h-16 border-b border-border/30 dark:border-border/40 bg-card flex-shrink-0 relative px-3 shadow-sm">
         {/* Left Section - Case Info and Search */}
         <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-3 min-w-0">
           <h1 className="text-lg font-semibold truncate">{case_.name}</h1>
@@ -177,7 +177,7 @@ export const CaseHeader = memo(
           {/* Pane toggles - only show in review mode, compact icon-only buttons */}
           {viewMode === "split" && !reportMode && (
             <>
-              <div className="flex items-center gap-1 border border-border/40 dark:border-border/50 rounded-md p-0.5">
+              <div className="flex items-center gap-1 border border-border/30 dark:border-border/40 rounded-md p-0.5">
                 {onToggleNotes && (
                   <Button
                     variant={notesVisible ? "default" : "ghost"}

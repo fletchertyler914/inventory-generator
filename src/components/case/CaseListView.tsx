@@ -279,7 +279,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
   if (loading) {
     return (
       <div className="h-full flex flex-col">
-        <div className="p-8 border-b border-border/40 dark:border-border/50 flex-shrink-0">
+        <div className="p-8 border-b border-border/30 dark:border-border/40 flex-shrink-0">
           <Skeleton className="h-8 w-32 mb-2" />
           <Skeleton className="h-4 w-24" />
         </div>
@@ -318,7 +318,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
       </div>
 
       {/* Header Section */}
-      <div className="relative z-10 p-8 border-b border-border/40 dark:border-border/50 flex-shrink-0 bg-background/80 backdrop-blur-sm">
+      <div className="relative z-10 p-8 border-b border-border/30 dark:border-border/40 flex-shrink-0 bg-background/80 backdrop-blur-sm">
         <div className="space-y-4">
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -411,7 +411,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
             <div className="flex flex-col items-center justify-center py-24 px-4">
               <div className="relative mb-6">
                 <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
-                <div className="relative p-6 rounded-2xl bg-muted/50 border border-border/40 dark:border-border/50">
+                <div className="relative p-6 rounded-2xl bg-muted/50 border border-border/30 dark:border-border/40">
                   <FolderOpen className="h-16 w-16 text-muted-foreground/50" />
                 </div>
               </div>

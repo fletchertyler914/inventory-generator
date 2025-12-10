@@ -9,7 +9,7 @@ interface CaseListViewModeProps {
 
 export function CaseListViewMode({ viewMode, onViewModeChange }: CaseListViewModeProps) {
   return (
-    <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-md border border-border/40 dark:border-border/50 h-10">
+    <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-md border border-border/30 dark:border-border/40 h-10">
       <Button
         variant={viewMode === 'grid' ? 'default' : 'ghost'}
         onClick={() => onViewModeChange('grid')}

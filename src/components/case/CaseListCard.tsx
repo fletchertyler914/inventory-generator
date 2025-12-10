@@ -42,7 +42,7 @@ export const CaseListCard = memo(function CaseListCard({
       <div
         className={cn(
           "group flex items-center gap-4 p-4 rounded-lg border cursor-pointer transition-all duration-200",
-          "border-border/40 dark:border-border/50",
+          "border-border/30 dark:border-border/40",
           "hover:shadow-md hover:shadow-primary/5 hover:-translate-y-0.5",
           "hover:border-primary/60 dark:hover:border-primary/50",
           isSelected && "ring-2 ring-primary border-primary dark:border-primary shadow-md shadow-primary/10 bg-primary/5",
@@ -121,7 +121,7 @@ export const CaseListCard = memo(function CaseListCard({
       className={cn(
         "group cursor-pointer transition-all duration-200",
         "hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1",
-        "border-border/40 dark:border-border/50 hover:border-primary/60 dark:hover:border-primary/50",
+        "border-border/30 dark:border-border/40 hover:border-primary/50 dark:hover:border-primary/50",
         isSelected && "ring-2 ring-primary border-primary dark:border-primary shadow-lg shadow-primary/10",
         isRecent && "bg-primary/5 border-primary/20 dark:border-primary/30"
       )}
@@ -178,7 +178,7 @@ export const CaseListCard = memo(function CaseListCard({
             {case_.deployment_mode}
           </Badge>
         </div>
-        <div className="flex items-center justify-between pt-2 border-t border-border/40 dark:border-border/50">
+        <div className="flex items-center justify-between pt-2 border-t border-border/30 dark:border-border/40">
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />

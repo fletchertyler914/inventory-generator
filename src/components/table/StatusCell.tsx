@@ -59,7 +59,7 @@ export function StatusCell({ status, onStatusChange }: StatusCellProps) {
         </Button>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-48 p-1 dark:bg-popover dark:border-border/60 dark:text-popover-foreground border-border/50" 
+        className="w-48 p-1 dark:bg-popover dark:border-border/40 dark:text-popover-foreground border-border/30" 
         align="start"
       >
         <div className="space-y-0.5">

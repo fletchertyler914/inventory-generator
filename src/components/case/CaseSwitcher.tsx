@@ -76,12 +76,12 @@ export function CaseSwitcher({ currentCaseId, onSelectCase, onCreateCase }: Case
         </Button>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-[300px] p-0 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground border-border/50 dark:border-border/60" 
+        className="w-[300px] p-0 bg-popover text-popover-foreground dark:bg-popover dark:text-popover-foreground border-border/30 dark:border-border/40" 
         align="start"
       >
         <div className="flex flex-col">
           {onCreateCase && (
-            <div className="p-2 border-b border-border/40 dark:border-border/50">
+            <div className="p-2 border-b border-border/30 dark:border-border/40">
               <Button
                 variant="outline"
                 size="sm"

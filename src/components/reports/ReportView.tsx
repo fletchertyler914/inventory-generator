@@ -26,8 +26,8 @@ export function ReportView({
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left Section - Section Navigation */}
-        <div className="w-64 border-r border-border/40 dark:border-border/50 bg-card flex-shrink-0 flex flex-col">
-          <div className="p-4 border-b border-border/40 dark:border-border/50">
+        <div className="w-64 border-r border-border/30 dark:border-border/40 bg-card flex-shrink-0 flex flex-col">
+          <div className="p-4 border-b border-border/30 dark:border-border/40">
             <h3 className="text-sm font-semibold mb-2">Sections</h3>
             <div className="space-y-1">
               {[
@@ -63,7 +63,7 @@ export function ReportView({
               ))}
             </div>
           </div>
-          <div className="p-4 border-t border-border/40 dark:border-border/50">
+          <div className="p-4 border-t border-border/30 dark:border-border/40">
             <h3 className="text-sm font-semibold mb-2">Templates</h3>
             <div className="space-y-1">
               <div className="text-xs text-muted-foreground p-2 rounded hover:bg-muted cursor-pointer">
@@ -82,7 +82,7 @@ export function ReportView({
         {/* Main Content - Editor */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Top Bar - Only in content area */}
-          <div className="h-12 border-b border-border/40 dark:border-border/50 bg-card flex-shrink-0 flex items-center justify-end px-4">
+          <div className="h-12 border-b border-border/30 dark:border-border/40 bg-card flex-shrink-0 flex items-center justify-end px-4">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -134,8 +134,8 @@ export function ReportView({
 
         {/* Right Section - Preview (optional) */}
         {previewVisible && (
-          <div className="w-96 border-l border-border/40 dark:border-border/50 bg-card flex-shrink-0 flex flex-col">
-            <div className="p-4 border-b border-border/40 dark:border-border/50">
+          <div className="w-96 border-l border-border/30 dark:border-border/40 bg-card flex-shrink-0 flex flex-col">
+            <div className="p-4 border-b border-border/30 dark:border-border/40">
               <h3 className="text-sm font-semibold">Preview</h3>
             </div>
             <div className="flex-1 p-4 overflow-y-auto">

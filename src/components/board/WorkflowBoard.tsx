@@ -176,10 +176,10 @@ function DroppableColumn({
       ref={setNodeRef}
       className={cn(
         "flex flex-col h-full min-h-[240px] min-w-[340px] w-[340px] rounded-lg border transition-all duration-200 bg-card shadow-sm flex-shrink-0",
-        "border-border/40 dark:border-border/50",
+        "border-border/30 dark:border-border/40",
         isOver || isDroppableOver
           ? "border-primary border-2 dark:border-primary bg-primary/5 shadow-lg scale-[1.01]"
-          : "hover:border-border/60 dark:hover:border-border/70"
+          : "hover:border-border/50 dark:hover:border-border/50"
       )}
     >
       {/* Column Header */}
@@ -188,7 +188,7 @@ function DroppableColumn({
           "px-3 py-2.5 border-b flex items-center justify-between flex-shrink-0 rounded-t-lg transition-colors",
           isOver || isDroppableOver 
             ? "border-primary dark:border-primary bg-primary/10" 
-            : "border-border/40 dark:border-border/50 bg-card"
+            : "border-border/30 dark:border-border/40 bg-card"
         )}
       >
         <h3 className={cn("text-sm font-semibold truncate", color)}>{label}</h3>
@@ -204,9 +204,16 @@ function DroppableColumn({
             <Search className="h-3.5 w-3.5" />
           </Button>
           <Badge
-            variant="secondary"
+            variant="outline"
             className={cn(
               "text-[10px] px-1.5 py-0 font-medium flex-shrink-0",
+              "bg-transparent border-current/40",
+              // Match status color for each swimlane - ghost style with outline
+              status === "unreviewed" && "text-muted-foreground",
+              status === "in_progress" && "text-blue-400 dark:text-blue-400",
+              status === "reviewed" && "text-green-400 dark:text-green-400",
+              status === "flagged" && "text-yellow-400 dark:text-yellow-400",
+              status === "finalized" && "text-green-500 dark:text-green-500",
               count === 0 && "opacity-50"
             )}
           >
@@ -217,7 +224,7 @@ function DroppableColumn({
 
       {/* ELITE: Filter input row - appears between header and card list */}
       {filterVisible && (
-        <div className="px-3 py-2 border-b border-border/40 dark:border-border/50 bg-muted/20 flex-shrink-0 transition-all duration-200">
+        <div className="px-3 py-2 border-b border-border/30 dark:border-border/40 bg-muted/20 flex-shrink-0 transition-all duration-200">
           <div className="relative flex items-center gap-2">
             <Input
               type="text"
@@ -843,7 +850,7 @@ export function WorkflowBoard({
                         "py-12 text-center rounded-md border-2 border-dashed transition-all duration-200 mx-2",
                         isOver
                           ? "border-primary dark:border-primary bg-primary/10 scale-[1.02]"
-                          : "border-border/40 dark:border-border/50 bg-muted/20"
+                          : "border-border/30 dark:border-border/40 bg-muted/20"
                       )}
                     >
                       <div className="flex flex-col items-center gap-2">

@@ -208,7 +208,7 @@ export const TimelineView = memo(function TimelineView({ caseId, currentFileId, 
                             className="min-h-[80px] text-sm"
                             autoFocus
                           />
-                          <div className="flex gap-1.5 justify-end pt-2 border-t border-border/40 dark:border-border/50">
+                          <div className="flex gap-1.5 justify-end pt-2 border-t border-border/30 dark:border-border/40">
                             <Button
                               size="sm"
                               variant="ghost"

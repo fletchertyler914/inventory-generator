@@ -114,7 +114,7 @@ export function DuplicateGroupView({ group, caseId, onBack, onResolved }: Duplic
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0">
+      <div className="flex items-center gap-2 p-3 border-b border-border/30 dark:border-border/40 flex-shrink-0">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back

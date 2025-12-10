@@ -20,7 +20,7 @@ export function PanelHeader({
   onClose,
 }: PanelHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-3 py-3 border-b border-border/40 dark:border-border/50 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+    <div className="flex items-center justify-between px-3 py-3 border-b border-border/30 dark:border-border/40 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {count !== undefined && count > 0 && (

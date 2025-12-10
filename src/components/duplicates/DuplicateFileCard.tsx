@@ -113,7 +113,7 @@ export function DuplicateFileCard({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+        <div className="flex items-center gap-2 pt-2 border-t border-border/30">
           {!isPrimary ? (
             <>
               <Button variant="default" size="sm" onClick={onKeep} className="flex-1 text-xs h-7">

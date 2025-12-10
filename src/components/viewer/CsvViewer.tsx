@@ -99,13 +99,13 @@ export function CsvViewer({ data }: CsvViewerProps) {
 
   return (
     <div className="w-full h-full overflow-auto">
-      <table className="border-collapse border border-border/40 dark:border-border/50" style={{ tableLayout: 'auto', width: 'max-content' }}>
+      <table className="border-collapse border border-border/30 dark:border-border/40" style={{ tableLayout: 'auto', width: 'max-content' }}>
         <thead>
           <tr className="bg-muted">
             {normalizedHeaders.map((header, index) => (
               <th
                 key={index}
-                className="border border-border/40 dark:border-border/50 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10 whitespace-nowrap"
+                className="border border-border/30 dark:border-border/40 p-2 text-left text-sm font-semibold sticky top-0 bg-muted z-10 whitespace-nowrap"
                 style={{ minWidth: '150px', maxWidth: 'none' }}
               >
                 {header || `Column ${index + 1}`}
@@ -119,7 +119,7 @@ export function CsvViewer({ data }: CsvViewerProps) {
               {row.map((cellValue, cellIndex) => (
                 <td
                   key={cellIndex}
-                  className="border border-border/40 dark:border-border/50 p-2 text-sm whitespace-nowrap"
+                  className="border border-border/30 dark:border-border/40 p-2 text-sm whitespace-nowrap"
                   style={{ minWidth: '150px', maxWidth: 'none', overflow: 'visible' }}
                 >
                   <span style={{ display: 'inline-block', maxWidth: 'none' }}>{cellValue || '\u00A0'}</span>

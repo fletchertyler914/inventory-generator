@@ -106,7 +106,7 @@ export const WorkflowCard = memo(function WorkflowCard({
       data-workflow-card
       className={cn(
         "group relative rounded-lg border bg-card p-2.5 shadow-sm transition-all duration-200",
-        "border-border/40 dark:border-border/50",
+        "border-border/30 dark:border-border/40",
         "hover:shadow-md hover:border-primary/60 dark:hover:border-primary/50 cursor-grab active:cursor-grabbing",
         isSelected &&
           "ring-1 ring-primary/60 border-primary/40 dark:border-primary/40 bg-primary/5 dark:bg-primary/10",

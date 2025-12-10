@@ -544,7 +544,7 @@ export const FileNavigator = memo(
 
     return (
       <div className="h-full flex flex-col min-w-0 overflow-hidden" style={{ minWidth: "190px" }}>
-        <div className="p-2 sm:p-3 border-b border-border/40 dark:border-border/50 flex-shrink-0 min-w-0">
+        <div className="p-2 sm:p-3 border-b border-border/30 dark:border-border/40 flex-shrink-0 min-w-0">
           <div className="relative flex items-center gap-1 sm:gap-2 min-w-0">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

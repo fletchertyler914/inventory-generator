@@ -173,7 +173,7 @@ export function TiptapEditor({
   return (
     <div className={cn("flex flex-col h-full overflow-hidden", className)}>
       {editable && (
-        <div className="flex items-center justify-end gap-0.5 p-1 border-b border-border/40 dark:border-border/50 bg-muted/30 flex-shrink-0 sticky top-0 z-10">
+        <div className="flex items-center justify-end gap-0.5 p-1 border-b border-border/30 dark:border-border/40 bg-muted/30 flex-shrink-0 sticky top-0 z-10">
           {/* Font/Heading Menu */}
           <Popover open={fontMenuOpen} onOpenChange={setFontMenuOpen}>
             <PopoverTrigger asChild>
@@ -191,7 +191,7 @@ export function TiptapEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-40 p-1 bg-card border border-border/50 dark:border-border/60 shadow-lg" 
+              className="w-40 p-1 bg-card border border-border/30 dark:border-border/40 shadow-lg" 
               align="end"
               style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
             >
@@ -270,7 +270,7 @@ export function TiptapEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-40 p-1 bg-card border border-border/50 dark:border-border/60 shadow-lg" 
+              className="w-40 p-1 bg-card border border-border/30 dark:border-border/40 shadow-lg" 
               align="end"
               style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
             >
@@ -348,7 +348,7 @@ export function TiptapEditor({
               </Button>
             </PopoverTrigger>
             <PopoverContent 
-              className="w-40 p-1 bg-card border border-border/50 dark:border-border/60 shadow-lg" 
+              className="w-40 p-1 bg-card border border-border/30 dark:border-border/40 shadow-lg" 
               align="end"
               style={{ backgroundColor: cardBgColor, opacity: 1, backdropFilter: 'none' }}
             >

@@ -56,7 +56,7 @@ export const BoardView = memo(function BoardView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-      <div className="px-4 pt-3 pb-3 border-b border-border/40 dark:border-border/50 flex-shrink-0">
+      <div className="px-4 pt-3 pb-3 border-b border-border/30 dark:border-border/40 flex-shrink-0">
         {/* Header Row - Title and Toggle */}
         <div className="flex items-center gap-2 mb-3">
           {(onToggleNavigator || onExpandNavigator) && (
