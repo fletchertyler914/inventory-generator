@@ -785,8 +785,25 @@ export const IntegratedFileViewer = memo(
     // Keyboard shortcuts
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
+        const target = e.target as HTMLElement;
+        
+        // Don't handle arrow keys when editing in dialog or editable elements
+        const isEditable = 
+          target.tagName === "INPUT" || 
+          target.tagName === "TEXTAREA" || 
+          target.isContentEditable ||
+          target.closest('[role="dialog"]') ||
+          target.closest('.ProseMirror');
+        
+        // Only skip arrow key handling for editable elements, not Escape
         if (e.key === "Escape") {
-          onClose()
+          // Only close if not in a dialog
+          if (!target.closest('[role="dialog"]')) {
+            onClose()
+          }
+        } else if (isEditable) {
+          // Don't handle arrow keys when editing
+          return;
         } else if (e.key === "ArrowLeft" && hasPrevious) {
           e.preventDefault()
           onPrevious()

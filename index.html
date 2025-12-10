@@ -4,6 +4,82 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tauri + React + Typescript</title>
+    <style>
+      /* Immediate background color to prevent white flash */
+      html {
+        background-color: #f4f4f4;
+        color: #525252;
+      }
+      html.dark {
+        background-color: #333333;
+        color: #ebebeb;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: inherit;
+        color: inherit;
+      }
+    </style>
+    <script>
+      // Immediate theme detection to prevent white flash
+      (function() {
+        // Detect system theme preference synchronously
+        function detectSystemTheme() {
+          try {
+            const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+            if (mediaQuery && typeof mediaQuery.matches === "boolean") {
+              return mediaQuery.matches ? "dark" : "light";
+            }
+          } catch (e) {
+            // Fallback if matchMedia fails
+          }
+          return "light";
+        }
+
+        // Apply theme immediately to prevent white flash
+        const systemTheme = detectSystemTheme();
+        const html = document.documentElement;
+        html.classList.remove("light", "dark");
+        html.classList.add(systemTheme);
+
+        // Optionally try to read stored theme preference (async, non-blocking)
+        // This will update the theme if user has a manual preference
+        // The React code in main.tsx will also handle this, but we try early here
+        if (typeof window !== "undefined") {
+          // Wait for Tauri APIs to be available, then try to read from store
+          const checkTauri = setInterval(() => {
+            if (window.__TAURI_INTERNALS__) {
+              clearInterval(checkTauri);
+              
+              // Try to read from store (non-blocking, will be handled by React if this fails)
+              import("@tauri-apps/plugin-store").then(({ Store }) => {
+                return Store.load(".settings-store.json");
+              }).then((store) => {
+                return store.get("theme");
+              }).then((storedTheme) => {
+                if (storedTheme === "light" || storedTheme === "dark") {
+                  // User has manual preference, apply it
+                  html.classList.remove("light", "dark");
+                  html.classList.add(storedTheme);
+                } else if (storedTheme === "system" || !storedTheme) {
+                  // Use system preference (already applied above)
+                  const currentSystemTheme = detectSystemTheme();
+                  html.classList.remove("light", "dark");
+                  html.classList.add(currentSystemTheme);
+                }
+              }).catch(() => {
+                // Store read failed, keep system theme (already applied)
+                // React code will handle this when it loads
+              });
+            }
+          }, 50);
+          
+          // Stop checking after 2 seconds (React will handle it by then)
+          setTimeout(() => clearInterval(checkTauri), 2000);
+        }
+      })();
+    </script>
   </head>
 
   <body>
