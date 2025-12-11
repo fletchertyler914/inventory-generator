@@ -116,6 +116,7 @@ export const CaseWorkspace = memo(
 
     // Filter items based on folder
     // Normalize folder paths for consistent comparison (handle null/undefined/empty)
+    // Recursively includes files in the selected folder and all its subfolders
     const filteredItems = useMemo(() => {
       let filtered = [...items]
       if (selectedFolderPath) {
@@ -123,7 +124,10 @@ export const CaseWorkspace = memo(
         const normalizedSelectedPath = selectedFolderPath.trim()
         filtered = filtered.filter((item) => {
           const itemPath = (item.folder_path || "").trim()
-          return itemPath === normalizedSelectedPath
+          // Match files directly in the selected folder OR in any subfolder
+          // The "/" separator ensures we only match descendants, not parent/sibling folders
+          return itemPath === normalizedSelectedPath || 
+                 itemPath.startsWith(normalizedSelectedPath + "/")
         })
       }
       return filtered
@@ -333,11 +337,25 @@ export const CaseWorkspace = memo(
           toggleNotes()
           return
         }
+
+        // Cmd/Ctrl + F: Toggle findings panel
+        if (modifier && e.key.toLowerCase() === "f") {
+          e.preventDefault()
+          toggleFindings()
+          return
+        }
+
+        // Cmd/Ctrl + T: Toggle timeline panel
+        if (modifier && e.key.toLowerCase() === "t") {
+          e.preventDefault()
+          toggleTimeline()
+          return
+        }
       }
 
       window.addEventListener("keydown", handleKeyDown)
       return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [toggleNotes])
+    }, [toggleNotes, toggleFindings, toggleTimeline])
 
     // Close notes when file is closed
     useEffect(() => {

@@ -115,6 +115,7 @@ export const BoardView = memo(function BoardView({
             statusFilter="all"
             totalFiles={items.length}
             caseId={caseId}
+            selectedFolderPath={selectedFolderPath}
           />
         </Suspense>
       </div>

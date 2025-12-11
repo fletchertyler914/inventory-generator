@@ -43,6 +43,7 @@ interface WorkflowBoardProps {
   onStatusFilterChange?: (filter: TableFilter) => void
   totalFiles?: number
   caseId?: string
+  selectedFolderPath?: string | null
 }
 
 const workflowStates: { value: FileStatus; label: string; color: string }[] = [
@@ -87,6 +88,7 @@ function SortableWorkflowCard({
   duplicateCount,
   duplicateGroupId,
   duplicateShape,
+  selectedFolderPath,
 }: {
   item: InventoryItem
   index: number
@@ -100,6 +102,7 @@ function SortableWorkflowCard({
   duplicateCount?: number
   duplicateGroupId?: string
   duplicateShape?: 'dot' | 'square' | 'diamond'
+  selectedFolderPath?: string | null
 }) {
   const {
     attributes,
@@ -132,6 +135,7 @@ function SortableWorkflowCard({
         {...(duplicateCount !== undefined && { duplicateCount })}
         {...(duplicateGroupId && { duplicateGroupId })}
         {...(duplicateShape && { duplicateShape })}
+        {...(selectedFolderPath !== undefined && { selectedFolderPath })}
         dragListeners={listeners}
         dragAttributes={attributes}
       />
@@ -287,6 +291,7 @@ export function WorkflowBoard({
   onStatusFilterChange: _onStatusFilterChange,
   totalFiles: _totalFiles,
   caseId,
+  selectedFolderPath,
 }: WorkflowBoardProps) {
   // Track which files have changed
   const [changedFiles, setChangedFiles] = useState<Set<string>>(new Set())
@@ -889,6 +894,7 @@ export function WorkflowBoard({
                             };
                           })()}
                           {...(caseId && { caseId })}
+                          {...(selectedFolderPath !== undefined && { selectedFolderPath })}
                         />
                       )
                     })

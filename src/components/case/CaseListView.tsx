@@ -76,7 +76,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
     }
   }, [cases.length, viewMode])
 
-  // Keyboard shortcut: Cmd/Ctrl+F to focus search
+  // Keyboard shortcut: Cmd/Ctrl+K to focus search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -87,7 +87,7 @@ export function CaseListView({ onSelectCase, onCreateCase, currentCaseId }: Case
 
       const modifier = navigator.platform.toUpperCase().indexOf("MAC") >= 0 ? e.metaKey : e.ctrlKey
 
-      if (modifier && e.key.toLowerCase() === "f") {
+      if (modifier && e.key.toLowerCase() === "k") {
         e.preventDefault()
         searchInputRef.current?.focus()
         searchInputRef.current?.select()

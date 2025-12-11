@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu"
 import { convertFileSrc } from "@tauri-apps/api/core"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 import type { InventoryItem } from "@/types/inventory"
 import type { FileStatus } from "@/types/inventory"
 import { fileService, type FileChangeStatus } from "@/services/fileService"
@@ -885,6 +886,32 @@ export const IntegratedFileViewer = memo(
 
     // Keyboard shortcuts
     useEffect(() => {
+      // Handler for Cmd/Ctrl+F to prevent PDF viewer search (needs capture phase)
+      const handlePdfSearchPrevention = (e: KeyboardEvent) => {
+        const target = e.target as HTMLElement;
+        const modifier =
+          navigator.platform.toUpperCase().indexOf("MAC") >= 0 ? e.metaKey : e.ctrlKey
+
+        // Prevent Cmd/Ctrl+F from opening PDF viewer search when viewing PDFs
+        if (modifier && e.key.toLowerCase() === "f" && fileCategory === "pdf") {
+          const isEditable = 
+            target.tagName === "INPUT" || 
+            target.tagName === "TEXTAREA" || 
+            target.isContentEditable
+          
+          // Only prevent if the event is coming from within the PDF viewer
+          // Don't prevent if user is in our app's search input or other editable fields
+          const isInPdfViewer = target.closest('.rpv-core__viewer')
+          const isInAppSearch = target.closest('[cmdk-input]') || target.closest('[role="dialog"]')
+          
+          if (isInPdfViewer && !isInAppSearch && !isEditable) {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        }
+      }
+
+      // Handler for other keyboard shortcuts (normal phase)
       const handleKeyDown = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement;
         
@@ -898,10 +925,40 @@ export const IntegratedFileViewer = memo(
         
         // Only skip arrow key handling for editable elements, not Escape
         if (e.key === "Escape") {
-          // Only close if not in a dialog
-          if (!target.closest('[role="dialog"]')) {
-            onClose()
+          // Don't close if user is in a dialog
+          if (target.closest('[role="dialog"]')) {
+            return
           }
+
+          // Prevent default FIRST (synchronously) to block fullscreen exit if we're in fullscreen
+          // Since checking fullscreen is async but preventDefault must be synchronous,
+          // we prevent it as a precaution when in Tauri environment
+          // This won't block onClose() from executing
+          if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+
+          // THEN always close the file viewer (this should never be blocked)
+          onClose()
+
+          // Verify fullscreen status asynchronously (for logging/debugging, but not required)
+          // We've already prevented default and closed the viewer above
+          const verifyFullscreen = async () => {
+            try {
+              if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+                const window_ = getCurrentWindow()
+                await window_.isFullscreen()
+                // If we're here and in fullscreen, we've already prevented exit above
+              }
+            } catch (error) {
+              // Ignore errors - we've already handled the escape
+            }
+          }
+          verifyFullscreen().catch(() => {
+            // Ignore - viewer is already closed
+          })
+          return
         } else if (isEditable) {
           // Don't handle arrow keys when editing
           return;
@@ -914,9 +971,16 @@ export const IntegratedFileViewer = memo(
         }
       }
 
+      // Use capture phase only for PDF search prevention
+      window.addEventListener("keydown", handlePdfSearchPrevention, true)
+      // Normal phase for other shortcuts
       window.addEventListener("keydown", handleKeyDown)
-      return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [onClose, onNext, onPrevious, hasNext, hasPrevious])
+      
+      return () => {
+        window.removeEventListener("keydown", handlePdfSearchPrevention, true)
+        window.removeEventListener("keydown", handleKeyDown)
+      }
+    }, [onClose, onNext, onPrevious, hasNext, hasPrevious, fileCategory])
 
     if (loading) {
       return (

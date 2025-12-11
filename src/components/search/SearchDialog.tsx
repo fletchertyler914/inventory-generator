@@ -34,7 +34,7 @@ interface SearchDialogProps {
 
 /**
  * Full-screen search dialog using CommandDialog
- * Opens with Cmd/Ctrl+F or clicking search icon
+ * Opens with Cmd/Ctrl+K or clicking search icon
  */
 export const SearchDialog = memo(
   function SearchDialog({

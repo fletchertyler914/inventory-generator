@@ -62,7 +62,7 @@ const isMacOS = (): boolean => {
  * Features:
  * - Uses Command component directly in header (not in dialog)
  * - CommandList only shows when CommandInput is focused
- * - Cmd/Ctrl+F to focus input (like a finder)
+ * - Cmd/Ctrl+K to focus input (like a finder)
  * - Search across files, notes, findings, timeline
  * - Result grouping with CommandGroup
  * - Individual results with CommandItem
@@ -101,7 +101,7 @@ export const SearchBar = memo(
     // Memoize platform detection
     const modifierKey = useMemo(() => (isMacOS() ? MODIFIER_KEY_MAC : MODIFIER_KEY_OTHER), [])
 
-    // Cmd/Ctrl + F: Focus the search input
+    // Cmd/Ctrl + K: Focus the search input
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement
@@ -114,7 +114,7 @@ export const SearchBar = memo(
         const modifier =
           navigator.platform.toUpperCase().indexOf("MAC") >= 0 ? e.metaKey : e.ctrlKey
 
-        if (modifier && e.key.toLowerCase() === "f") {
+        if (modifier && e.key.toLowerCase() === "k") {
           e.preventDefault()
           inputRef.current?.focus()
           inputRef.current?.select()
@@ -418,7 +418,7 @@ export const SearchBar = memo(
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none z-10" />
             <CommandInput
               ref={inputRef}
-              placeholder={`Search files, notes, findings, timeline... (${modifierKey}F)`}
+              placeholder={`Search files, notes, findings, timeline... (${modifierKey}K)`}
               value={query}
               onValueChange={setQuery}
               className="pl-10 pr-10 h-11 text-base border-0 bg-transparent focus-visible:ring-0"

@@ -100,7 +100,7 @@ export const CaseHeader = memo(
 
     const modifierKey = isMacOS() ? "⌘" : "⌃"
 
-    // Cmd/Ctrl + F: Open search dialog
+    // Cmd/Ctrl + K: Open search dialog
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement
@@ -113,7 +113,7 @@ export const CaseHeader = memo(
         const modifier =
           navigator.platform.toUpperCase().indexOf("MAC") >= 0 ? e.metaKey : e.ctrlKey
 
-        if (modifier && e.key.toLowerCase() === "f") {
+        if (modifier && e.key.toLowerCase() === "k") {
           e.preventDefault()
           setSearchDialogOpen(true)
         }
@@ -141,11 +141,11 @@ export const CaseHeader = memo(
             variant="ghost"
             size="sm"
             onClick={() => setSearchDialogOpen(true)}
-            title={`Search files, notes, findings, timeline (${modifierKey}F)`}
+            title={`Search files, notes, findings, timeline (${modifierKey}K)`}
             className="h-8 px-3 gap-2 transition-all duration-200 flex-shrink-0"
           >
             <Search className="h-4 w-4" />
-            <span className="text-xs text-muted-foreground font-mono">{modifierKey}F</span>
+            <span className="text-xs text-muted-foreground font-mono">{modifierKey}K</span>
           </Button>
         </div>
 
@@ -183,7 +183,7 @@ export const CaseHeader = memo(
                     variant={notesVisible ? "default" : "ghost"}
                     size="sm"
                     onClick={onToggleNotes}
-                    title="Toggle notes panel (Cmd/Ctrl+N)"
+                    title={`Toggle notes panel (${modifierKey}N)`}
                     className="h-8 w-8 p-0 transition-all duration-200"
                   >
                     <StickyNote className="h-4 w-4" />
@@ -194,7 +194,7 @@ export const CaseHeader = memo(
                     variant={findingsVisible ? "default" : "ghost"}
                     size="sm"
                     onClick={onToggleFindings}
-                    title="Toggle findings panel"
+                    title={`Toggle findings panel (${modifierKey}F)`}
                     className="h-8 w-8 p-0 transition-all duration-200"
                   >
                     <AlertTriangle className="h-4 w-4" />
@@ -205,7 +205,7 @@ export const CaseHeader = memo(
                     variant={timelineVisible ? "default" : "ghost"}
                     size="sm"
                     onClick={onToggleTimeline}
-                    title="Toggle timeline panel"
+                    title={`Toggle timeline panel (${modifierKey}T)`}
                     className="h-8 w-8 p-0 transition-all duration-200"
                   >
                     <Calendar className="h-4 w-4" />

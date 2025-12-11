@@ -20,6 +20,7 @@ interface WorkflowCardProps {
   duplicateCount?: number
   duplicateGroupId?: string
   duplicateShape?: "dot" | "square" | "diamond"
+  selectedFolderPath?: string | null
   dragListeners?: ReturnType<typeof useDraggable>["listeners"]
   dragAttributes?: DraggableAttributes
 }
@@ -36,11 +37,36 @@ export const WorkflowCard = memo(function WorkflowCard({
   duplicateCount,
   duplicateGroupId,
   duplicateShape,
+  selectedFolderPath,
   dragListeners: externalListeners,
   dragAttributes: externalAttributes,
 }: WorkflowCardProps) {
   // Get key mapping fields to display (top 2 priority fields)
   const keyFields = getKeyMappingFields(item, caseId, 2)
+
+  // Calculate relative path from selected folder for breadcrumb display
+  const relativePath = (() => {
+    if (!selectedFolderPath) {
+      // No folder selected, show normal folder_name
+      return item.folder_name && item.folder_name !== "-" ? item.folder_name : null
+    }
+    
+    const itemPath = (item.folder_path || "").trim()
+    const normalizedSelectedPath = selectedFolderPath.trim()
+    
+    // If file is at root of selected folder, show nothing
+    if (itemPath === normalizedSelectedPath) {
+      return null
+    }
+    
+    // If file is in a subfolder, show relative path
+    if (itemPath.startsWith(normalizedSelectedPath + "/")) {
+      return itemPath.slice(normalizedSelectedPath.length + 1)
+    }
+    
+    // Shouldn't happen if filtering is correct, but handle gracefully
+    return null
+  })()
 
   // Use external drag listeners/attributes if provided (from sortable), otherwise use draggable
   const {
@@ -153,13 +179,17 @@ export const WorkflowCard = memo(function WorkflowCard({
         </div>
       </div>
 
-      {/* Folder Path */}
-      {item.folder_name && item.folder_name !== "-" && (
-        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground min-w-0 w-full">
+      {/* Folder Path - Relative to selected folder */}
+      {relativePath && (
+        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground min-w-0 w-full pl-[22px]">
           <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
             <Folder className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate min-w-0 max-w-full" title={item.folder_path}>
-              {item.folder_name}
+            <span 
+              className="truncate min-w-0 max-w-full" 
+              title={relativePath}
+              style={{ maxWidth: "200px" }}
+            >
+              {relativePath}
             </span>
           </div>
           {/* Note indicator - inline with folder path */}
