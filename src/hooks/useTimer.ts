@@ -13,7 +13,6 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { timeService } from "@/services/timeService"
-import type { ActiveTimer } from "@/types/timeTracking"
 import { logError } from "@/lib/logger"
 import { toast } from "@/hooks/useToast"
 
@@ -50,14 +49,13 @@ function formatTime(seconds: number): string {
 
 export function useTimer({ caseId, enabled = true, onTimerStop }: UseTimerOptions): UseTimerReturn {
   // Extract base caseId (remove refresh suffix if present)
-  const baseCaseId = caseId.split("-refresh-")[0]
+  const baseCaseId: string = caseId.split("-refresh-")[0] || caseId
 
   const [isRunning, setIsRunning] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null)
 
   const animationFrameRef = useRef<number | null>(null)
   const lastSyncRef = useRef<number>(0)
@@ -73,7 +71,6 @@ export function useTimer({ caseId, enabled = true, onTimerStop }: UseTimerOption
     try {
       const timer = await timeService.getActiveTimer(baseCaseId)
       if (timer) {
-        setActiveTimer(timer)
         setIsRunning(true)
         setIsPaused(false)
         // Calculate elapsed time from start_time
@@ -170,9 +167,11 @@ export function useTimer({ caseId, enabled = true, onTimerStop }: UseTimerOption
       lastSyncRef.current = now
       // Background sync - don't await (non-blocking)
       // Only syncs to ensure backend state is current, not for UI updates
-      timeService.getActiveTimer(baseCaseId).catch((err) => {
-        logError("Failed to sync timer state", err)
-      })
+      if (baseCaseId) {
+        timeService.getActiveTimer(baseCaseId).catch((err) => {
+          logError("Failed to sync timer state", err)
+        })
+      }
     }
 
     animationFrameRef.current = requestAnimationFrame(updateTimer)

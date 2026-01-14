@@ -61,7 +61,7 @@ function App() {
           }
         } catch (error) {
           // Silently fail - timer is not critical for case switching
-          logError("Failed to stop timer when switching cases", error)
+          logAppError("Failed to stop timer when switching cases", error)
         }
       }
 

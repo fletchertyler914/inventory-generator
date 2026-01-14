@@ -28,7 +28,6 @@ import type { TimeSegment, BillingConfig } from "@/types/timeTracking"
 import {
   calculateSegmentBillableAmount,
   formatBillableAmount,
-  getEffectiveRate,
 } from "@/lib/billing-utils"
 import { formatTime } from "@/lib/time-utils"
 import { format } from "date-fns"
@@ -96,8 +95,10 @@ export function SegmentEditDialog({
   // Calculate timestamps from date + time
   const startTimestamp = useMemo(() => {
     if (!startDate || !startTime) return null
-    const [hours, minutes] = startTime.split(":").map(Number)
-    if (isNaN(hours) || isNaN(minutes)) return null
+    const parts = startTime.split(":").map(Number)
+    const hours = parts[0]
+    const minutes = parts[1]
+    if (hours === undefined || minutes === undefined || isNaN(hours) || isNaN(minutes)) return null
     const date = new Date(startDate)
     date.setHours(hours, minutes, 0, 0)
     return Math.floor(date.getTime() / 1000)
@@ -105,8 +106,10 @@ export function SegmentEditDialog({
 
   const endTimestamp = useMemo(() => {
     if (!endDate || !endTime) return null
-    const [hours, minutes] = endTime.split(":").map(Number)
-    if (isNaN(hours) || isNaN(minutes)) return null
+    const parts = endTime.split(":").map(Number)
+    const hours = parts[0]
+    const minutes = parts[1]
+    if (hours === undefined || minutes === undefined || isNaN(hours) || isNaN(minutes)) return null
     const date = new Date(endDate)
     date.setHours(hours, minutes, 0, 0)
     return Math.floor(date.getTime() / 1000)
@@ -122,17 +125,19 @@ export function SegmentEditDialog({
   const tempSegment: TimeSegment | null = useMemo(() => {
     if (!segment || !startTimestamp || !endTimestamp) return null
 
+    const rateOverrideValue = rateOverride.trim() && !isNaN(parseFloat(rateOverride)) && parseFloat(rateOverride) >= 0
+      ? parseFloat(rateOverride)
+      : undefined
+    const notesValue = notes.trim() || undefined
+
     return {
       ...segment,
       start_time: startTimestamp,
       end_time: endTimestamp,
       duration_seconds: durationSeconds > 0 ? durationSeconds : null,
-      rate_override:
-        rateOverride.trim() && !isNaN(parseFloat(rateOverride)) && parseFloat(rateOverride) >= 0
-          ? parseFloat(rateOverride)
-          : undefined,
+      ...(rateOverrideValue !== undefined ? { rate_override: rateOverrideValue } : {}),
       discount_percent: parseFloat(discountPercent) || 0,
-      notes: notes.trim() || undefined,
+      ...(notesValue !== undefined ? { notes: notesValue } : {}),
     }
   }, [segment, startTimestamp, endTimestamp, durationSeconds, rateOverride, discountPercent, notes])
 
@@ -193,12 +198,14 @@ export function SegmentEditDialog({
     try {
       if (segment) {
         // Update existing segment
+        const rateOverrideValue = hasRateOverride ? parseFloat(rateOverride) : undefined
+        const notesValue = notes.trim() || undefined
         const updates: Partial<TimeSegment> = {
           start_time: startTimestamp!,
           end_time: endTimestamp!,
           discount_percent: discount,
-          notes: notes.trim() || undefined,
-          rate_override: hasRateOverride ? parseFloat(rateOverride) : undefined,
+          ...(rateOverrideValue !== undefined ? { rate_override: rateOverrideValue } : {}),
+          ...(notesValue !== undefined ? { notes: notesValue } : {}),
         }
 
         await timeService.updateTimeSegment(segment.id, updates)

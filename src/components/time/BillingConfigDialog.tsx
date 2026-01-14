@@ -80,9 +80,9 @@ export function BillingConfigDialog({
     try {
       const config: BillingConfig = {
         billing_type: billingType,
-        fixed_price: billingType === 'fixed_price' ? parseFloat(fixedPrice) : undefined,
-        pay_rate: billingType === 'pay_rate' ? parseFloat(payRate) : undefined,
-        rate_unit: billingType === 'pay_rate' ? rateUnit : undefined,
+        ...(billingType === 'fixed_price' && fixedPrice ? { fixed_price: parseFloat(fixedPrice) } : {}),
+        ...(billingType === 'pay_rate' && payRate ? { pay_rate: parseFloat(payRate) } : {}),
+        ...(billingType === 'pay_rate' && rateUnit ? { rate_unit: rateUnit } : {}),
         created_at: Date.now() / 1000,
         updated_at: Date.now() / 1000,
       };

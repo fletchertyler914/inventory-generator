@@ -53,7 +53,9 @@
               clearInterval(checkTauri);
               
               // Try to read from store (non-blocking, will be handled by React if this fails)
-              import("@tauri-apps/plugin-store").then(({ Store }) => {
+              // Use Function constructor to make import truly dynamic (Vite won't try to resolve it)
+              const dynamicImport = new Function('specifier', 'return import(specifier)');
+              dynamicImport("@tauri-apps/plugin-store").then(({ Store }) => {
                 return Store.load(".settings-store.json");
               }).then((store) => {
                 return store.get("theme");

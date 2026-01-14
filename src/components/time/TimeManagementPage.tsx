@@ -412,9 +412,9 @@ export function TimeManagementPage({ case_, onClose }: TimeManagementPageProps) 
                       return (
                         <TimeCalendarDayButton
                           {...props}
-                          entry={entry ?? undefined}
-                          entryStatus={status ?? undefined}
-                          billingConfig={billingConfig ?? undefined}
+                          {...(entry ? { entry } : {})}
+                          {...(status !== null ? { entryStatus: status } : {})}
+                          {...(billingConfig ? { billingConfig } : {})}
                           calculateBillable={calculateEntryBillable}
                           matchesSearch={matchesSearch}
                         />
@@ -787,8 +787,8 @@ export function TimeManagementPage({ case_, onClose }: TimeManagementPageProps) 
             setAddingSegmentEntryId(null)
           }
         }}
-        segment={editingSegment}
-        entryId={addingSegmentEntryId || undefined}
+        segment={editingSegment === "new" ? null : editingSegment}
+        {...(addingSegmentEntryId ? { entryId: addingSegmentEntryId } : {})}
         billingConfig={billingConfig}
         onSave={() => {
           refresh()

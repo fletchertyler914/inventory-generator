@@ -30,7 +30,7 @@ export function TimerWidget({ caseId, onStop, className }: TimerWidgetProps) {
 
   // Force refresh by changing the caseId passed to useTimer when refreshKey changes
   // Extract base caseId (remove any refresh suffix that might be there)
-  const baseCaseId = caseId.split("-refresh-")[0]
+  const baseCaseId: string = caseId.split("-refresh-")[0] || caseId
   const timerCaseId = refreshKey > 0 ? `${baseCaseId}-refresh-${refreshKey}` : baseCaseId
 
   const {

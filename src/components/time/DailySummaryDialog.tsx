@@ -45,7 +45,6 @@ export function DailySummaryDialog({
   const [loading, setLoading] = useState(false)
   const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null)
   const [billingAmount, setBillingAmount] = useState<number | null>(null)
-  const [entryId, setEntryId] = useState<string | null>(null)
 
   // Load billing config and entry when dialog opens
   useEffect(() => {
@@ -61,7 +60,6 @@ export function DailySummaryDialog({
           setBillingConfig(config)
 
           if (entry) {
-            setEntryId(entry.id)
             // Load existing summary if present
             setSummary(entry.summary || "")
 
@@ -90,13 +88,11 @@ export function DailySummaryDialog({
           // Reset on error
           setBillingConfig(null)
           setBillingAmount(null)
-          setEntryId(null)
         })
     } else {
       // Reset when dialog closes
       setBillingConfig(null)
       setBillingAmount(null)
-      setEntryId(null)
       setSummary("")
     }
   }, [open, caseId])
@@ -108,7 +104,7 @@ export function DailySummaryDialog({
       const today = getStartOfDayTimestamp(Date.now() / 1000)
       const entry = await timeService.getTimeEntry(caseId, today)
       if (entry) {
-        await timeService.updateTimeEntry(entry.id, { summary: summary || undefined })
+        await timeService.updateTimeEntry(entry.id, summary ? { summary } : {})
       }
       toast({
         title: "Summary saved",
