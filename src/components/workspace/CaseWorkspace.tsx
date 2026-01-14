@@ -7,9 +7,24 @@ import { useWorkspaceAutoSync } from "@/hooks/useWorkspaceAutoSync"
 import { useFileNavigation } from "@/hooks/useFileNavigation"
 import { noteService } from "@/services/noteService"
 import { fileService } from "@/services/fileService"
+import { timeService } from "@/services/timeService"
+import { getStartOfDayTimestamp } from "@/lib/time-utils"
 import { toast } from "@/hooks/useToast"
 import type { Case } from "@/types/case"
 import type { InventoryItem } from "@/types/inventory"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog"
+import { TimeManagementPage } from "../time/TimeManagementPage"
+import { clearServiceCache } from "@/services/baseService"
+import { logError } from "@/lib/logger"
 
 // Lazy load heavy components for better initial load performance
 const LazyReportView = lazy(() =>
@@ -113,6 +128,9 @@ export const CaseWorkspace = memo(
     // Local state
     const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
     const [reportDialogOpen, setReportDialogOpen] = useState<boolean>(false)
+    const [showTimerStartDialog, setShowTimerStartDialog] = useState(false)
+    const [showTimerStopDialog, setShowTimerStopDialog] = useState(false)
+    const [showTimeManagement, setShowTimeManagement] = useState(false)
 
     // Filter items based on folder
     // Normalize folder paths for consistent comparison (handle null/undefined/empty)
@@ -126,8 +144,9 @@ export const CaseWorkspace = memo(
           const itemPath = (item.folder_path || "").trim()
           // Match files directly in the selected folder OR in any subfolder
           // The "/" separator ensures we only match descendants, not parent/sibling folders
-          return itemPath === normalizedSelectedPath || 
-                 itemPath.startsWith(normalizedSelectedPath + "/")
+          return (
+            itemPath === normalizedSelectedPath || itemPath.startsWith(normalizedSelectedPath + "/")
+          )
         })
       }
       return filtered
@@ -175,7 +194,6 @@ export const CaseWorkspace = memo(
         const refreshedItems = await fileService.loadCaseFilesWithInventory(case_.id, true)
         onItemsChange(refreshedItems)
       } catch (error) {
-        const { logError } = require("@/lib/logger")
         logError("Failed to reload files after refresh", error)
       }
     }, [case_.id, onItemsChange])
@@ -243,7 +261,6 @@ export const CaseWorkspace = memo(
             }
           }
         } catch (error) {
-          const { logError } = require("@/lib/logger")
           logError("Failed to fetch note for file selection", error)
         }
       },
@@ -364,6 +381,104 @@ export const CaseWorkspace = memo(
       }
     }, [viewingFile, preferences.notes_visible, setNotesVisible])
 
+    // Auto-start timer logic when case opens
+    useEffect(() => {
+      if (!preferencesLoaded || !case_.id) return
+
+      const checkAndStartTimer = async () => {
+        try {
+          // Clear cache to ensure we get fresh data
+          clearServiceCache("get_active_timer")
+
+          // Check if timer is already running in database (single source of truth)
+          const activeTimer = await timeService.getActiveTimer(case_.id)
+
+          if (activeTimer) {
+            // Timer already running, no action needed - don't show dialog
+            return
+          }
+
+          // Check if there's a time entry for today
+          const today = getStartOfDayTimestamp(Date.now() / 1000)
+          clearServiceCache("get_time_entry")
+          const todayEntry = await timeService.getTimeEntry(case_.id, today)
+
+          if (!todayEntry) {
+            // No entry for today - show confirmation dialog (prompt only, never auto-start)
+            setShowTimerStartDialog(true)
+          }
+          // If entry exists, do nothing - timer should only be started manually or via prompt
+        } catch (error) {
+          // Silently fail - timer is not critical
+          logError("Failed to check/start timer on case open", error)
+        }
+      }
+
+      // Delay the check slightly to allow timer widget to initialize
+      const timeoutId = setTimeout(() => {
+        checkAndStartTimer()
+      }, 500)
+
+      return () => clearTimeout(timeoutId)
+    }, [case_.id, preferencesLoaded])
+
+    // Handle timer start confirmation
+    const handleTimerStartConfirm = useCallback(async () => {
+      try {
+        await timeService.startTimer(case_.id)
+        setShowTimerStartDialog(false)
+        toast({
+          title: "Timer started",
+          description: "Time tracking has begun for today.",
+        })
+        // Force a page refresh of timer state by triggering a custom event
+        window.dispatchEvent(new CustomEvent("timer-started", { detail: { caseId: case_.id } }))
+      } catch (error) {
+        toast({
+          title: "Failed to start timer",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        })
+      }
+    }, [case_.id])
+
+    // Handle case close with timer check
+    const handleCloseCaseWithTimerCheck = useCallback(async () => {
+      try {
+        // Check if timer is running
+        const activeTimer = await timeService.getActiveTimer(case_.id)
+        if (activeTimer) {
+          // Show confirmation dialog
+          setShowTimerStopDialog(true)
+        } else {
+          // No timer running - close immediately
+          onCloseCase()
+        }
+      } catch (error) {
+        // On error, just close the case
+        onCloseCase()
+      }
+    }, [case_.id, onCloseCase])
+
+    // Handle timer stop and case close
+    const handleTimerStopAndClose = useCallback(async () => {
+      try {
+        // Stop timer and wait for it to complete
+        await timeService.stopTimer(case_.id)
+        setShowTimerStopDialog(false)
+        // Small delay to ensure database write completes
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        onCloseCase()
+      } catch (error) {
+        toast({
+          title: "Failed to stop timer",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        })
+        // Don't close case if timer stop failed - user might want to retry
+      }
+    }, [case_.id, onCloseCase])
+
     return (
       <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
         {/* Header */}
@@ -371,7 +486,7 @@ export const CaseWorkspace = memo(
           case={case_}
           fileCount={items.length}
           items={items}
-          onClose={onCloseCase}
+          onClose={handleCloseCaseWithTimerCheck}
           onAddFiles={handleAddFilesClick}
           onAddFolders={handleAddFoldersClick}
           viewMode={preferences.view_mode}
@@ -393,6 +508,7 @@ export const CaseWorkspace = memo(
           isSyncing={isSyncing}
           autoSyncEnabled={preferences.auto_sync_enabled ?? true}
           onToggleAutoSync={toggleAutoSync}
+          onOpenTimeManagement={() => setShowTimeManagement(true)}
         />
 
         {/* Main Content Area */}
@@ -408,6 +524,11 @@ export const CaseWorkspace = memo(
             >
               <LazyReportView case_={case_} items={items} onToggleReportMode={toggleReportMode} />
             </Suspense>
+          </div>
+        ) : showTimeManagement ? (
+          /* Time Management Mode */
+          <div className="flex-1 overflow-hidden min-h-0">
+            <TimeManagementPage case_={case_} onClose={() => setShowTimeManagement(false)} />
           </div>
         ) : (
           /* Review Mode - Show split/board views */
@@ -460,6 +581,42 @@ export const CaseWorkspace = memo(
             />
           </Suspense>
         )}
+
+        {/* Timer Start Confirmation Dialog */}
+        <AlertDialog open={showTimerStartDialog} onOpenChange={setShowTimerStartDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Start Timer?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You don't have a time entry for today. Would you like to start the timer now?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowTimerStartDialog(false)}>
+                Not Now
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleTimerStartConfirm}>Start Timer</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Timer Stop Confirmation Dialog */}
+        <AlertDialog open={showTimerStopDialog} onOpenChange={setShowTimerStopDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Timer is Running</AlertDialogTitle>
+              <AlertDialogDescription>
+                You have an active timer. Would you like to stop it before closing the case?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowTimerStopDialog(false)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleTimerStopAndClose}>Stop & Close</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     )
   },

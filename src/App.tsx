@@ -46,9 +46,25 @@ function App() {
 
   /**
    * Handle case selection - ELITE: Load from database instantly
+   * ELITE: Auto-stop current timer and start new one when switching cases
    */
   const handleCaseSelect = useCallback(
     async (case_: Case) => {
+      // If switching cases, stop current timer
+      if (currentCase && currentCase.id !== case_.id) {
+        try {
+          const { timeService } = await import("@/services/timeService")
+          const activeTimer = await timeService.getActiveTimer(currentCase.id)
+          if (activeTimer) {
+            // Auto-stop current timer (without summary - user can add it later)
+            await timeService.stopTimer(currentCase.id)
+          }
+        } catch (error) {
+          // Silently fail - timer is not critical for case switching
+          logError("Failed to stop timer when switching cases", error)
+        }
+      }
+
       setCurrentCase(case_)
       // Show loading screen during case loading
       setIsInitializing(true)

@@ -275,6 +275,50 @@ pub struct TimelineEvent {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeEntry {
+    pub id: String,
+    pub case_id: String,
+    pub entry_date: i64, // Unix timestamp for the date (start of day)
+    pub total_seconds: i64, // Total tracked time for the day
+    pub summary: Option<String>, // Daily summary/notes for billing
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeSegment {
+    pub id: String,
+    pub time_entry_id: String,
+    pub start_time: i64, // Unix timestamp
+    pub end_time: Option<i64>, // NULL if segment is still running
+    pub duration_seconds: Option<i64>, // Calculated duration (NULL if running)
+    pub rate_override: Option<f64>, // Optional rate override for this segment
+    pub discount_percent: f64, // Discount percentage (0-100)
+    pub notes: Option<String>, // Optional notes for this segment
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BillingConfig {
+    pub case_id: String,
+    pub billing_type: String, // "fixed_price" or "pay_rate"
+    pub fixed_price: Option<f64>, // NULL if pay_rate
+    pub pay_rate: Option<f64>, // NULL if fixed_price
+    pub rate_unit: Option<String>, // "hourly", "daily", "weekly", "monthly" (NULL if fixed_price)
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveTimer {
+    pub case_id: String,
+    pub current_segment_id: Option<String>, // Current time_segment.id if running
+    pub started_at: i64, // When timer started
+    pub last_updated_at: i64, // Last heartbeat/update
+}
+
 /// Get column configuration from database (global or case-specific)
 /// Returns None if not found
 pub async fn get_column_config(
@@ -860,6 +904,87 @@ pub fn get_migrations() -> Vec<Migration> {
                 CREATE INDEX IF NOT EXISTS idx_duplicate_groups_file_id ON duplicate_groups(file_id);
                 CREATE INDEX IF NOT EXISTS idx_duplicate_groups_primary ON duplicate_groups(group_id, is_primary) WHERE is_primary = 1;
                 CREATE INDEX IF NOT EXISTS idx_files_case_hash_deleted ON files(case_id, file_hash, deleted_at) WHERE file_hash IS NOT NULL AND deleted_at IS NULL;
+            "#,
+        },
+        Migration {
+            version: 2,
+            description: "add time tracking tables with ELITE indexes and constraints",
+            kind: MigrationKind::Up,
+            sql: r#"
+                -- Time tracking tables
+                CREATE TABLE IF NOT EXISTS time_entries (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    entry_date INTEGER NOT NULL, -- Unix timestamp for the date (start of day)
+                    total_seconds INTEGER NOT NULL, -- Total tracked time for the day (calculated from segments)
+                    summary TEXT, -- Daily summary/notes for billing
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS time_segments (
+                    id TEXT PRIMARY KEY,
+                    time_entry_id TEXT NOT NULL,
+                    start_time INTEGER NOT NULL, -- Unix timestamp
+                    end_time INTEGER, -- NULL if segment is still running
+                    duration_seconds INTEGER, -- Calculated duration (NULL if running, cached for performance)
+                    rate_override REAL, -- Optional rate override for this segment
+                    discount_percent REAL DEFAULT 0, -- Discount percentage (0-100)
+                    notes TEXT, -- Optional notes for this segment
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY (time_entry_id) REFERENCES time_entries(id) ON DELETE CASCADE,
+                    CHECK (end_time IS NULL OR end_time >= start_time), -- ELITE: Data integrity constraint
+                    CHECK (discount_percent >= 0 AND discount_percent <= 100) -- ELITE: Validation constraint
+                );
+
+                CREATE TABLE IF NOT EXISTS case_billing_config (
+                    case_id TEXT PRIMARY KEY,
+                    billing_type TEXT NOT NULL, -- 'fixed_price' or 'pay_rate'
+                    fixed_price REAL, -- NULL if pay_rate
+                    pay_rate REAL, -- NULL if fixed_price
+                    rate_unit TEXT, -- 'hourly', 'daily', 'weekly', 'monthly' (NULL if fixed_price)
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+                    CHECK (billing_type IN ('fixed_price', 'pay_rate')), -- ELITE: Enum validation
+                    CHECK (billing_type = 'fixed_price' OR pay_rate IS NOT NULL), -- ELITE: Conditional validation
+                    CHECK (billing_type = 'pay_rate' OR fixed_price IS NOT NULL) -- ELITE: Conditional validation
+                );
+
+                CREATE TABLE IF NOT EXISTS active_timers (
+                    case_id TEXT PRIMARY KEY,
+                    current_segment_id TEXT, -- Current time_segment.id if running
+                    started_at INTEGER NOT NULL, -- When timer started
+                    last_updated_at INTEGER NOT NULL, -- Last heartbeat/update
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+                    FOREIGN KEY (current_segment_id) REFERENCES time_segments(id) ON DELETE SET NULL
+                );
+
+                -- ELITE: Single column indexes for foreign keys and frequently filtered columns
+                CREATE INDEX IF NOT EXISTS idx_time_entries_case_id ON time_entries(case_id);
+                CREATE INDEX IF NOT EXISTS idx_time_entries_date ON time_entries(entry_date);
+
+                -- ELITE: Composite index for common query pattern (case + date lookup)
+                -- Column order: most selective first (case_id), then ordering column (entry_date)
+                CREATE INDEX IF NOT EXISTS idx_time_entries_case_date ON time_entries(case_id, entry_date DESC);
+
+                -- ELITE: Covering index for time entry list queries (includes summary for preview)
+                CREATE INDEX IF NOT EXISTS idx_time_entries_case_created ON time_entries(case_id, created_at DESC);
+
+                -- ELITE: Single column indexes for time_segments
+                CREATE INDEX IF NOT EXISTS idx_time_segments_entry_id ON time_segments(time_entry_id);
+                CREATE INDEX IF NOT EXISTS idx_time_segments_start_time ON time_segments(start_time);
+
+                -- ELITE: Composite index for segment queries within entry (ordered by start time)
+                CREATE INDEX IF NOT EXISTS idx_time_segments_entry_start ON time_segments(time_entry_id, start_time ASC);
+
+                -- ELITE: Partial index for active/running segments (end_time IS NULL)
+                CREATE INDEX IF NOT EXISTS idx_time_segments_active ON time_segments(time_entry_id, start_time) WHERE end_time IS NULL;
+
+                -- ELITE: Index for billing type queries (filtering by billing model)
+                CREATE INDEX IF NOT EXISTS idx_billing_config_type ON case_billing_config(billing_type);
             "#,
         },
     ]

@@ -12,6 +12,7 @@ mod field_extraction;
 mod path_validation;
 mod file_operations;
 mod file_cleanup;
+mod time_tracking;
 
 use mappings::process_file_metadata;
 use export::{read_xlsx, read_csv, read_json};
@@ -3981,7 +3982,25 @@ pub fn run() {
             get_system_file_filter_config,
             save_system_file_filter_config,
             get_workspace_preferences_db,
-            save_workspace_preferences_db
+            save_workspace_preferences_db,
+            time_tracking::start_timer,
+            time_tracking::pause_timer,
+            time_tracking::resume_timer,
+            time_tracking::stop_timer,
+            time_tracking::get_active_timer,
+            time_tracking::get_time_entries,
+            time_tracking::get_time_entry,
+            time_tracking::get_time_entries_summary,
+            time_tracking::update_time_entry,
+            time_tracking::update_time_segment,
+            time_tracking::create_time_segment,
+            time_tracking::delete_time_entry,
+            time_tracking::delete_time_segment,
+            time_tracking::batch_update_segments,
+            time_tracking::set_case_billing_config,
+            time_tracking::get_case_billing_config,
+            time_tracking::calculate_billing_amount,
+            time_tracking::calculate_case_total
         ]);
     
     let context = tauri::generate_context!();

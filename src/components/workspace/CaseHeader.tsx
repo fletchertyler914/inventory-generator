@@ -23,6 +23,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu"
+import { TimerWidget } from "../time/TimerWidget"
+import { Clock } from "lucide-react"
 import type { Case } from "@/types/case"
 import type { InventoryItem } from "@/types/inventory"
 
@@ -52,6 +54,7 @@ interface CaseHeaderProps {
   isSyncing?: boolean
   autoSyncEnabled?: boolean
   onToggleAutoSync?: () => void
+  onOpenTimeManagement?: () => void
 }
 
 export const CaseHeader = memo(
@@ -80,6 +83,7 @@ export const CaseHeader = memo(
     isSyncing = false,
     autoSyncEnabled = false,
     onToggleAutoSync,
+    onOpenTimeManagement,
   }: CaseHeaderProps) {
     const [searchDialogOpen, setSearchDialogOpen] = useState(false)
 
@@ -136,6 +140,8 @@ export const CaseHeader = memo(
               </Badge>
             </>
           )}
+          <span className="h-4 w-px bg-border flex-shrink-0" aria-hidden="true" />
+          <TimerWidget caseId={case_.id} key={`timer-${case_.id}`} />
           <span className="h-4 w-px bg-border flex-shrink-0" aria-hidden="true" />
           <Button
             variant="ghost"
@@ -272,6 +278,15 @@ export const CaseHeader = memo(
                       </div>
                     </DropdownMenuItem>
                   )}
+                </>
+              )}
+              {onOpenTimeManagement && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onOpenTimeManagement}>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Time Management
+                  </DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
