@@ -74,7 +74,7 @@ export function FileChangeWarning({
   let variant: 'default' | 'destructive' = 'default';
   let title = 'File Modified';
   let description = '';
-  let showRefresh = true;
+  const showRefresh = true;
   let refreshLabel = 'Refresh File';
 
   switch (fileStatus) {

@@ -65,7 +65,7 @@ export function CaseFilters({
         }
         return computedColor;
       }
-    } catch (e) {
+    } catch (_e) {
       // Color computation failed, using fallback
     }
     

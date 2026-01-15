@@ -10,7 +10,7 @@
     "start:linux": "./src-tauri/target/release/bundle/linux/CaseSpace",
     "build": "tsc && vite build",
     "clean": "rm -rf node_modules && pnpm install",
-    "clean:all": "./clear-cache.sh && pnpm clean",
+    "clean:all": "./scripts/clear-cache.sh && pnpm clean",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest",
@@ -18,11 +18,11 @@
     "lint": "eslint . --fix --report-unused-disable-directives",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css,md}\"",
-    "logs": "./tail-logs.sh",
-    "logs:errors": "./tail-logs.sh --errors",
-    "logs:watch": "./tail-logs.sh --watch",
-    "debug:build": "./debug-build.sh",
-    "debug:test": "./test-built-app.sh"
+    "logs": "./scripts/tail-logs.sh",
+    "logs:errors": "./scripts/tail-logs.sh --errors",
+    "logs:watch": "./scripts/tail-logs.sh --watch",
+    "debug:build": "./scripts/debug-build.sh",
+    "debug:test": "./scripts/test-built-app.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

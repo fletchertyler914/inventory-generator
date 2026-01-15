@@ -182,7 +182,7 @@ function App() {
             if (mounted) {
               await handleCaseSelect(lastCase)
             }
-          } catch (error) {
+          } catch (_error) {
             // Case no longer exists, ignore
             logger.debug("Last selected case no longer exists", { lastCaseId })
           }

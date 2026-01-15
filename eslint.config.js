@@ -59,6 +59,7 @@ export default tseslint.config(
       '*.config.ts',
       'build/**',
       'target/**',
+      'public/pdf.worker.min.js', // Minified third-party library
       // Suppress warnings in shadcn/ui library components
       'src/components/ui/calendar.tsx',
     ],

@@ -25,7 +25,7 @@ export function htmlToText(html: string): string {
   }
   
   // Fast regex-based extraction (much faster than DOM manipulation)
-  let text = html
+  const text = html
     // Remove script and style tags with their content
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")

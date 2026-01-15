@@ -337,6 +337,15 @@ pnpm tauri build
 - Focus management in dialogs
 - WCAG AA color contrast
 
+## Documentation
+
+For detailed documentation, see the [docs/](./docs/) directory:
+
+- **[Testing Guide](./docs/testing.md)** - How to write and run tests
+- **[Debugging Guide](./docs/debugging.md)** - Debugging tips and troubleshooting
+- **[Development Notes](./docs/development-notes.md)** - Implementation details and optimization notes
+- **[Test Plan](./docs/test-plan.md)** - Comprehensive test coverage plan
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidelines, code standards, and contribution workflow.
