@@ -37,7 +37,7 @@ import { StatusCell } from "../table/StatusCell"
 import { toast } from "@/hooks/useToast"
 import { useTheme } from "@/hooks/useTheme"
 import { ErrorBoundary } from "../ErrorBoundary"
-import { createBlobUrlFromBase64, getMimeTypeFromExtension, revokeBlobUrl } from "@/lib/blob-utils"
+import { createBlobUrlFromBase64, createDataUrlFromBase64, getMimeTypeFromExtension, revokeBlobUrl } from "@/lib/blob-utils"
 
 // ELITE: Lazy load heavy viewer components for optimal bundle size
 const LazyViewer = lazy(() => import("react-viewer").then((m) => ({ default: m.default })))
@@ -784,12 +784,14 @@ export const IntegratedFileViewer = memo(
       if (category === "video" || category === "audio" || category === "archive") {
         setLoading(false)
       } else if (category === "pdf") {
-        // ELITE: Load PDF via Rust, convert base64 to blob using shared utility
+        // ELITE: Load PDF via Rust, convert base64 to data URL (works better with PDF.js in Tauri)
+        // Data URLs are embedded directly and don't require separate fetch like blob URLs
         const loadPdf = async () => {
           try {
             const base64 = await fileService.readFileBase64(file.absolute_path)
-            const blobUrl = createBlobUrlFromBase64(base64, "application/pdf")
-            setPdfBlobUrl(blobUrl)
+            // Use data URL instead of blob URL for better compatibility with PDF.js in Tauri
+            const dataUrl = createDataUrlFromBase64(base64, "application/pdf")
+            setPdfBlobUrl(dataUrl)
             setLoading(false)
           } catch (err) {
             const { logError } = require("@/lib/logger")

@@ -13,8 +13,8 @@ import { fileService } from "./services/fileService"
 import { caseService } from "./services/caseService"
 import { createAppError, logError, ErrorCode } from "./lib/error-handler"
 import { toast } from "./hooks/useToast"
-import { getStoreValue, setStoreValue } from "./lib/store-utils"
-import { logger, logError as logAppError } from "./lib/logger"
+import { setStoreValue } from "./lib/store-utils"
+import { logError as logAppError } from "./lib/logger"
 import type { Case } from "./types/case"
 
 /**
@@ -163,41 +163,16 @@ function App() {
   )
 
   /**
-   * Initialize app - wait for theme and React to be ready, and load last selected case
+   * Initialize app - wait for theme and React to be ready
    */
   useEffect(() => {
     let mounted = true
-
-    // Load last selected case if available
-    const loadLastCase = async () => {
-      try {
-        const lastCaseId = await getStoreValue<string | null>(
-          "casespace-last-case-id",
-          null,
-          "settings"
-        )
-        if (lastCaseId && mounted) {
-          try {
-            const lastCase = await caseService.getCase(lastCaseId)
-            if (mounted) {
-              await handleCaseSelect(lastCase)
-            }
-          } catch (_error) {
-            // Case no longer exists, ignore
-            logger.debug("Last selected case no longer exists", { lastCaseId })
-          }
-        }
-      } catch (error) {
-        logAppError("Failed to load last selected case", error)
-      }
-    }
 
     // Wait for theme initialization and initial render
     const initTimer = setTimeout(() => {
       if (mounted) {
         setIsInitializing(false)
-        // Load last case after initialization
-        loadLastCase()
+        // Show case overview page on launch (no auto-open of last case)
       }
     }, 800) // Give enough time for theme detection and smooth splash display
 
@@ -205,7 +180,7 @@ function App() {
       mounted = false
       clearTimeout(initTimer)
     }
-  }, [handleCaseSelect])
+  }, [])
 
   /**
    * Handle case creation from dialog

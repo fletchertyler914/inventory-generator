@@ -109,6 +109,28 @@ export function getMimeTypeFromExtension(extension: string): string {
 }
 
 /**
+ * Converts base64-encoded string to data URL
+ * ELITE: Works better with PDF.js in Tauri than blob URLs
+ * Data URLs are embedded directly and don't require separate fetch
+ * 
+ * @param base64 - Base64-encoded file data
+ * @param mimeType - MIME type for the data URL (e.g., 'image/png', 'application/pdf')
+ * @returns Data URL string
+ */
+export function createDataUrlFromBase64(base64: string, mimeType: string): string {
+  if (!base64 || typeof base64 !== 'string') {
+    throw new Error('Invalid base64 data: must be a non-empty string');
+  }
+
+  if (!mimeType || typeof mimeType !== 'string') {
+    throw new Error('Invalid MIME type: must be a non-empty string');
+  }
+
+  // Create data URL directly from base64
+  return `data:${mimeType};base64,${base64}`;
+}
+
+/**
  * Safely revokes a blob URL
  * ELITE: Prevents errors if URL is already revoked or invalid
  * 
@@ -117,6 +139,11 @@ export function getMimeTypeFromExtension(extension: string): string {
 export function revokeBlobUrl(url: string | null | undefined): void {
   if (!url || typeof url !== 'string') {
     return; // Nothing to revoke
+  }
+
+  // Don't revoke data URLs (they're just strings, not object URLs)
+  if (url.startsWith('data:')) {
+    return;
   }
 
   try {
