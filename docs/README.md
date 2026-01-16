@@ -1,49 +1,73 @@
 # Documentation Index
 
-This directory contains detailed documentation for CaseSpace development and maintenance.
+This directory contains comprehensive documentation for CaseSpace.
 
 ## Core Documentation
 
-### [Testing Guide](./testing.md)
-Comprehensive guide for writing and running tests:
-- Quick start for frontend and backend tests
-- Test structure and naming conventions
-- Performance testing guidelines
-- Security and edge case testing
+### [Architecture](./architecture.md)
+Complete system architecture documentation:
+- System overview and principles
+- Frontend and backend architecture
+- Data flow and patterns
+- Performance targets
+- Code organization
+
+### [Development Guide](./DEVELOPMENT.md)
+Development and optimization guide:
+- Key optimizations (completed and remaining)
+- Code organization and patterns
+- Performance targets
+- Database schema
+- Caching strategy
+
+### [Testing Guide](./TESTING.md)
+Comprehensive testing documentation:
+- Running tests (frontend and backend)
+- Test organization and standards
+- Writing tests
+- Test coverage
 - Best practices
 
-### [Debugging Guide](./debugging.md)
-Debugging tips and troubleshooting:
-- Step-by-step debugging procedures
-- Common issues and fixes
-- Build debugging
-- Log viewing and analysis
-
-### [Development Notes](./development-notes.md)
-Implementation details and optimization notes:
-- Completed optimizations (duplicate detection)
-- Remaining optimization opportunities
-- Architecture decisions
-- Performance targets and benchmarks
-
-### [Test Plan](./test-plan.md)
-Comprehensive test coverage plan:
-- Core user flows to test
-- Test implementation priorities
-- Performance requirements
-- Security tests
-- Edge cases
-
-## Additional Documentation
-
-### [Implementation Summary](./implementation-summary.md)
-Historical notes on completed implementations (may be outdated).
+### [Codebase Overview](./codebase-overview.md)
+Detailed codebase structure and organization:
+- Project structure
+- Core workflows
+- Key components
+- Service layer patterns
 
 ### [Optimization Opportunities](./optimization-opportunities.md)
-Detailed analysis of potential optimizations (see development-notes.md for consolidated version).
+Analysis of potential optimizations:
+- Completed optimizations
+- Remaining opportunities
+- Performance benchmarks
+
+### [Style Guide](./STYLE_GUIDE.md)
+UI/UX and branding guidelines:
+- Color system (OKLCH-based)
+- Typography and spacing
+- Component patterns
+- Dark mode support
+- Accessibility standards
+
+### [Branding Guidelines](./BRANDING.md)
+Brand positioning and messaging:
+- Product name and taglines
+- Brand personality and voice
+- Key messages and positioning
+- Visual identity
+- Messaging framework
+
+### [Gaps Analysis](./GAPS_ANALYSIS.md)
+Current state vs. vision assessment:
+- What's fully implemented
+- Partial implementations and gaps
+- Roadmap to full vision
+- Priority matrix
+
+## Additional Resources
 
 ### [Marketing Overview](./marketing-overview.md)
-Marketing and product positioning documentation (for reference).
+Product positioning and marketing documentation (for reference).
 
 ## Quick Links
 

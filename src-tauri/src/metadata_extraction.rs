@@ -131,6 +131,7 @@ pub struct MediaMetadata {
 /// - Supports cancellation via watch channel
 /// - Checks cancellation at safe points (between operations)
 /// - Returns partial results if cancelled mid-extraction
+#[allow(dead_code)] // Alternative extraction method, may be used in future
 pub async fn extract_file_metadata_with_cache(
     file_path: &Path,
     file_id: Option<&str>,
@@ -644,6 +645,7 @@ async fn extract_video_metadata(file_path: &Path) -> Result<MediaMetadata, Strin
 
 /// Get cached metadata from database if valid
 /// Returns None if cache miss, invalid, or error (graceful degradation)
+#[allow(dead_code)] // Helper for extract_file_metadata_with_cache
 async fn get_cached_metadata(
     pool: &sqlx::sqlite::SqlitePool,
     file_id: &str,
@@ -698,6 +700,7 @@ async fn get_cached_metadata(
 
 /// Cache metadata in database
 /// ELITE: Graceful degradation - doesn't fail if caching fails
+#[allow(dead_code)] // Helper for extract_file_metadata_with_cache
 async fn cache_metadata(
     pool: &sqlx::sqlite::SqlitePool,
     file_id: &str,
@@ -728,6 +731,7 @@ async fn cache_metadata(
 
 /// Extract metadata with retry logic for transient failures
 /// ELITE: Graceful error handling - retries transient failures, fails fast on permanent errors
+#[allow(dead_code)] // Alternative extraction method with retry logic, may be used in future
 pub async fn extract_file_metadata_with_retry(
     file_path: &Path,
     max_retries: u32,

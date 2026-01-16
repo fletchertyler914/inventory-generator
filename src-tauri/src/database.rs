@@ -7,6 +7,7 @@ use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use sqlx::Row;
 
 /// Normalize a folder path to create a stable workspace ID
+#[allow(dead_code)] // May be used in future workspace management features
 fn normalize_path(path: &str) -> String {
     let path_buf = PathBuf::from(path);
     // Resolve to absolute path and normalize separators
@@ -19,6 +20,7 @@ fn normalize_path(path: &str) -> String {
 }
 
 /// Generate a stable workspace ID from a folder path
+#[allow(dead_code)] // May be used in future workspace management features
 pub fn generate_workspace_id(folder_path: &str) -> String {
     let normalized = normalize_path(folder_path);
     let mut hasher = Sha256::new();
@@ -276,6 +278,7 @@ pub struct TimelineEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Defined for type safety, currently using serde_json::Value in time_tracking
 pub struct TimeEntry {
     pub id: String,
     pub case_id: String,
@@ -287,6 +290,7 @@ pub struct TimeEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Defined for type safety, currently using serde_json::Value in time_tracking
 pub struct TimeSegment {
     pub id: String,
     pub time_entry_id: String,

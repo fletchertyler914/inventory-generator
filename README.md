@@ -9,7 +9,7 @@ A production-grade Tauri application for comprehensive case and document managem
 - **Schema-Driven Inventory**: Flexible, customizable inventory structure with global and case-specific schemas
 - **Fast Folder Scanning**: Recursively scan directories and extract file metadata with parallel processing
 - **Smart Document Classification**: Automatically categorize documents by type and date ranges
-- **Report Generation**: Generate reports with case data in XLSX format
+- **Report View**: Placeholder for future AI-powered report generation feature
 - **Bulk Operations**: Efficiently update multiple items at once
 - **Virtual Scrolling**: Handles large datasets (10,000+ items) with smooth performance
 
@@ -61,7 +61,7 @@ All inventory data is stored in a flexible JSON structure (`inventory_data`) tha
 - **Framework**: Tauri 2.0
 - **Error Handling**: Custom error types with `thiserror`
 - **File Processing**: Efficient recursive directory scanning with parallel processing
-- **Report Generation**: Export case data for reports
+- **Repository Pattern**: Centralized database queries for maintainability
 - **Database**: SQLite with FTS5 full-text search
 - **Performance**: Async I/O, batch operations, optimized queries
 
@@ -89,7 +89,10 @@ casespace/
 │       ├── database.rs   # Database schema and migrations
 │       ├── error.rs      # Error handling
 │       ├── scanner.rs   # File scanning
-│       ├── export.rs    # Dynamic export functionality
+│       ├── repositories/  # Database repository layer
+│       │   ├── case_repository.rs
+│       │   ├── file_repository.rs
+│       │   └── shared.rs
 │       ├── file_ingestion.rs  # File processing
 │       ├── file_conversion.rs  # File-to-inventory conversion
 │       └── mappings.rs  # Document classification
@@ -134,7 +137,7 @@ Key tables:
 
 ## Performance Optimizations
 
-### Backend (Rust) - 100% Optimized
+### Backend (Rust) - Optimized
 
 1. **Parallel File Processing**
    - Tokio async runtime with optimal worker pools (2x CPU cores)
@@ -166,13 +169,7 @@ Key tables:
    - FTS5 full-text search with automatic triggers
    - **Impact**: Sub-100ms queries on 10k+ files
 
-7. **Dynamic Export Optimization**
-   - Parse JSON once per item, reuse for all columns
-   - Cached field path parsing
-   - Minimal string allocations
-   - **Impact**: 3-5x faster exports
-
-### Frontend (React) - 95% Optimized
+### Frontend (React) - Optimized
 
 1. **Virtual Scrolling**
    - Only renders visible rows for large datasets
@@ -341,10 +338,11 @@ pnpm tauri build
 
 For detailed documentation, see the [docs/](./docs/) directory:
 
-- **[Testing Guide](./docs/testing.md)** - How to write and run tests
-- **[Debugging Guide](./docs/debugging.md)** - Debugging tips and troubleshooting
-- **[Development Notes](./docs/development-notes.md)** - Implementation details and optimization notes
-- **[Test Plan](./docs/test-plan.md)** - Comprehensive test coverage plan
+- **[Architecture](./docs/architecture.md)** - Complete system architecture
+- **[Development Guide](./docs/DEVELOPMENT.md)** - Development and optimization guide
+- **[Testing Guide](./docs/TESTING.md)** - Comprehensive testing documentation
+- **[Style Guide](./docs/STYLE_GUIDE.md)** - UI/UX and branding guidelines
+- **[Codebase Overview](./docs/codebase-overview.md)** - Detailed codebase structure
 
 ## Contributing
 

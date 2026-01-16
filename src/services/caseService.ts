@@ -1,6 +1,5 @@
-import { safeInvoke } from '@/lib/tauri-utils';
-import { cachedInvoke, clearCache } from '@/lib/request-cache';
-import type { Case } from '../types/case';
+import { serviceInvoke, clearServiceCache } from "./baseService"
+import type { Case } from "../types/case"
 
 export const caseService = {
   async createCase(
@@ -10,22 +9,22 @@ export const caseService = {
     department?: string,
     client?: string
   ): Promise<Case> {
-    const result = await safeInvoke<Case>('create_case', {
+    const result = await serviceInvoke<Case>("create_case", {
       name,
       caseId, // Tauri converts camelCase to snake_case automatically
       department,
       client,
       sources, // Array of file/folder paths
-    });
+    })
     // Clear cases list cache
-    clearCache('list_cases');
-    return result;
+    clearServiceCache("list_cases")
+    return result
   },
 
   async getOrCreateCase(folderPath: string): Promise<Case> {
-    return safeInvoke<Case>('get_or_create_case', {
+    return serviceInvoke<Case>("get_or_create_case", {
       folderPath, // Tauri converts camelCase to snake_case automatically
-    });
+    })
   },
 
   /**
@@ -33,36 +32,42 @@ export const caseService = {
    * Cached for 1 minute to reduce redundant queries
    */
   async listCases(): Promise<Case[]> {
-    return cachedInvoke<Case[]>('list_cases', {}, 60 * 1000);
+    return serviceInvoke<Case[]>(
+      "list_cases",
+      {},
+      {
+        cache: true,
+        cacheTtl: 60 * 1000, // 1 minute
+      }
+    )
   },
 
   async getCase(caseId: string): Promise<Case> {
-    return safeInvoke<Case>('get_case', {
+    return serviceInvoke<Case>("get_case", {
       caseId, // Tauri converts camelCase to snake_case automatically
-    });
+    })
   },
 
   async updateCaseMetadata(
     caseId: string,
     updates: {
-      name?: string;
-      caseId?: string;
-      department?: string;
-      client?: string;
+      name?: string
+      caseId?: string
+      department?: string
+      client?: string
     }
   ): Promise<void> {
-    return safeInvoke('update_case_metadata', {
+    return serviceInvoke("update_case_metadata", {
       caseId, // Tauri converts camelCase to snake_case automatically
       ...updates,
-    });
+    })
   },
 
   async deleteCase(caseId: string): Promise<void> {
-    await safeInvoke('delete_case', {
+    await serviceInvoke("delete_case", {
       caseId, // Tauri converts camelCase to snake_case automatically
-    });
+    })
     // Clear cases list cache
-    clearCache('list_cases');
+    clearServiceCache("list_cases")
   },
-};
-
+}

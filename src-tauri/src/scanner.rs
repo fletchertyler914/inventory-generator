@@ -156,6 +156,7 @@ impl FileMetadata {
     }
     
     /// Synchronous version for compatibility (uses spawn_blocking internally)
+    #[allow(dead_code)] // Synchronous wrapper, async version is used instead
     pub fn from_path(root_path: &Path, file_path: &Path) -> std::io::Result<Self> {
         // Try to use current runtime handle
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
@@ -254,6 +255,7 @@ pub async fn count_files_async(root_path: &Path, filter_config: Option<&SystemFi
 }
 
 /// Synchronous wrapper for count_files_async
+#[allow(dead_code)] // Synchronous wrapper, async version is used instead
 pub fn count_files(root_path: &Path, filter_config: Option<&SystemFileFilter>) -> std::io::Result<usize> {
     // Try to use current runtime handle
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
@@ -326,6 +328,7 @@ pub async fn scan_folder_async(root_path: &Path, filter_config: Option<&SystemFi
 }
 
 /// Synchronous wrapper for scan_folder_async
+#[allow(dead_code)] // Synchronous wrapper, async version is used instead
 pub fn scan_folder(root_path: &Path, filter_config: Option<&SystemFileFilter>) -> std::io::Result<Vec<FileMetadata>> {
     // Try to use current runtime handle
     if let Ok(handle) = tokio::runtime::Handle::try_current() {

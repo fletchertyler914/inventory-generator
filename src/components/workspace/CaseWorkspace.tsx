@@ -30,9 +30,6 @@ import { logError } from "@/lib/logger"
 const LazyReportView = lazy(() =>
   import("../reports/ReportView").then((m) => ({ default: m.ReportView }))
 )
-const LazyReportGenerator = lazy(() =>
-  import("../reports/ReportGenerator").then((m) => ({ default: m.ReportGenerator }))
-)
 
 // Export LazyWorkflowBoard for use in BoardView
 export const LazyWorkflowBoard = lazy(() =>
@@ -127,7 +124,6 @@ export const CaseWorkspace = memo(
 
     // Local state
     const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
-    const [reportDialogOpen, setReportDialogOpen] = useState<boolean>(false)
     const [showTimerStartDialog, setShowTimerStartDialog] = useState(false)
     const [showTimerStopDialog, setShowTimerStopDialog] = useState(false)
     const [showTimeManagement, setShowTimeManagement] = useState(false)
@@ -568,18 +564,6 @@ export const CaseWorkspace = memo(
             onCloseDuplicates={() => setDuplicatesVisible(false)}
             onOpenDuplicates={() => setDuplicatesVisible(true)}
           />
-        )}
-
-        {/* Report Generator Dialog - Lazy loaded */}
-        {reportDialogOpen && (
-          <Suspense fallback={null}>
-            <LazyReportGenerator
-              items={items}
-              case_={case_}
-              open={reportDialogOpen}
-              onOpenChange={setReportDialogOpen}
-            />
-          </Suspense>
         )}
 
         {/* Timer Start Confirmation Dialog */}

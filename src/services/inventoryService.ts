@@ -43,40 +43,6 @@ export async function scanDirectory(path: string): Promise<InventoryItem[]> {
   return invoke<InventoryItem[]>("scan_directory", { path })
 }
 
-/**
- * Exports case files to a file for report generation
- * 
- * @param items - Array of case files to export
- * @param format - Export format: "xlsx", "csv", or "json"
- * @param outputPath - Full path where the file should be saved
- * @param caseNumber - Optional case number to include in metadata
- * @param folderPath - Optional folder path to include in metadata
- * @param columnConfig - Optional column configuration for dynamic export
- * @returns Promise that resolves when export is complete
- * @throws Error if export fails
- * 
- * @example
- * ```ts
- * await exportInventory(items, "xlsx", "/path/to/output.xlsx", "CASE-001", "/source/folder", columnConfig)
- * ```
- */
-export async function exportInventory(
-  items: InventoryItem[],
-  format: "xlsx" | "csv" | "json",
-  outputPath: string,
-  caseNumber: string | null,
-  folderPath: string | null,
-  columnConfig?: { columns: Array<{ id: string; label: string; visible: boolean; order: number; fieldPath?: string }> } | null
-): Promise<void> {
-  return invoke("export_inventory", {
-    items,
-    format,
-    outputPath,
-    caseNumber: caseNumber || null,
-    folderPath: folderPath || null,
-    columnConfig: columnConfig ? JSON.stringify(columnConfig) : null,
-  })
-}
 
 /**
  * Syncs inventory with folder contents

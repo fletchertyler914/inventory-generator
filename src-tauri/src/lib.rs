@@ -1,8 +1,12 @@
 mod scanner;
 mod mappings;
-mod export;
 mod error;
 mod database;
+mod repositories;
+#[cfg(test)]
+mod test_helpers;
+#[cfg(test)]
+mod commands;
 mod file_utils;
 mod file_conversion;
 mod file_ingestion;
@@ -15,7 +19,6 @@ mod file_cleanup;
 mod time_tracking;
 
 use mappings::process_file_metadata;
-use export::{read_xlsx, read_csv, read_json};
 use error::AppError;
 use database::{Case, Note, File, Finding, TimelineEvent, WorkspacePreferences};
 use scanner::SystemFileFilter;
@@ -200,106 +203,6 @@ async fn scan_directory(path: String, app: tauri::AppHandle) -> Result<Vec<Inven
     Ok(items)
 }
 
-/// Export case files for report generation
-#[tauri::command]
-fn export_inventory(
-    items: Vec<InventoryItem>,
-    format: String,
-    output_path: String,
-    case_number: Option<String>,
-    folder_path: Option<String>,
-    column_config: Option<String>, // JSON string of ExportColumnConfig
-) -> Result<(), String> {
-    // If column config provided, use dynamic export
-    if let Some(config_str) = column_config {
-        let config: export::ExportColumnConfig = serde_json::from_str(&config_str)
-            .map_err(|e| format!("Invalid column config: {}", e))?;
-        
-        // Filter to visible columns and sort by order
-        let mut visible_columns: Vec<_> = config.columns
-            .into_iter()
-            .filter(|col| col.visible)
-            .collect();
-        visible_columns.sort_by_key(|col| col.order);
-        
-        // Extract absolute paths for hyperlinks
-        let absolute_paths: Vec<String> = items.iter().map(|item| item.absolute_path.clone()).collect();
-        
-        match format.as_str() {
-            "xlsx" => export::generate_xlsx_dynamic(&items, &visible_columns, &absolute_paths, case_number.as_deref(), folder_path.as_deref(), &output_path)
-                .map_err(|e| AppError::XlsxError(e.to_string()).to_string_message()),
-            "csv" => export::generate_csv_dynamic(&items, &visible_columns, &absolute_paths, case_number.as_deref(), folder_path.as_deref(), &output_path)
-                .map_err(|e| AppError::CsvError(e.to_string()).to_string_message()),
-            "json" => export::generate_json_dynamic(&items, &visible_columns, case_number.as_deref(), folder_path.as_deref(), &output_path)
-                .map_err(|e| AppError::JsonError(e.to_string()).to_string_message()),
-            _ => Err(AppError::UnsupportedFormat(format).to_string_message()),
-        }
-    } else {
-        // No column config provided - use default visible columns from schema
-        // This should not happen in normal operation, but provide a fallback
-        Err("Column configuration is required for export".to_string())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ImportResult {
-    pub items: Vec<InventoryItem>,
-    pub case_number: Option<String>,
-    pub folder_path: Option<String>,
-}
-
-#[tauri::command]
-fn import_inventory(
-    file_path: String,
-    format: Option<String>,
-) -> Result<ImportResult, String> {
-    // Detect format from file extension if not provided
-    let detected_format = format.unwrap_or_else(|| {
-        let path = PathBuf::from(&file_path);
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.to_lowercase())
-            .unwrap_or_else(|| "xlsx".to_string())
-    });
-    
-    let (rows, case_number, folder_path) = match detected_format.as_str() {
-        "xlsx" => read_xlsx(&file_path)
-            .map_err(|e| AppError::ReadXlsxError(e.to_string()).to_string_message())?,
-        "csv" => read_csv(&file_path)
-            .map_err(|e| AppError::ReadCsvError(e.to_string()).to_string_message())?,
-        "json" => read_json(&file_path)
-            .map_err(|e| AppError::ReadJsonError(e.to_string()).to_string_message())?,
-        _ => return Err(AppError::UnsupportedFormat(detected_format).to_string_message()),
-    };
-    
-    // Convert InventoryRow to InventoryItem (with empty absolute_path)
-    // ELITE: Schema-driven - store imported fields in inventory_data JSON
-    let items: Vec<InventoryItem> = rows
-        .into_iter()
-        .map(|row| {
-            // Build inventory_data JSON with imported fields
-            let inventory_data_obj = serde_json::json!({});
-            
-            InventoryItem {
-                id: None, // No ID - imported from external source
-                absolute_path: String::new(), // Not exported, so empty
-                status: None,
-                tags: None,
-                file_name: row.file_name,
-                folder_name: row.folder_name,
-                folder_path: row.folder_path,
-                file_type: row.file_type,
-                inventory_data: Some(inventory_data_obj.to_string()),
-            }
-        })
-        .collect();
-    
-    Ok(ImportResult {
-        items,
-        case_number,
-        folder_path,
-    })
-}
 
 /// ELITE: Async inventory sync using tokio::fs
 #[tauri::command]
@@ -3925,8 +3828,6 @@ pub fn run() {
             get_database_path,
             count_directory_files,
             scan_directory,
-            export_inventory,
-            import_inventory,
             sync_inventory,
             create_case,
             get_or_create_case,

@@ -16,27 +16,6 @@ pub enum AppError {
 
     #[error("Error scanning folder: {0}")]
     ScanError(String),
-
-    #[error("Error generating XLSX: {0}")]
-    XlsxError(String),
-
-    #[error("Error generating CSV: {0}")]
-    CsvError(String),
-
-    #[error("Error generating JSON: {0}")]
-    JsonError(String),
-
-    #[error("Error reading XLSX: {0}")]
-    ReadXlsxError(String),
-
-    #[error("Error reading CSV: {0}")]
-    ReadCsvError(String),
-
-    #[error("Error reading JSON: {0}")]
-    ReadJsonError(String),
-
-    #[error("Unsupported format: {0}")]
-    UnsupportedFormat(String),
 }
 
 /// Helper function to convert AppError to String for Tauri commands
