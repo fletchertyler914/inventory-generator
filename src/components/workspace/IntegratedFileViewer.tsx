@@ -774,8 +774,23 @@ export const IntegratedFileViewer = memo(
           }
           setLoading(false)
         } catch (err) {
+          const { logError } = require("@/lib/logger")
+          logError("[IntegratedFileViewer] Error loading file", err)
           const errorMessage = err instanceof Error ? err.message : String(err)
-          setError(`Failed to load file: ${errorMessage}`)
+
+          // ELITE: Provide helpful error message for file not found (e.g., after rename or move)
+          if (
+            errorMessage.includes("File not found") ||
+            errorMessage.includes("File does not exist")
+          ) {
+            setError(
+              `File not found. The file may have been moved or renamed.\n\n` +
+                `Path: ${file.absolute_path}\n\n` +
+                `Please re-sync the case to update file paths, or remove this file from the case.`
+            )
+          } else {
+            setError(`Failed to load file: ${errorMessage}`)
+          }
           setLoading(false)
         }
       }
@@ -784,17 +799,17 @@ export const IntegratedFileViewer = memo(
       if (category === "video" || category === "audio" || category === "archive") {
         setLoading(false)
       } else if (category === "pdf") {
-        // ELITE: Load PDF via Rust, convert base64 to data URL (works better with PDF.js in Tauri)
-        // Data URLs are embedded directly and don't require separate fetch like blob URLs
+        // ELITE: Load PDF via base64 for both Tauri and browser
+        // convertFileSrc only works for files in $APPDIR/$RESOURCE, not arbitrary file paths
+        // Using data URLs works reliably for PDF.js in both environments
         const loadPdf = async () => {
           try {
             const base64 = await fileService.readFileBase64(file.absolute_path)
-            // Use data URL instead of blob URL for better compatibility with PDF.js in Tauri
             const dataUrl = createDataUrlFromBase64(base64, "application/pdf")
             setPdfBlobUrl(dataUrl)
             setLoading(false)
           } catch (err) {
-            const { logError } = require("@/lib/logger")
+            const { logError } = await import("@/lib/logger")
             logError("[IntegratedFileViewer] Error loading PDF", err)
             const errorMessage = err instanceof Error ? err.message : String(err)
 
@@ -853,7 +868,11 @@ export const IntegratedFileViewer = memo(
       // Cleanup blob URLs on unmount or file change
       return () => {
         setPdfBlobUrl((prev) => {
-          revokeBlobUrl(prev)
+          // Only revoke if it's a blob/data URL (starts with blob: or data:)
+          // Tauri file:// URLs don't need revocation
+          if (prev && (prev.startsWith('blob:') || prev.startsWith('data:'))) {
+            revokeBlobUrl(prev)
+          }
           return null
         })
         setImageBlobUrl((prev) => {

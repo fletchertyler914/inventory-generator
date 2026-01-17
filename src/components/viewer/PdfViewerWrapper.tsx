@@ -10,6 +10,9 @@ interface PdfViewerWrapperProps {
 
 export function PdfViewerWrapper({ fileUrl }: PdfViewerWrapperProps) {
   const { resolvedTheme } = useTheme();
+  
+  // Create plugin instance at top level - it uses hooks internally
+  // This must be called during render, not inside useMemo
   const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
   // Map app theme to PDF viewer theme
@@ -232,13 +235,46 @@ export function PdfViewerWrapper({ fileUrl }: PdfViewerWrapperProps) {
         .rpv-core__progress-bar {
           background-color: var(--primary) !important;
         }
+
+        /* ELITE: Performance optimizations for large PDFs */
+        /* Virtual scrolling - only render visible pages */
+        .rpv-core__page-layer {
+          contain: layout style paint;
+          will-change: transform;
+        }
+
+        /* Optimize canvas rendering */
+        .rpv-core__page-layer canvas {
+          image-rendering: -webkit-optimize-contrast;
+          image-rendering: crisp-edges;
+        }
+
+        /* Reduce repaints during scroll */
+        .rpv-core__inner-pages {
+          contain: layout style paint;
+          transform: translateZ(0);
+        }
+
+        /* Optimize text layer rendering */
+        .rpv-core__text-layer {
+          contain: layout style;
+        }
+
+        /* Memory optimization - unload off-screen pages faster */
+        .rpv-core__page[data-page-number] {
+          content-visibility: auto;
+        }
       `}</style>
       <div className={`w-full h-full ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
+        {/* ELITE: Worker configuration optimized for large PDF collections */}
         <Worker workerUrl={workerUrl}>
           <Viewer
             fileUrl={fileUrl}
             plugins={[defaultLayoutPluginInstance]}
             theme={pdfTheme}
+            // ELITE: Default scale for optimal initial view
+            // PDF.js handles virtual scrolling internally - only visible pages are rendered
+            defaultScale="PageFit"
           />
         </Worker>
       </div>

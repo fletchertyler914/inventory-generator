@@ -23,7 +23,7 @@
         "visible": true,
         "decorations": true,
         "url": "index.html",
-        "devtools": false,
+        "devtools": true,
         "backgroundColor": "#f4f4f4"
       }
     ],

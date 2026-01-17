@@ -585,17 +585,21 @@ export const FileNavigator = memo(
           <div className="p-2 sm:p-3 space-y-1 min-w-0">
             {/* "All Files" option to clear folder filter */}
             {onFolderSelect && (
-              <Button
-                onClick={() => onFolderSelect(null)}
-                variant="ghost"
+              <div
                 className={cn(
-                  "w-full justify-start px-2 sm:px-3 py-2 h-auto text-sm flex items-center gap-1 sm:gap-2 overflow-hidden min-w-0 font-medium max-w-full",
+                  "w-full justify-start px-2 sm:px-3 py-2 h-auto text-sm flex items-center gap-1 sm:gap-2 overflow-hidden min-w-0 font-medium max-w-full rounded-md transition-colors",
                   !selectedFolderPath && "bg-primary/10 border border-primary/20"
                 )}
-                title="Show all files in table"
               >
-                <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="truncate flex-1 text-left min-w-0">All Files</span>
+                <Button
+                  onClick={() => onFolderSelect(null)}
+                  variant="ghost"
+                  className="flex-1 justify-start px-0 h-auto text-sm font-medium"
+                  title="Show all files in table"
+                >
+                  <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate flex-1 text-left min-w-0">All Files</span>
+                </Button>
                 <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
                   <Button
                     onClick={(e) => {
@@ -625,7 +629,7 @@ export const FileNavigator = memo(
                     {items.length}
                   </span>
                 </div>
-              </Button>
+              </div>
             )}
             {filteredTree.subfolders.size === 0 && filteredTree.files.length === 0 ? (
               <div className="text-center py-8 text-sm text-muted-foreground">

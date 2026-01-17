@@ -3,6 +3,8 @@
  * Provides user-friendly error messages, error codes, retry logic, and recovery strategies
  */
 
+import { logError as logAppError } from "./logger";
+
 export enum ErrorCode {
   SCAN_DIRECTORY_FAILED = "SCAN_DIRECTORY_FAILED",
   EXPORT_FAILED = "EXPORT_FAILED",
@@ -98,7 +100,6 @@ export function createAppError(error: unknown, defaultCode: ErrorCode = ErrorCod
  * Technical details are logged, user-friendly message is returned
  */
 export function logError(error: AppError, context?: string): void {
-  const { logError: logAppError } = require("./logger");
   logAppError(
     `${error.code}: ${error.message}`,
     error.originalError,
